@@ -1,3 +1,4 @@
+// app/recomendador/page.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -54,10 +55,25 @@ interface ScoredModel {
   availableFuels: string[]; availableTransmissions: string[]; maxPlazas: number; 
   topFeatures: string[]; dealershipStatus: string;
   score: number; matchPercentage: number; equipScore: number; badge?: string;
+  origen: string;
+  hasAdas: boolean;
+  hasCuero: boolean;
+  has4x4: boolean;
+  hasTecho: boolean;
+  hasCamara: boolean;
 }
 
 interface AdCampaign { id: string; sponsor: string; headline: string; highlight: string; price: string; link: string; img: string; location: string; isActive: boolean; targetCategory?: string; }
 interface FinancialConfig { tasa_anual: number; gastos_admin: number; seguro_vida: number; }
+
+// Interfaz para definir correctamente los pasos del Wizard y evitar errores de inferencia
+interface WizardStep {
+  id: string;
+  title: string;
+  subtitle: string;
+  isMultiple: boolean;
+  options: { label: string; value: string; desc?: string; icon?: string }[];
+}
 
 export default function RecomendadorPage() {
   const [step, setStep] = useState<number>(0); 
@@ -183,7 +199,7 @@ export default function RecomendadorPage() {
   // ==========================================
   // 2. CONSTRUCCIÓN DINÁMICA DEL WIZARD
   // ==========================================
-  const WIZARD_STEPS = useMemo(() => [
+  const WIZARD_STEPS: WizardStep[] = useMemo(() => [
     {
       id: 'conocimiento', title: '¿Cuánto sabés de autos?', subtitle: 'Esto nos ayuda a hacerte las preguntas correctas.', isMultiple: false,
       options: [
@@ -325,7 +341,8 @@ export default function RecomendadorPage() {
         availableFuels: fuels, availableTransmissions: trans, maxPlazas,
         hasAdas, hasCuero, has4x4, hasTecho, hasCamara, 
         topFeatures: extractedFeatures.slice(0, 4), dealershipStatus,
-        score: 0, matchPercentage: 0, equipScore: maxEquipScore
+        score: 0, matchPercentage: 0, equipScore: maxEquipScore,
+        origen: model.origen
       };
     });
 

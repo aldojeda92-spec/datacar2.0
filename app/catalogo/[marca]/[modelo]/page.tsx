@@ -19,7 +19,7 @@ interface VersionData {
   id: string; modelId: string; name: string; price: number; concesionaria?: string; promocion?: string; url_auto?: string;
   specs: { 
     motor: string; transmision: string; combustible: string; traccion: string; plazas: number; 
-    airbags: number; tamanho_pantalla: number; garantia: string; alimentacion?: string; autonomi_electrica?: string; 
+    airbags: number; tamanho_pantalla: number; garantia: string; alimentacion?: string; autonomi_electrica?: string; conectividad?: string;
   };
   chasis?: { 
     medida_neumatico?: string; tipo_llanta?: string; detalle_suspension?: string; detalles_freno?: string; 

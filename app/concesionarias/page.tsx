@@ -100,8 +100,8 @@ export default function PortalConcesionariasPage() {
         getDocs(collection(db, 'leads'))
       ]);
 
-      const bList = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const mList = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const bList: any[] = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const mList: any[] = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       
       setMarcasList(bList);
       setModelosList(mList);
@@ -115,7 +115,7 @@ export default function PortalConcesionariasPage() {
       // ==============================================
       // RESOLUCIÓN: INVENTARIO POR MARCAS PERMITIDAS
       // ==============================================
-      const allVersions = vSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const allVersions: any[] = vSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const invEnriquecido = allVersions.map(vData => {
         const modelInfo = modelsMap[vData.modelId] || { name: 'Desconocido', brandId: '' };
         const brandName = brandsMap[modelInfo.brandId] || 'Desconocido';
@@ -162,8 +162,8 @@ export default function PortalConcesionariasPage() {
       if (currentUser) {
         try {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists() && userDoc.data().role === 'concesionaria') {
-            const rawData = userDoc.data();
+          if (userDoc.exists() && userDoc.data()?.role === 'concesionaria') {
+            const rawData = userDoc.data() as any;
             
             // Auto-Sanación del Array de Marcas
             let parsedMarcas: string[] = [];
