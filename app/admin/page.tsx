@@ -171,29 +171,7 @@ export default function AdminDashboardPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
-          // SELF-HEALING PARA EL CEO
-          if (currentUser.email === 'aldojeda92@gmail.com') { 
-            const userRef = doc(db, 'users', currentUser.uid);
-            const userSnap = await getDoc(userRef);
-            
-            // Evita escrituras redundantes para prevenir bucles de carga
-            if (!userSnap.exists() || userSnap.data().role !== 'admin') {
-              await setDoc(userRef, { 
-                email: currentUser.email, 
-                role: 'admin', 
-                dealershipName: 'DATACAR CENTRAL',
-                marcasPermitidas: ['ALL'],
-                updatedAt: serverTimestamp() 
-              }, { merge: true });
-            }
-            
-            setAdminUser(currentUser);
-            setIsAuthLoading(false);
-            fetchAllData();
-            return;
-          }
-
-          // VALIDACIÓN ESTÁNDAR PARA OTROS ADMINS
+          // VALIDACIÓN DE ROL ADMIN (única vía: doc en Firestore, sin bypass por email)
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
           if (userDoc.exists() && userDoc.data().role === 'admin') {
             setAdminUser(currentUser);
@@ -301,27 +279,6 @@ export default function AdminDashboardPage() {
     } catch (err) {
       alert("Error actualizando el estado del lead.");
     }
-  };
-
-  const handleNukeDatabase = async () => {
-    const confirmation1 = window.confirm("⚠️ ALERTA CRÍTICA: Estás a punto de ELIMINAR TODA LA BASE DE DATOS. ¿Continuar?");
-    if (!confirmation1) return;
-    const confirmation2 = window.prompt("Escribe exactamente: BORRAR TODO");
-    if (confirmation2 !== 'BORRAR TODO') return setFeedback({ type: 'error', message: 'Purga cancelada.' });
-
-    setLoading(true);
-    try {
-      const collectionsToPurge = ['brands', 'models', 'versions', 'campaigns'];
-      for (const colName of collectionsToPurge) {
-        const snap = await getDocs(collection(db, colName));
-        for (let i = 0; i < snap.docs.length; i += 400) {
-          const batch = writeBatch(db);
-          snap.docs.slice(i, i + 400).forEach(d => batch.delete(doc(db, colName, d.id)));
-          await batch.commit();
-        }
-      }
-      setFeedback({ type: 'success', message: 'Base de datos purgada.' }); fetchAllData();
-    } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
   const handleSaveFinancial = async (e: React.FormEvent) => {
@@ -655,9 +612,6 @@ export default function AdminDashboardPage() {
           <span className="text-[#C0C0C0] px-6 mt-6 mb-3">Herramientas</span>
           <button onClick={() => { setActiveTab('inyector'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'inyector' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Inyector CSV</button>
           <button onClick={() => { setActiveTab('ads'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'ads' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Ads Manager</button>
-          
-          <span className="text-[#D93025] px-6 mt-8 mb-3">Zona de Peligro</span>
-          <button onClick={handleNukeDatabase} className="text-left px-6 py-3 transition-colors border-l-2 border-transparent text-[#D93025] hover:bg-[#D93025]/10">Purgar Base de Datos</button>
         </nav>
 
         <div className="p-6 border-t border-[#FFFFFF]/10">

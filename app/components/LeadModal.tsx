@@ -50,6 +50,7 @@ export default function LeadModal({
         vehiculo: `${marcaVehiculo} ${vehiculoInteres}`,
         origen: origenLead,
         concesionaria_destino: concesionariaDestino || 'A designar (Central DATACAR)',
+        concesionaria_destino_norm: (concesionariaDestino || 'A DESIGNAR').toUpperCase().trim(),
         estado: 'Nuevo',
         createdAt: serverTimestamp()
       });

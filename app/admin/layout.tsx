@@ -2,33 +2,55 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../lib/firebase';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // El observador de Firebase revisa el token en tiempo real
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-        // Si no está logueado y no está ya en la página de login, lo expulsamos
-        if (pathname !== '/admin/login') {
+    // El observador de Firebase revisa el token en tiempo real y valida el rol admin
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (pathname === '/admin/login') {
+        setStatus('unauthorized');
+        return;
+      }
+
+      if (!user) {
+        setStatus('unauthorized');
+        router.push('/admin/login');
+        return;
+      }
+
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (snap.exists() && snap.data().role === 'admin') {
+          setStatus('authorized');
+        } else {
+          await signOut(auth);
+          setStatus('unauthorized');
           router.push('/admin/login');
         }
+      } catch {
+        await signOut(auth);
+        setStatus('unauthorized');
+        router.push('/admin/login');
       }
     });
 
     return () => unsubscribe();
   }, [router, pathname]);
 
-  // Pantalla de carga mientras Firebase verifica el token (Latencia B2B)
-  if (isAuthenticated === null) {
+  // Ruta de login: siempre se renderiza, sin importar el estado de auth
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
+
+  // Pantalla de carga mientras Firebase verifica el token y el rol (Latencia B2B)
+  if (status !== 'authorized') {
     return (
       <div className="min-h-screen bg-[#0A1F33] flex items-center justify-center text-[#FFFFFF]">
         <div className="font-black text-2xl tracking-widest uppercase animate-pulse" style={{ fontFamily: 'Montserrat, sans-serif' }}>
@@ -39,15 +61,5 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // Si no está autenticado y está en la ruta de login, renderizamos el login (los children)
-  if (!isAuthenticated && pathname === '/admin/login') {
-    return <>{children}</>;
-  }
-
-  // Si está autenticado, renderizamos el panel de control normalmente
-  if (isAuthenticated) {
-    return <>{children}</>;
-  }
-
-  return null;
+  return <>{children}</>;
 }

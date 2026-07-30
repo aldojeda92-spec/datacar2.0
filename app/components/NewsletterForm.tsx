@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
 // CORRECCIÓN BUGS DE RUTA: Subimos dos niveles (../../) para llegar a la raíz del proyecto
 import { db } from '../../lib/firebase';
 import { sendWelcomeEmail } from '../../lib/mailer';
@@ -26,7 +26,7 @@ export default function NewsletterForm() {
 
     try {
       // 1. Evitar duplicados (Psicología UX: no saturar al cliente con correos repetidos)
-      const q = query(collection(db, 'newsletter_subscribers'), where('email', '==', email.toLowerCase().trim()));
+      const q = query(collection(db, 'newsletter_subscribers'), where('email', '==', email.toLowerCase().trim()), limit(1));
       const snap = await getDocs(q);
       
       if (!snap.empty) {

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { collection, getDocs, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, query, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, query, where, writeBatch } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { db, auth } from '../../lib/firebase';
 
@@ -92,12 +92,13 @@ export default function PortalConcesionariasPage() {
       const permitidasNormalizadas = uData.marcasPermitidas.map(m => m.toUpperCase().trim());
       const dealershipNameNorm = uData.dealershipName.toUpperCase().trim();
 
-      // Obtenemos Catálogo Global
+      // Obtenemos Catálogo Global (los leads se filtran server-side por concesionaria_destino_norm,
+      // no se descarga la colección completa de leads de todas las concesionarias)
       const [bSnap, mSnap, vSnap, leadsSnap] = await Promise.all([
         getDocs(collection(db, 'brands')),
         getDocs(collection(db, 'models')),
         getDocs(collection(db, 'versions')),
-        getDocs(collection(db, 'leads'))
+        getDocs(query(collection(db, 'leads'), where('concesionaria_destino_norm', '==', dealershipNameNorm)))
       ]);
 
       const bList: any[] = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -133,14 +134,10 @@ export default function PortalConcesionariasPage() {
       setInventario(invEnriquecido);
 
       // ==============================================
-      // RESOLUCIÓN: LEADS CON FUZZY MATCHING (RAM)
+      // RESOLUCIÓN: LEADS (ya filtrados server-side por la query)
       // ==============================================
       const myLeads = leadsSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter((l: any) => {
-          const dest = (l.concesionaria_destino || '').toUpperCase().trim();
-          return dest === dealershipNameNorm;
-        })
         .sort((a: any, b: any) => b.createdAt?.toDate() - a.createdAt?.toDate());
 
       setLeads(myLeads);

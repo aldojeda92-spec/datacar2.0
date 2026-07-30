@@ -1,0 +1,168 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- Helpers ----------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userDoc().data.role == 'admin';
+    }
+
+    function isConcesionaria() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userDoc().data.role == 'concesionaria';
+    }
+
+    function myBrands() {
+      return userDoc().data.marcasPermitidas;
+    }
+
+    function myDealershipNorm() {
+      return userDoc().data.dealershipName.upper().trim();
+    }
+
+    // ¿La marca (por id) está en la lista de marcas permitidas de la concesionaria?
+    function brandAllowed(brandId) {
+      return isAdmin() || (
+        isConcesionaria() &&
+        exists(/databases/$(database)/documents/brands/$(brandId)) &&
+        get(/databases/$(database)/documents/brands/$(brandId)).data.name in myBrands()
+      );
+    }
+
+    function modelBrandAllowed(modelId) {
+      return isAdmin() || (
+        isConcesionaria() &&
+        exists(/databases/$(database)/documents/models/$(modelId)) &&
+        brandAllowed(get(/databases/$(database)/documents/models/$(modelId)).data.brandId)
+      );
+    }
+
+    // ---------------- users ----------------
+    match /users/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      // Nadie se auto-asigna role/marcasPermitidas. Alta de admins/concesionarias
+      // SOLO por un admin ya existente (vía panel /admin) o manualmente en Console.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---------------- brands ----------------
+    match /brands/{brandId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------------- models ----------------
+    match /models/{modelId} {
+      allow read: if true;
+      allow create: if isAdmin() ||
+        (isConcesionaria() && brandAllowed(request.resource.data.brandId));
+      allow update: if isAdmin() || (
+        isConcesionaria() &&
+        brandAllowed(resource.data.brandId) &&
+        brandAllowed(request.resource.data.brandId)
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ---------------- versions ----------------
+    match /versions/{versionId} {
+      allow read: if true; // catálogo público, lo consume el comparador
+      allow create: if isAdmin() ||
+        (isConcesionaria() && modelBrandAllowed(request.resource.data.modelId));
+      allow update: if isAdmin() || (
+        isConcesionaria() &&
+        modelBrandAllowed(resource.data.modelId) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['price', 'promocion', 'url_auto', 'updatedAt'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ---------------- campaigns (ads) ----------------
+    match /campaigns/{campaignId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------------- concesionarias (entidad) ----------------
+    match /concesionarias/{concId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------------- config (financial, etc.) ----------------
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------------- leads ----------------
+    match /leads/{leadId} {
+      allow create: if
+        request.resource.data.keys().hasOnly(
+          ['nombre','telefono','email','vehiculo','origen',
+           'concesionaria_destino','concesionaria_destino_norm','estado','createdAt']) &&
+        request.resource.data.nombre is string &&
+        request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() < 120 &&
+        request.resource.data.telefono is string &&
+        request.resource.data.telefono.matches('^09[0-9]{8}$') &&
+        request.resource.data.estado == 'Nuevo' &&
+        request.resource.data.createdAt == request.time;
+
+      // El cliente concesionaria DEBE consultar con
+      // where('concesionaria_destino_norm','==', <su dealership normalizado>)
+      allow get, list: if isAdmin() || (
+        isConcesionaria() &&
+        resource.data.concesionaria_destino_norm == myDealershipNorm()
+      );
+
+      allow update: if isAdmin() || (
+        isConcesionaria() &&
+        resource.data.concesionaria_destino_norm == myDealershipNorm() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado'])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------------- dealership_requests ----------------
+    match /dealership_requests/{reqId} {
+      allow create: if
+        request.resource.data.estado == 'Pendiente' &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+      allow get, list, update, delete: if isAdmin();
+    }
+
+    // ---------------- newsletter_subscribers ----------------
+    match /newsletter_subscribers/{subId} {
+      allow create: if
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$') &&
+        request.resource.data.estado == 'Activo';
+      // Solo se permite chequear duplicado (una consulta puntual, no exportar la lista)
+      allow list: if request.query.limit <= 1;
+      allow get, update, delete: if isAdmin();
+    }
+
+    // ---------------- comparison_stats (telemetría) ----------------
+    match /comparison_stats/{statId} {
+      allow create: if true;
+      allow get, list, update, delete: if isAdmin();
+    }
+
+    // Todo lo no listado explícitamente: denegado por defecto.
+  }
+}
