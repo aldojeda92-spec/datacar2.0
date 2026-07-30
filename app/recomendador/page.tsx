@@ -9,8 +9,6 @@ import { db } from '../../lib/firebase';
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
 // ==========================================
-const generarSlug = (texto: string) => texto?.toString().toLowerCase().replace(/[\s_]+/g, '-').replace(/[^\w-]+/g, '') || '';
-
 const ALIAS = {
   HIBRIDO: ['hibrido', 'hybrid', 'hev', 'phev', 'mhev', 'reev', 'eco'],
   ELECTRICO: ['electrico', 'ev', 'bev', '100% electrico'],
@@ -756,7 +754,7 @@ export default function RecomendadorPage() {
                         <button onClick={() => { setCalcVehicle(model); setCuotaCalculada(null); }} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-none">
                             Consultar / Simular
                         </button>
-                        <Link href={`/catalogo/${generarSlug(model.brandName)}/${generarSlug(model.modelName)}`} className="w-full text-center bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-3 transition-colors rounded-none">
+                        <Link href={`/catalogo/${model.brandId}/${model.id}`} className="w-full text-center bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-3 transition-colors rounded-none">
                           Ver Detalles Técnicos
                         </Link>
                       </div>
@@ -818,7 +816,7 @@ export default function RecomendadorPage() {
                          <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{auto.brandName}</p>
                          <h4 className="font-black text-sm text-[#0A1F33] uppercase leading-tight mb-1 truncate" style={{ fontFamily: 'Montserrat, sans-serif' }}>{auto.modelName}</h4>
                          <span className="font-black text-xs text-[#0A1F33] mt-2">Desde US$ {auto.startingPrice.toLocaleString()}</span>
-                         <Link href={`/catalogo/${generarSlug(auto.brandName)}/${generarSlug(auto.modelName)}`} className="text-[9px] font-bold text-[#00BFFF] hover:text-[#0A1F33] uppercase tracking-widest mt-1 underline transition-colors">
+                         <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="text-[9px] font-bold text-[#00BFFF] hover:text-[#0A1F33] uppercase tracking-widest mt-1 underline transition-colors">
                            Ver Detalles Técnicos →
                          </Link>
                       </div>

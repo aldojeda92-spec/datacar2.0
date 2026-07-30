@@ -14,11 +14,9 @@ import NewsletterForm from './components/NewsletterForm';
 interface AutoModel {
   id: string; brandId: string; brand: string; name: string; category: string; price: number; img: string; isPopular?: boolean;
 }
-interface SearchItem { id: string; type: 'Marca' | 'Modelo'; title: string; subtitle?: string; }
+interface SearchItem { id: string; type: 'Marca' | 'Modelo'; title: string; subtitle?: string; brandId?: string; modelId?: string; }
 interface BrandItem { id: string; name: string; logoUrl?: string; }
 interface AdCampaign { id: string; sponsor: string; headline: string; highlight: string; price: string; link: string; img: string; location: string; startDate: string; endDate: string; isActive: boolean; }
-
-const generarSlug = (texto: string) => texto?.toLowerCase().replace(/[\s_]+/g, '-').replace(/[^\w-]+/g, '') || '';
 
 // ==========================================
 // COMPONENTE FOOTER (AHORA MODULARIZADO)
@@ -165,7 +163,7 @@ export default function HomePage() {
           const cleanCategory = rawCategory.trim().toUpperCase();
           tempTipos.add(cleanCategory);
           
-          tempSearchIndex.push({ id: `m_${doc.id}`, type: 'Modelo', title: `${brandName} ${data.name}`, subtitle: cleanCategory });
+          tempSearchIndex.push({ id: `m_${doc.id}`, type: 'Modelo', title: `${brandName} ${data.name}`, subtitle: cleanCategory, brandId: data.brandId, modelId: doc.id });
           return {
             id: doc.id, 
             brandId: data.brandId, 
@@ -325,7 +323,9 @@ export default function HomePage() {
             <div className="absolute top-full left-0 w-full bg-[#FFFFFF] border-2 border-t-0 border-[#00BFFF] max-h-80 overflow-y-auto z-50 mt-0">
               <ul className="flex flex-col">
                 {searchResults.length > 0 ? searchResults.map((item) => {
-                    const dynamicUrl = item.type === 'Modelo' ? `/catalogo/${generarSlug(item.title.split(' ')[0])}/${generarSlug(item.title.split(' ').slice(1).join(' '))}` : `/catalogo?marca=${encodeURIComponent(item.title)}`;
+                    const dynamicUrl = item.type === 'Modelo' && item.brandId && item.modelId
+                      ? `/catalogo/${item.brandId}/${item.modelId}`
+                      : `/catalogo?marca=${encodeURIComponent(item.title)}`;
                     return (
                       <li key={item.id} className="border-b border-[#C0C0C0]/40 last:border-0 hover:bg-[#F8F9FA] transition-colors">
                         <Link href={dynamicUrl} className="flex justify-between items-center px-6 py-4">
@@ -391,7 +391,7 @@ export default function HomePage() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {isLoading ? <div className="col-span-full py-10 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">Cargando inventario...</div> : autosMasBuscados.length > 0 ? autosMasBuscados.map((auto) => (
-            <Link href={`/catalogo/${generarSlug(auto.brand)}/${generarSlug(auto.name)}`} key={`pop_${auto.id}`} className="block">
+            <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block">
               <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group">
                 <div className="p-4 flex-grow h-28 flex items-center justify-center bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/30"><img src={auto.img} alt={auto.name} className="w-full h-20 object-contain group-hover:scale-105 transition-transform" /></div>
                 <div className="p-4 flex flex-col">
@@ -517,7 +517,7 @@ export default function HomePage() {
              <div className="col-span-full py-10 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">Filtrando mercado...</div>
           ) : autosFiltradosPorPrecio.length > 0 ? (
             autosFiltradosPorPrecio.map((auto) => (
-              <Link href={`/catalogo/${generarSlug(auto.brand)}/${generarSlug(auto.name)}`} key={`precio_${auto.id}`} className="block">
+              <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`precio_${auto.id}`} className="block">
                 <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group overflow-hidden">
                   <div className="p-3 flex justify-end shrink-0 h-10 border-b border-[#C0C0C0]/20">
                     <span className="text-[8px] border border-[#C0C0C0] text-[#3A3A3C] px-2 py-1 uppercase font-bold bg-[#F8F9FA] truncate max-w-full block">
