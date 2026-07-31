@@ -5,29 +5,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
+import { generarSlug } from '../../lib/slug';
+import { parseCSVRow } from '../../lib/csv';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
 // ==========================================
-const generarSlug = (texto: string) => texto?.toString().toLowerCase().replace(/[\s_]+/g, '-').replace(/[^\w-]+/g, '') || '';
 const generarId = () => Math.random().toString(36).substring(2, 15);
-
-const parseCSVRow = (text: string) => {
-  let result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === '"' && text[i + 1] === '"') { current += '"'; i++; } 
-      else if (char === '"') { inQuotes = !inQuotes; } 
-      else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; } 
-      else { current += char; }
-  }
-  result.push(current.trim());
-  return result;
-};
 
 // Interface para Leads
 interface LeadData {

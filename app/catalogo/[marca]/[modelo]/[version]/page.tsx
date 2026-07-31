@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../../../lib/firebase';
+import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../../lib/finance';
 import LeadModal from '../../../../components/LeadModal'; // INYECCIÓN B2B
 import NewsletterForm from '../../../../components/NewsletterForm'; // INYECCIÓN B2C
 
@@ -31,7 +32,6 @@ interface VersionData {
   };
 }
 interface BrandData { name: string; origen_marca: string; }
-interface FinancialConfig { tasa_anual: number; gastos_admin: number; seguro_vida: number; }
 
 export default function VersionDetailPage() {
   const params = useParams();
@@ -44,7 +44,7 @@ export default function VersionDetailPage() {
   const [brand, setBrand] = useState<BrandData | null>(null);
   const [version, setVersion] = useState<VersionData | null>(null);
   
-  const [config, setConfig] = useState<FinancialConfig>({ tasa_anual: 0.09, gastos_admin: 0.022, seguro_vida: 0.005 });
+  const [config, setConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
   const [cuotaCalculada, setCuotaCalculada] = useState<number | null>(null);
 
   // Estados UI
@@ -111,12 +111,8 @@ export default function VersionDetailPage() {
     const plazoNum = Number(calcForm.plazo) || 36;
     if (entregaNum >= version.price) { setFeedback({ type: 'error', message: 'La entrega debe ser inferior al precio.' }); return; }
 
-    const retencion_total = config.gastos_admin + config.seguro_vida;
-    const r_mensual = config.tasa_anual / 12;
-    const principalBruto = (version.price - entregaNum) / (1 - retencion_total);
-    const cuota = principalBruto * (r_mensual * Math.pow(1 + r_mensual, plazoNum)) / (Math.pow(1 + r_mensual, plazoNum) - 1);
-
-    setCuotaCalculada(cuota); setFeedback({ type: '', message: '' });
+    setCuotaCalculada(calcularCuotaFrancesa(version.price, entregaNum, plazoNum, config));
+    setFeedback({ type: '', message: '' });
   };
 
   const handleComparar = () => {

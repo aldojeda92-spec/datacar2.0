@@ -6,25 +6,8 @@ import Link from 'next/link';
 import { collection, getDocs, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, query, where, writeBatch } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { db, auth } from '../../lib/firebase';
-
-// ==========================================
-// UTILIDADES E INFRAESTRUCTURA
-// ==========================================
-const generarSlug = (texto: string) => texto?.toString().toLowerCase().replace(/[\s_]+/g, '-').replace(/[^\w-]+/g, '') || '';
-const parseCSVRow = (text: string) => {
-  let result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === '"' && text[i + 1] === '"') { current += '"'; i++; } 
-      else if (char === '"') { inQuotes = !inQuotes; } 
-      else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; } 
-      else { current += char; }
-  }
-  result.push(current.trim());
-  return result;
-};
+import { generarSlug } from '../../lib/slug';
+import { parseCSVRow } from '../../lib/csv';
 
 // ==========================================
 // INTERFACES B2B

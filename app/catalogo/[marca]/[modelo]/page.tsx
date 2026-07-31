@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 // CORRECCIÓN DE RUTAS: 4 niveles para lib (raíz), 3 niveles para components (dentro de app)
 import { db } from '../../../../lib/firebase';
+import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../lib/finance';
 import LeadModal from '../../../components/LeadModal';
 
 // ==========================================
@@ -31,7 +32,6 @@ interface VersionData {
   };
 }
 interface BrandData { name: string; origen_marca: string; }
-interface FinancialConfig { tasa_anual: number; gastos_admin: number; seguro_vida: number; }
 
 export default function ModeloDetailPage() {
   const params = useParams();
@@ -47,7 +47,7 @@ export default function ModeloDetailPage() {
   const [precioDesde, setPrecioDesde] = useState<number>(0);
 
   // Estados Financieros
-  const [config, setConfig] = useState<FinancialConfig>({ tasa_anual: 0.09, gastos_admin: 0.022, seguro_vida: 0.005 });
+  const [config, setConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
   const [cuotaCalculada, setCuotaCalculada] = useState<number | null>(null);
 
   // Estados UI (Modales y Expansores Flat)
@@ -129,12 +129,8 @@ export default function ModeloDetailPage() {
     const plazoNum = Number(calcForm.plazo) || 36;
     if (entregaNum >= precioDesde) { setFeedback({ type: 'error', message: 'La entrega debe ser menor al precio del auto.' }); return; }
 
-    const retencion_total = config.gastos_admin + config.seguro_vida;
-    const r_mensual = config.tasa_anual / 12;
-    const principalBruto = (precioDesde - entregaNum) / (1 - retencion_total);
-    const cuota = principalBruto * (r_mensual * Math.pow(1 + r_mensual, plazoNum)) / (Math.pow(1 + r_mensual, plazoNum) - 1);
-
-    setCuotaCalculada(cuota); setFeedback({ type: '', message: '' });
+    setCuotaCalculada(calcularCuotaFrancesa(precioDesde, entregaNum, plazoNum, config));
+    setFeedback({ type: '', message: '' });
   };
 
   const handleComparar = (version: VersionData) => {

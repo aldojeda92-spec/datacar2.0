@@ -8,11 +8,11 @@ import { db } from '../../lib/firebase';
 // CORRECCIÓN DE RUTAS: Solo un nivel arriba (../) porque components está dentro de app/
 import LeadModal from '../components/LeadModal';
 import NewsletterForm from '../components/NewsletterForm';
+import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa, calcularPresupuestoInverso } from '../../lib/finance';
 
 // ==========================================
 // INTERFACES
 // ==========================================
-interface FinancialConfig { tasa_anual: number; gastos_admin: number; seguro_vida: number; }
 interface BrandItem { id: string; name: string; }
 interface ModelItem { id: string; brandId: string; name: string; }
 interface VersionItem { id: string; modelId: string; name: string; price: number; }
@@ -43,7 +43,7 @@ const Footer = () => {
 
 export default function CalculadoraPage() {
   const [loading, setLoading] = useState(true);
-  const [config, setConfig] = useState<FinancialConfig>({ tasa_anual: 0.09, gastos_admin: 0.022, seguro_vida: 0.005 });
+  const [config, setConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
   
   // TABS: 'directo' (Sabe qué auto quiere) | 'inverso' (Sabe cuánto puede pagar)
   const [calcMode, setCalcMode] = useState<'directo' | 'inverso'>('directo');
@@ -122,43 +122,28 @@ export default function CalculadoraPage() {
   }, [selectedVersion, versions]);
 
   // ==========================================
-  // 2. MOTORES MATEMÁTICOS
+  // 2. MOTORES MATEMÁTICOS (lib/finance.ts)
   // ==========================================
-  const retencion_total = config.gastos_admin + config.seguro_vida;
-  const r_mensual = config.tasa_anual / 12;
-
   // ALGORITMO 1: Sistema Francés con Capital Bruto
   const calcularCuotaDirecta = (e: React.FormEvent) => {
     e.preventDefault();
     const entregaNum = Number(entregaDirecto) || 0;
-    
+
     if (precioVehiculo <= 0) return alert('Seleccioná un vehículo válido primero.');
     if (entregaNum >= precioVehiculo) return alert('La entrega inicial no puede ser mayor o igual al precio del vehículo.');
 
-    // Principal Real = (Precio - Entrega) / (1 - Retenciones)
-    const principalBruto = (precioVehiculo - entregaNum) / (1 - retencion_total);
-    // Cuota Constante Francés
-    const cuota = principalBruto * (r_mensual * Math.pow(1 + r_mensual, plazoDirecto)) / (Math.pow(1 + r_mensual, plazoDirecto) - 1);
-    
-    setCuotaCalculada(cuota);
+    setCuotaCalculada(calcularCuotaFrancesa(precioVehiculo, entregaNum, plazoDirecto, config));
   };
 
   // ALGORITMO 2: Ingeniería Inversa de Presupuesto
-  const calcularPresupuestoInverso = (e: React.FormEvent) => {
+  const calcularPoderDeCompra = (e: React.FormEvent) => {
     e.preventDefault();
     const cuotaNum = Number(cuotaObjetivo) || 0;
     const entregaNum = Number(entregaInverso) || 0;
-    
+
     if (cuotaNum <= 0) return alert('Ingresá una cuota mensual válida.');
 
-    // Valor Presente (Préstamo Bruto Aprobado)
-    const prestamo_bruto = cuotaNum * (1 - Math.pow(1 + r_mensual, -plazoInverso)) / r_mensual;
-    // Dinero Neto Disponible
-    const dinero_neto = prestamo_bruto * (1 - retencion_total);
-    // Poder de Compra Total
-    const presupuesto_total = dinero_neto + entregaNum;
-    
-    setPresupuestoBase(presupuesto_total);
+    setPresupuestoBase(calcularPresupuestoInverso(cuotaNum, entregaNum, plazoInverso, config));
   };
 
   // ==========================================
@@ -325,7 +310,7 @@ export default function CalculadoraPage() {
       {calcMode === 'inverso' && (
         <section className="max-w-[800px] mx-auto w-full px-4 py-8 flex-grow">
           <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-8 md:p-12">
-            <form onSubmit={calcularPresupuestoInverso} className="flex flex-col gap-8">
+            <form onSubmit={calcularPoderDeCompra} className="flex flex-col gap-8">
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>

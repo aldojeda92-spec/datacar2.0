@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { collection, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../lib/finance';
 
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
@@ -62,7 +63,6 @@ interface ScoredModel {
 }
 
 interface AdCampaign { id: string; sponsor: string; headline: string; highlight: string; price: string; link: string; img: string; location: string; isActive: boolean; targetCategory?: string; }
-interface FinancialConfig { tasa_anual: number; gastos_admin: number; seguro_vida: number; }
 
 // Interfaz para definir correctamente los pasos del Wizard y evitar errores de inferencia
 interface WizardStep {
@@ -82,7 +82,7 @@ export default function RecomendadorPage() {
   const [rawVersions, setRawVersions] = useState<VersionData[]>([]);
   const [ads, setAds] = useState<AdCampaign[]>([]);
   const [smartAd, setSmartAd] = useState<AdCampaign | null>(null);
-  const [finConfig, setFinConfig] = useState<FinancialConfig>({ tasa_anual: 0.09, gastos_admin: 0.022, seguro_vida: 0.005 });
+  const [finConfig, setFinConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
 
   const [tiposDisponibles, setTiposDisponibles] = useState<string[]>([]);
   const [marcasDisponibles, setMarcasDisponibles] = useState<string[]>([]);
@@ -507,12 +507,7 @@ export default function RecomendadorPage() {
     
     if (entregaNum >= calcVehicle.startingPrice) { alert('La entrega debe ser menor al precio total.'); return; }
 
-    const retencion_total = finConfig.gastos_admin + finConfig.seguro_vida;
-    const r_mensual = finConfig.tasa_anual / 12;
-    const principalBruto = (calcVehicle.startingPrice - entregaNum) / (1 - retencion_total);
-    const cuota = principalBruto * (r_mensual * Math.pow(1 + r_mensual, plazoNum)) / (Math.pow(1 + r_mensual, plazoNum) - 1);
-
-    setCuotaCalculada(cuota);
+    setCuotaCalculada(calcularCuotaFrancesa(calcVehicle.startingPrice, entregaNum, plazoNum, finConfig));
   };
 
   if (loading) return <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center font-bold text-[#0A1F33] tracking-widest uppercase text-sm">Cargando inteligencia de mercado...</div>;
