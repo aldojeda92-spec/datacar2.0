@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { doc, getDoc, collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../lib/compareStorage';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 
 // ==========================================
@@ -100,7 +101,7 @@ function ComparadorContent() {
           idsToFetch = urlAutos.split(',').slice(0, 3); // Límite estricto de 3
         } else {
           // Prioridad 2: Memoria Local del navegador
-          const savedList: CompareItem[] = JSON.parse(localStorage.getItem('datacar_compare') || '[]');
+          const savedList: CompareItem[] = getStoredCompareList();
           idsToFetch = savedList.map(item => item.id);
         }
         
@@ -132,7 +133,7 @@ function ComparadorContent() {
           setCompareList(hydratedCompareItems);
           
           // Sincronizar LocalStorage con lo cargado de la URL
-          localStorage.setItem('datacar_compare', JSON.stringify(hydratedCompareItems));
+          saveCompareList(hydratedCompareItems);
         }
 
         // Descargar Índice Ligero para el Buscador Predictivo
@@ -207,8 +208,8 @@ function ComparadorContent() {
     const newList = compareItems.filter(i => i.id !== id);
     setCompareList(newList);
     setVehiclesData(vehiclesData.filter(v => v.id !== id));
-    localStorage.setItem('datacar_compare', JSON.stringify(newList));
-    
+    saveCompareList(newList);
+
     // Actualizar URL silenciosamente para mantener la limpieza
     const newUrlParams = newList.length > 0 ? `?autos=${newList.map(i=>i.id).join(',')}` : window.location.pathname;
     window.history.replaceState({}, '', newUrlParams);
@@ -218,13 +219,13 @@ function ComparadorContent() {
     if (compareItems.length >= 3) return;
     const newItem = { id: v.id, name: `${v.brandName} ${v.modelName} ${v.versionName}`, price: v.price };
     const newList = [...compareItems, newItem];
-    localStorage.setItem('datacar_compare', JSON.stringify(newList));
+    saveCompareList(newList);
     // Modificamos la URL y recargamos para que el SSR limpie el caché
     window.location.href = `/comparador?autos=${newList.map(i=>i.id).join(',')}`;
   };
 
   const clearCompare = () => {
-    localStorage.removeItem('datacar_compare');
+    clearStoredCompareList();
     setCompareList([]);
     setVehiclesData([]);
     window.history.replaceState({}, '', window.location.pathname);

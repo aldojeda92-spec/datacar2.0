@@ -7,7 +7,7 @@ import { doc, getDoc, collection, getDocs, addDoc, serverTimestamp } from 'fireb
 import { db } from '../../lib/firebase';
 // CORRECCIÓN DE RUTAS: Solo un nivel arriba (../) porque components está dentro de app/
 import LeadModal from '../components/LeadModal';
-import NewsletterForm from '../components/NewsletterForm';
+import SimpleFooter from '../components/SimpleFooter';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa, calcularPresupuestoInverso } from '../../lib/finance';
 
 // ==========================================
@@ -16,30 +16,6 @@ import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa, calcu
 interface BrandItem { id: string; name: string; }
 interface ModelItem { id: string; brandId: string; name: string; }
 interface VersionItem { id: string; modelId: string; name: string; price: number; }
-
-// ==========================================
-// COMPONENTE FOOTER MODULAR B2C
-// ==========================================
-const Footer = () => {
-  return (
-    <footer className="w-full bg-[#0A1F33] border-t-4 border-[#00BFFF] text-[#FFFFFF] mt-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
-      <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-16 flex flex-col md:flex-row justify-between items-center gap-12 border-b border-[#FFFFFF]/10">
-        <div className="md:w-1/2 text-center md:text-left">
-          <h3 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>Suscribite a las oportunidades.</h3>
-          <p className="text-sm text-[#C0C0C0] font-medium">Sé el primero en enterarte de las mejores opciones de 0km, variaciones de precios y preventas.</p>
-        </div>
-        <div className="md:w-1/2 w-full max-w-lg">
-          <NewsletterForm />
-        </div>
-      </div>
-      <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6">
-        <p className="text-[10px] text-[#C0C0C0]/60 font-medium text-center md:text-left leading-relaxed">
-          © {new Date().getFullYear()} DATACAR PARAGUAY. Las cotizaciones financieras son referenciales y están sujetas a análisis crediticio.
-        </p>
-      </div>
-    </footer>
-  );
-};
 
 export default function CalculadoraPage() {
   const [loading, setLoading] = useState(true);
@@ -384,7 +360,7 @@ export default function CalculadoraPage() {
       {/* ==========================================
           FOOTER COMPLETO B2C (Inyectado)
           ========================================== */}
-      <Footer />
+      <SimpleFooter disclaimer="DATACAR PARAGUAY. Las cotizaciones financieras son referenciales y están sujetas a análisis crediticio." />
 
     </main>
   );

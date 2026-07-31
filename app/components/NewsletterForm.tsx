@@ -7,7 +7,7 @@ import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } fro
 import { db } from '../../lib/firebase';
 import { sendWelcomeEmail } from '../../lib/mailer';
 
-export default function NewsletterForm() {
+export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: string }) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'exists'>('idle');
 
@@ -38,7 +38,7 @@ export default function NewsletterForm() {
       // 2. Guardar en Firebase (Bóveda de Audiencia)
       await addDoc(collection(db, 'newsletter_subscribers'), {
         email: email.toLowerCase().trim(),
-        origen: 'Footer Home',
+        origen,
         estado: 'Activo',
         createdAt: serverTimestamp()
       });

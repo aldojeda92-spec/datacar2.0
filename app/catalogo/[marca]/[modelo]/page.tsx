@@ -4,11 +4,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 // CORRECCIÓN DE RUTAS: 4 niveles para lib (raíz), 3 niveles para components (dentro de app)
 import { db } from '../../../../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../lib/finance';
 import LeadModal from '../../../components/LeadModal';
+import NewsletterForm from '../../../components/NewsletterForm';
+import { FAQ_FICHA_VEHICULO as faqs } from '../../../../lib/faqData';
+import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../lib/compareStorage';
 
 // ==========================================
 // INTERFACES
@@ -63,17 +66,8 @@ export default function ModeloDetailPage() {
   const [calcForm, setCalcForm] = useState({ entrega: '', plazo: '36' });
   const [feedback, setFeedback] = useState({ type: '', message: '' });
 
-  // Estados Footer (Newsletter & FAQ)
-  const [emailNewsletter, setEmailNewsletter] = useState('');
-  const [subStatus, setSubStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  // Estado Footer (FAQ)
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-
-  const faqs = [
-    { q: '¿Los precios reflejados son finales?', a: 'Los valores publicados son precios de lista oficiales sugeridos por los representantes en Paraguay. No incluyen gastos de patentamiento ni fletes internos.' },
-    { q: '¿Puedo financiar este modelo?', a: 'Sí. Trabajamos con las principales entidades bancarias del país. Al usar nuestra calculadora o contactar a un asesor, te gestionamos la pre-aprobación con tasas preferenciales.' },
-    { q: '¿Toman mi vehículo usado como parte de pago?', a: 'El servicio de toma de usados depende de la concesionaria oficial que disponga del stock. Nuestro equipo se encarga de negociar la mejor cotización para tu unidad actual.' },
-    { q: '¿Qué incluye el servicio "Negociamos por vos"?', a: 'Es un servicio premium donde nosotros interactuamos con las concesionarias. Buscamos el stock, negociamos el precio final, gestionamos el papeleo y te entregamos el 0km, ahorrándote tiempo y dinero.' }
-  ];
 
   // ==========================================
   // 1. OBTENCIÓN Y CÁLCULO DE DATOS
@@ -111,8 +105,7 @@ export default function ModeloDetailPage() {
           setPrecioDesde(modelData.startingPrice);
         }
 
-        const savedCompare = JSON.parse(localStorage.getItem('datacar_compare') || '[]');
-        setCompareList(savedCompare);
+        setCompareList(getStoredCompareList());
 
       } catch (error) { console.error("Error obteniendo datos:", error); } 
       finally { setLoading(false); }
@@ -138,35 +131,17 @@ export default function ModeloDetailPage() {
     if (!compareList.find(v => v.id === version.id)) {
       const newItem = { id: version.id, name: `${brand?.name} ${model?.name} ${version.name}`, price: version.price };
       const newList = [...compareList, newItem];
-      setCompareList(newList); localStorage.setItem('datacar_compare', JSON.stringify(newList));
+      setCompareList(newList); saveCompareList(newList);
     }
   };
 
   const handleRemoveCompare = (id: string) => {
     const newList = compareList.filter(v => v.id !== id);
-    setCompareList(newList); localStorage.setItem('datacar_compare', JSON.stringify(newList));
+    setCompareList(newList); saveCompareList(newList);
   };
 
-  const clearCompare = () => { setCompareList([]); localStorage.removeItem('datacar_compare'); };
+  const clearCompare = () => { setCompareList([]); clearStoredCompareList(); };
 
-  const handleSubscribe = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailNewsletter) return;
-    setSubStatus('loading');
-    try {
-      await addDoc(collection(db, 'newsletter_subscribers'), {
-        email: emailNewsletter,
-        source: 'modelo_footer',
-        createdAt: serverTimestamp()
-      });
-      setSubStatus('success');
-      setEmailNewsletter('');
-      setTimeout(() => setSubStatus('idle'), 5000);
-    } catch (error) {
-      setSubStatus('error');
-      setTimeout(() => setSubStatus('idle'), 5000);
-    }
-  };
 
   if (loading) return <div className="min-h-screen bg-[#FFFFFF] flex items-center justify-center font-bold text-[#0A1F33] tracking-widest uppercase text-sm">Cargando información del auto...</div>;
   if (!model) return <div className="min-h-screen bg-[#FFFFFF] flex items-center justify-center font-bold text-[#D93025] tracking-widest uppercase text-sm">Vehículo no encontrado.</div>;
@@ -510,16 +485,7 @@ export default function ModeloDetailPage() {
               <p className="text-sm text-[#C0C0C0] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Sé el primero en enterarte de las mejores opciones de 0km en tu e-mail.</p>
             </div>
             <div className="md:w-1/2 w-full max-w-lg">
-              <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-0 w-full">
-                <input 
-                  type="email" placeholder="Ingresá tu correo electrónico" required value={emailNewsletter} onChange={(e) => setEmailNewsletter(e.target.value)}
-                  className="flex-grow p-4 text-sm border-none focus:outline-none bg-[#FFFFFF] text-[#3A3A3C] font-medium rounded-none" 
-                />
-                <button type="submit" disabled={subStatus === 'loading'} className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest px-8 py-4 transition-colors disabled:opacity-50 border border-transparent rounded-none">
-                  {subStatus === 'loading' ? 'Procesando...' : subStatus === 'success' ? 'Suscrito ✓' : 'Suscribirme'}
-                </button>
-              </form>
-              {subStatus === 'error' && <p className="text-[#D93025] text-[10px] font-bold uppercase mt-2 text-center md:text-left">Error de red. Intenta nuevamente.</p>}
+              <NewsletterForm origen="Ficha de Modelo" />
             </div>
           </div>
         </div>
