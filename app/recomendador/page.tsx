@@ -3,9 +3,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { collection, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../lib/finance';
+import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
@@ -107,11 +108,11 @@ export default function RecomendadorPage() {
   useEffect(() => {
     const fetchEcosystem = async () => {
       try {
-        const [bSnap, mSnap, vSnap, cSnap, finSnap] = await Promise.all([
-          getDocs(collection(db, 'brands')),
-          getDocs(collection(db, 'models')),
-          getDocs(collection(db, 'versions')),
-          getDocs(collection(db, 'campaigns')),
+        const [brandsData, modelsData, versionsData, campaignsData, finSnap] = await Promise.all([
+          getCachedBrands(),
+          getCachedModels(),
+          getCachedVersions(),
+          getCachedCampaigns(),
           getDoc(doc(db, 'config', 'financial'))
         ]);
 
@@ -120,23 +121,21 @@ export default function RecomendadorPage() {
         const brandsMap: Record<string, { name: string, origen: string }> = {};
         const tempMarcas = new Set<string>();
         const tempOrigenes = new Set<string>();
-        
-        bSnap.docs.forEach(d => { 
-          const data = d.data();
-          brandsMap[d.id] = { name: data.name, origen: data.origen_marca || 'No Especificado' }; 
+
+        brandsData.forEach((data) => {
+          brandsMap[data.id] = { name: data.name, origen: data.origen_marca || 'No Especificado' };
           tempMarcas.add(data.name);
           if (data.origen_marca) tempOrigenes.add(data.origen_marca);
         });
 
         const tempTipos = new Set<string>();
 
-        const modelsList: ModelData[] = mSnap.docs.map(doc => {
-          const data = doc.data();
+        const modelsList: ModelData[] = modelsData.map((data) => {
           const cleanTipo = (data.tipo_carroceria || 'Vehículo').trim().toUpperCase();
           tempTipos.add(cleanTipo);
 
           return {
-            id: doc.id,
+            id: data.id,
             brandId: data.brandId,
             brandName: brandsMap[data.brandId]?.name || 'Marca',
             name: data.name,
@@ -149,26 +148,24 @@ export default function RecomendadorPage() {
         const tempPlazas = new Set<number>();
         const tempCombustibles = new Set<string>();
 
-        const versionsList: VersionData[] = vSnap.docs.map(doc => {
-          const v = doc.data();
-          
+        const versionsList: VersionData[] = versionsData.map((v) => {
           const adasStr = v.features?.adas?.join(' ') || '';
           const confortStr = v.features?.confort_conveniencia?.join(' ') || '';
           const rawString = `${adasStr} ${v.features?.asiento_cuero} ${v.features?.techo_panoramico} ${v.specs?.camaras} ${v.specs?.traccion}`.toLowerCase();
-          
+
           const equipScore = adasStr.length + confortStr.length;
 
           const plazas = Number(v.specs?.plazas) || 5;
           const combustible = (v.specs?.combustible || '').trim().toUpperCase();
-          
+
           tempPlazas.add(plazas);
           if (combustible) tempCombustibles.add(combustible);
 
           return {
-            id: doc.id, modelId: v.modelId, name: v.name, price: Number(v.price) || 0,
-            combustible: combustible, 
+            id: v.id, modelId: v.modelId, name: v.name, price: Number(v.price) || 0,
+            combustible: combustible,
             transmision: (v.specs?.transmision || '').toLowerCase(),
-            plazas: plazas, 
+            plazas: plazas,
             traccion: (v.specs?.traccion || '').toLowerCase(),
             features_raw: rawString,
             equipScore: equipScore,
@@ -176,7 +173,7 @@ export default function RecomendadorPage() {
           };
         });
 
-        const activeAds = cSnap.docs.map(d => d.data() as AdCampaign).filter(c => c.isActive);
+        const activeAds = (campaignsData as AdCampaign[]).filter(c => c.isActive);
 
         setTiposDisponibles(Array.from(tempTipos).sort());
         setMarcasDisponibles(Array.from(tempMarcas).sort());

@@ -3,12 +3,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { doc, getDoc, collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 // CORRECCIÓN DE RUTAS: Solo un nivel arriba (../) porque components está dentro de app/
 import LeadModal from '../components/LeadModal';
 import SimpleFooter from '../components/SimpleFooter';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa, calcularPresupuestoInverso } from '../../lib/finance';
+import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/catalogCache';
 
 // ==========================================
 // INTERFACES
@@ -63,15 +64,15 @@ export default function CalculadoraPage() {
         const confSnap = await getDoc(doc(db, 'config', 'financial'));
         if (confSnap.exists()) setConfig(confSnap.data() as FinancialConfig);
 
-        const bSnap = await getDocs(collection(db, 'brands'));
-        const bList = bSnap.docs.map(d => ({ id: d.id, name: d.data().name })).sort((a,b) => a.name.localeCompare(b.name));
-        setBrands(bList);
-        
-        const mSnap = await getDocs(collection(db, 'models'));
-        setModels(mSnap.docs.map(d => ({ id: d.id, brandId: d.data().brandId, name: d.data().name })));
+        const [brandsData, modelsData, versionsData] = await Promise.all([
+          getCachedBrands(),
+          getCachedModels(),
+          getCachedVersions(),
+        ]);
 
-        const vSnap = await getDocs(collection(db, 'versions'));
-        setVersions(vSnap.docs.map(d => ({ id: d.id, modelId: d.data().modelId, name: d.data().name, price: Number(d.data().price) || 0 })));
+        setBrands(brandsData.map(d => ({ id: d.id, name: d.name })).sort((a, b) => a.name.localeCompare(b.name)));
+        setModels(modelsData.map(d => ({ id: d.id, brandId: d.brandId, name: d.name })));
+        setVersions(versionsData.map(d => ({ id: d.id, modelId: d.modelId, name: d.name, price: Number(d.price) || 0 })));
 
       } catch (error) { 
         console.error("Error conectando a DB:", error); 

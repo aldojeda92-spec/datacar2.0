@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { getCachedBrands, getCachedModels } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN DEL MODAL B2B
 import SimpleFooter from '../components/SimpleFooter';
 
@@ -34,16 +33,13 @@ export default function NegociamosPorVosPage() {
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
-        const [bSnap, mSnap] = await Promise.all([
-          getDocs(collection(db, 'brands')),
-          getDocs(collection(db, 'models'))
+        const [brandsData, modelsData] = await Promise.all([
+          getCachedBrands(),
+          getCachedModels(),
         ]);
-        
-        const bList = bSnap.docs.map(d => ({ id: d.id, name: d.data().name })).sort((a,b) => a.name.localeCompare(b.name));
-        setBrands(bList);
-        
-        const mList = mSnap.docs.map(d => ({ id: d.id, brandId: d.data().brandId, name: d.data().name })).sort((a,b) => a.name.localeCompare(b.name));
-        setModels(mList);
+
+        setBrands(brandsData.map(d => ({ id: d.id, name: d.name })).sort((a, b) => a.name.localeCompare(b.name)));
+        setModels(modelsData.map(d => ({ id: d.id, brandId: d.brandId, name: d.name })).sort((a, b) => a.name.localeCompare(b.name)));
       } catch (error) {
         console.error("Error cargando base de datos:", error);
       } finally {

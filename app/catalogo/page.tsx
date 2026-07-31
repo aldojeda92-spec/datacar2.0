@@ -4,8 +4,7 @@
 import React, { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
 import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
@@ -110,21 +109,20 @@ function CatalogoContent() {
     const fetchCatalogo = async () => {
       setIsLoading(true);
       try {
-        const [brandsSnap, modelsSnap, versionsSnap, campaignsSnap] = await Promise.all([
-          getDocs(collection(db, 'brands')),
-          getDocs(collection(db, 'models')),
-          getDocs(collection(db, 'versions')),
-          getDocs(collection(db, 'campaigns'))
+        const [brandsData, modelsData, versionsData, campaignsData] = await Promise.all([
+          getCachedBrands(),
+          getCachedModels(),
+          getCachedVersions(),
+          getCachedCampaigns(),
         ]);
 
         const brandsMap: Record<string, { name: string, origen: string }> = {};
         const tempMarcas = new Set<string>();
         const tempOrigenes = new Set<string>();
 
-        brandsSnap.docs.forEach(doc => { 
-          const data = doc.data();
+        brandsData.forEach((data) => {
           const origen = data.origen_marca || 'No Definido';
-          brandsMap[doc.id] = { name: data.name, origen: origen }; 
+          brandsMap[data.id] = { name: data.name, origen: origen };
           tempMarcas.add(data.name);
           if (data.origen_marca) tempOrigenes.add(data.origen_marca);
         });
@@ -133,13 +131,20 @@ function CatalogoContent() {
         const tempPlazas = new Set<string>();
         const tempCombustibles = new Set<string>();
 
+        // Agrupar versions por modelId una sola vez (antes era O(modelos×versiones))
+        const versionsByModelId = new Map<string, any[]>();
+        versionsData.forEach((v) => {
+          const list = versionsByModelId.get(v.modelId) || [];
+          list.push(v);
+          versionsByModelId.set(v.modelId, list);
+        });
+
         const modelsTemp = new Map<string, AutoModel>();
 
-        modelsSnap.docs.forEach(doc => {
-          const mData = doc.data();
+        modelsData.forEach((mData) => {
           const brandInfo = brandsMap[mData.brandId] || { name: 'MARCA', origen: '' };
-          
-          const modelVersions = versionsSnap.docs.filter(v => v.data().modelId === doc.id).map(v => v.data());
+
+          const modelVersions = versionsByModelId.get(mData.id) || [];
           const validVersions = modelVersions.filter(v => Number(v.price) > 0);
           validVersions.sort((a, b) => Number(a.price) - Number(b.price));
 
@@ -150,17 +155,17 @@ function CatalogoContent() {
           const uniqueKey = `${mData.brandId}_${(mData.name || '').toLowerCase()}`;
 
           const autoData: AutoModel = {
-            id: doc.id, 
-            brandId: mData.brandId || 'sin-marca', 
+            id: mData.id,
+            brandId: mData.brandId || 'sin-marca',
             brand: brandInfo.name,
-            name: mData.name || '', 
+            name: mData.name || '',
             versionName: baseVersion.name || '',
-            tipo_carroceria: mData.tipo_carroceria || 'Vehículo', 
-            price: price, 
+            tipo_carroceria: mData.tipo_carroceria || 'Vehículo',
+            price: price,
             img: mData.imgUrl || 'https://via.placeholder.com/400x200?text=Sin+Imagen',
-            transmision: specs.transmision || '', 
+            transmision: specs.transmision || '',
             combustible: specs.combustible || '',
-            traccion: specs.traccion || '', 
+            traccion: specs.traccion || '',
             plazas: specs.plazas?.toString() || '',
             origen_marca: brandInfo.origen,
             concesionaria: baseVersion.concesionaria || mData.concesionaria || ''
@@ -189,10 +194,10 @@ function CatalogoContent() {
 
         // Carga y validación de TODAS las campañas vigentes para este contexto
         const today = new Date().toISOString().split('T')[0];
-        const validAds = campaignsSnap.docs.map(d => d.data() as AdCampaign).filter(c => 
-          c.isActive === true && 
-          (c.location === 'catalogo' || c.location === 'ambos') && 
-          c.startDate <= today && 
+        const validAds = (campaignsData as AdCampaign[]).filter(c =>
+          c.isActive === true &&
+          (c.location === 'catalogo' || c.location === 'ambos') &&
+          c.startDate <= today &&
           c.endDate >= today
         );
         setActiveCampaigns(validAds);

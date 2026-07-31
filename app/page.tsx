@@ -3,10 +3,9 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { getCachedBrands, getCachedModels, getCachedCampaigns } from '../lib/catalogCache';
 // CORRECCIÓN BUGS DE RUTA: Apuntamos al directorio actual porque components está dentro de app/
-import NewsletterForm from './components/NewsletterForm'; 
+import NewsletterForm from './components/NewsletterForm';
 
 // ==========================================
 // INTERFACES B2B 
@@ -137,42 +136,40 @@ export default function HomePage() {
     const fetchEcosistema = async () => {
       setIsLoading(true);
       try {
-        const [brandsSnap, modelsSnap, campaignsSnap] = await Promise.all([
-          getDocs(collection(db, 'brands')),
-          getDocs(collection(db, 'models')),
-          getDocs(collection(db, 'campaigns'))
+        const [brandsData, modelsData, campaignsData] = await Promise.all([
+          getCachedBrands(),
+          getCachedModels(),
+          getCachedCampaigns(),
         ]);
 
         const brandsMap: Record<string, string> = {};
         const tempMarcas: BrandItem[] = [];
         const tempSearchIndex: SearchItem[] = [];
         const tempTipos = new Set<string>();
-        
-        brandsSnap.docs.forEach(doc => {
-          const brandData = doc.data();
+
+        brandsData.forEach((brandData) => {
           const brandName = brandData.name;
-          brandsMap[doc.id] = brandName;
-          tempMarcas.push({ id: doc.id, name: brandName, logoUrl: brandData.logoUrl }); 
-          tempSearchIndex.push({ id: `b_${doc.id}`, type: 'Marca', title: brandName });
+          brandsMap[brandData.id] = brandName;
+          tempMarcas.push({ id: brandData.id, name: brandName, logoUrl: brandData.logoUrl });
+          tempSearchIndex.push({ id: `b_${brandData.id}`, type: 'Marca', title: brandName });
         });
 
-        const fetchedAutos: AutoModel[] = modelsSnap.docs.map(doc => {
-          const data = doc.data();
+        const fetchedAutos: AutoModel[] = modelsData.map((data) => {
           const brandName = brandsMap[data.brandId] || 'MARCA';
           const rawCategory = data.tipo_carroceria || 'Vehículo';
           const cleanCategory = rawCategory.trim().toUpperCase();
           tempTipos.add(cleanCategory);
-          
-          tempSearchIndex.push({ id: `m_${doc.id}`, type: 'Modelo', title: `${brandName} ${data.name}`, subtitle: cleanCategory, brandId: data.brandId, modelId: doc.id });
+
+          tempSearchIndex.push({ id: `m_${data.id}`, type: 'Modelo', title: `${brandName} ${data.name}`, subtitle: cleanCategory, brandId: data.brandId, modelId: data.id });
           return {
-            id: doc.id, 
-            brandId: data.brandId, 
-            brand: brandName, 
-            name: data.name, 
+            id: data.id,
+            brandId: data.brandId,
+            brand: brandName,
+            name: data.name,
             category: cleanCategory,
-            price: Number(data.startingPrice) || 0, 
+            price: Number(data.startingPrice) || 0,
             img: data.imgUrl || 'https://via.placeholder.com/400x200?text=Auto',
-            isPopular: data.isPopular || false 
+            isPopular: data.isPopular || false
           };
         });
 
@@ -180,11 +177,11 @@ export default function HomePage() {
         setAutos(fetchedAutos);
         setSearchIndex(tempSearchIndex);
         setTiposDisponibles(Array.from(tempTipos).sort());
-        
+
         // Carga de Pauta (Home)
         const today = new Date().toISOString().split('T')[0];
-        const validCampaign = campaignsSnap.docs.map(d => d.data() as AdCampaign).find(c => 
-          c.isActive === true && 
+        const validCampaign = (campaignsData as AdCampaign[]).find(c =>
+          c.isActive === true &&
           (c.location === 'home' || c.location === 'ambos') &&
           c.startDate <= today && c.endDate >= today
         );

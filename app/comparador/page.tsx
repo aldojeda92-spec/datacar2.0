@@ -4,9 +4,10 @@
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { doc, getDoc, collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../lib/compareStorage';
+import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 
 // ==========================================
@@ -137,21 +138,22 @@ function ComparadorContent() {
         }
 
         // Descargar Índice Ligero para el Buscador Predictivo
-        const allVSnap = await getDocs(collection(db, 'versions'));
-        const allMSnap = await getDocs(collection(db, 'models'));
-        const allBSnap = await getDocs(collection(db, 'brands'));
+        const [allVersions, allModels, allBrands] = await Promise.all([
+          getCachedVersions(),
+          getCachedModels(),
+          getCachedBrands(),
+        ]);
 
         const brandsMap: Record<string, string> = {};
-        allBSnap.docs.forEach(b => brandsMap[b.id] = b.data().name);
+        allBrands.forEach(b => brandsMap[b.id] = b.name);
 
         const modelsMap: Record<string, { name: string, img: string, brandId: string }> = {};
-        allMSnap.docs.forEach(m => modelsMap[m.id] = { name: m.data().name, img: m.data().imgUrl, brandId: m.data().brandId });
+        allModels.forEach(m => modelsMap[m.id] = { name: m.name, img: m.imgUrl, brandId: m.brandId });
 
-        const formattedAll = allVSnap.docs.map(v => {
-          const data = v.data();
+        const formattedAll = allVersions.map(data => {
           const modelObj = modelsMap[data.modelId] || { name: '', img: '', brandId: '' };
           const bName = brandsMap[modelObj.brandId] || '';
-          return { id: v.id, brandName: bName, modelName: modelObj.name, versionName: data.name, price: Number(data.price) || 0 };
+          return { id: data.id, brandName: bName, modelName: modelObj.name, versionName: data.name, price: Number(data.price) || 0 };
         });
 
         setAllVersions(formattedAll.filter(v => v.price > 0));
