@@ -3,9 +3,11 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { getCachedBrands, getCachedModels, getCachedCampaigns } from '../lib/catalogCache';
 // CORRECCIÓN BUGS DE RUTA: Apuntamos al directorio actual porque components está dentro de app/
 import NewsletterForm from './components/NewsletterForm';
+import { isOptimizableImageSrc, isValidImageSrc } from '../lib/imageSrc';
 
 // ==========================================
 // INTERFACES B2B 
@@ -168,7 +170,7 @@ export default function HomeClient() {
             name: data.name,
             category: cleanCategory,
             price: Number(data.startingPrice) || 0,
-            img: data.imgUrl || 'https://via.placeholder.com/400x200?text=Auto',
+            img: isValidImageSrc(data.imgUrl) ? data.imgUrl : 'https://via.placeholder.com/400x200?text=Auto',
             isPopular: data.isPopular || false
           };
         });
@@ -372,7 +374,17 @@ export default function HomeClient() {
                 <p className="font-black text-3xl md:text-4xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.price}</p>
               </div>
               <div className="md:w-1/2 mt-6 md:mt-0 flex justify-end z-10 w-full relative h-48 md:h-64">
-                <img src={activeAd.img} alt={activeAd.sponsor} className="absolute right-0 bottom-0 md:top-1/2 md:-translate-y-1/2 max-h-full object-contain group-hover:scale-105 transition-transform origin-right" />
+                {isValidImageSrc(activeAd.img) && (
+                  <Image
+                    src={activeAd.img}
+                    alt={activeAd.sponsor}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    className="object-contain group-hover:scale-105 transition-transform origin-right"
+                    style={{ objectPosition: 'right bottom' }}
+                    unoptimized={!isOptimizableImageSrc(activeAd.img)}
+                  />
+                )}
               </div>
             </Link>
         </section>
@@ -390,7 +402,16 @@ export default function HomeClient() {
           {isLoading ? <div className="col-span-full py-10 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">Cargando inventario...</div> : autosMasBuscados.length > 0 ? autosMasBuscados.map((auto) => (
             <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block">
               <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group">
-                <div className="p-4 flex-grow h-28 flex items-center justify-center bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/30"><img src={auto.img} alt={auto.name} className="w-full h-20 object-contain group-hover:scale-105 transition-transform" /></div>
+                <div className="relative p-4 flex-grow h-28 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/30">
+                  <Image
+                    src={auto.img}
+                    alt={auto.name}
+                    fill
+                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                    className="object-contain p-4 group-hover:scale-105 transition-transform"
+                    unoptimized={!isOptimizableImageSrc(auto.img)}
+                  />
+                </div>
                 <div className="p-4 flex flex-col">
                   <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
                   <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight mb-1 h-8 line-clamp-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{auto.name}</h3>
@@ -435,9 +456,16 @@ export default function HomeClient() {
         <div className="flex flex-wrap gap-4 justify-center">
           {isLoading ? <p className="text-[10px] uppercase text-[#C0C0C0] font-bold tracking-widest">Escaneando mercado...</p> : marcas.length > 0 ? marcas.slice(0, 10).map((marca) => (
             <Link href={`/catalogo?marca=${encodeURIComponent(marca.name)}`} key={marca.id} className="w-28 h-28 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col justify-center items-center hover:border-[#0A1F33] transition-colors group">
-               {marca.logoUrl ? (
-                 <div className="w-12 h-12 mb-3 flex justify-center items-center opacity-80 group-hover:opacity-100 transition-opacity">
-                   <img src={marca.logoUrl} alt={marca.name} className="max-w-full max-h-full object-contain" />
+               {isValidImageSrc(marca.logoUrl) ? (
+                 <div className="relative w-12 h-12 mb-3 opacity-80 group-hover:opacity-100 transition-opacity">
+                   <Image
+                     src={marca.logoUrl}
+                     alt={marca.name}
+                     fill
+                     sizes="48px"
+                     className="object-contain"
+                     unoptimized={!isOptimizableImageSrc(marca.logoUrl)}
+                   />
                  </div>
                ) : (
                  <div className="w-12 h-12 bg-[#F5F5F5] mb-3 flex justify-center items-center group-hover:bg-[#0A1F33] transition-colors text-[10px] text-[#C0C0C0] group-hover:text-[#FFFFFF] uppercase font-bold">{marca.name.substring(0,2)}</div>
@@ -521,8 +549,15 @@ export default function HomeClient() {
                       {auto.category}
                     </span>
                   </div>
-                  <div className="p-4 pt-0 shrink-0 h-32 flex items-center justify-center bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors">
-                    <img src={auto.img} alt={auto.name} className="w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                  <div className="relative p-4 pt-0 shrink-0 h-32 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors">
+                    <Image
+                      src={auto.img}
+                      alt={auto.name}
+                      fill
+                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                      className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
+                      unoptimized={!isOptimizableImageSrc(auto.img)}
+                    />
                   </div>
                   <div className="p-4 flex flex-col flex-grow border-t border-[#C0C0C0] bg-[#F8F9FA]">
                     <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>

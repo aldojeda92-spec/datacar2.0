@@ -4,9 +4,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 // CORRECCIÓN DE RUTAS: 4 niveles para lib (raíz), 3 niveles para components (dentro de app)
 import { db } from '../../../../lib/firebase';
+import { isOptimizableImageSrc, isValidImageSrc } from '../../../../lib/imageSrc';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../lib/finance';
 import LeadModal from '../../../components/LeadModal';
 import NewsletterForm from '../../../components/NewsletterForm';
@@ -175,7 +177,21 @@ export default function ModeloDetailClient() {
       <section className="max-w-[1200px] mx-auto px-4 lg:px-8 py-4 mb-8">
         <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col md:flex-row">
           <div className="md:w-3/5 p-10 flex items-center justify-center border-b md:border-b-0 md:border-r border-[#C0C0C0] bg-[#FFFFFF] relative">
-            <img src={model.imgUrl} alt={model.name} className="w-full max-w-xl object-contain hover:scale-105 transition-transform duration-500" />
+            <div className="relative w-full max-w-xl aspect-[4/3]">
+              {isValidImageSrc(model.imgUrl) ? (
+                <Image
+                  src={model.imgUrl}
+                  alt={model.name}
+                  fill
+                  sizes="(max-width: 768px) 90vw, 40vw"
+                  className="object-contain hover:scale-105 transition-transform duration-500"
+                  preload
+                  unoptimized={!isOptimizableImageSrc(model.imgUrl)}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+              )}
+            </div>
             <span className="absolute bottom-4 right-4 text-[9px] text-[#C0C0C0] uppercase tracking-widest">* Imagen de carácter ilustrativo</span>
           </div>
 

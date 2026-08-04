@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../../../lib/firebase';
+import { isOptimizableImageSrc, isValidImageSrc } from '../../../../../lib/imageSrc';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../../lib/finance';
 import LeadModal from '../../../../components/LeadModal'; // INYECCIÓN B2B
 import NewsletterForm from '../../../../components/NewsletterForm'; // INYECCIÓN B2C
@@ -158,7 +160,21 @@ export default function VersionDetailClient() {
           <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col md:flex-row">
             
             <div className="md:w-1/2 p-10 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-[#C0C0C0] bg-[#FFFFFF] relative">
-              <img src={model.imgUrl} alt={version.name} className="w-full max-w-lg object-contain hover:scale-105 transition-transform duration-500 mb-6" />
+              <div className="relative w-full max-w-lg aspect-[4/3] mb-6">
+                {isValidImageSrc(model.imgUrl) ? (
+                  <Image
+                    src={model.imgUrl}
+                    alt={version.name}
+                    fill
+                    sizes="(max-width: 768px) 90vw, 40vw"
+                    className="object-contain hover:scale-105 transition-transform duration-500"
+                    preload
+                    unoptimized={!isOptimizableImageSrc(model.imgUrl)}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                )}
+              </div>
               <div className="w-full grid grid-cols-3 gap-2 border-t border-[#C0C0C0] pt-6">
                 <div className="text-center"><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-1">Combustible</p><p className="font-black text-xs text-[#0A1F33] uppercase">{version.specs.combustible}</p></div>
                 <div className="text-center border-l border-r border-[#C0C0C0]"><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-1">Transmisión</p><p className="font-black text-xs text-[#0A1F33] uppercase">{version.specs.transmision}</p></div>

@@ -3,10 +3,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../lib/finance';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
+import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
@@ -715,8 +717,19 @@ export default function RecomendadorPage() {
                     </div>
                   )}
 
-                  <div className="p-4 h-56 flex items-center justify-center border-b border-[#C0C0C0]/20 bg-[#F8F9FA]">
-                    <img src={model.imgUrl} alt={model.modelName} className="max-h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+                  <div className="relative p-4 h-56 border-b border-[#C0C0C0]/20 bg-[#F8F9FA]">
+                    {isValidImageSrc(model.imgUrl) ? (
+                      <Image
+                        src={model.imgUrl}
+                        alt={model.modelName}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                        className="object-contain p-4 group-hover:scale-105 transition-transform duration-500"
+                        unoptimized={!isOptimizableImageSrc(model.imgUrl)}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                    )}
                   </div>
                   
                   <div className="p-6 flex flex-col flex-grow">
@@ -784,8 +797,17 @@ export default function RecomendadorPage() {
             {smartAd && (
               <a href={smartAd.link} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col md:flex-row items-center p-8 mb-12 relative group hover:border-[#0A1F33] transition-colors shadow-none rounded-none">
                 <span className="absolute top-4 left-4 bg-[#F5F5F5] border border-[#C0C0C0] text-[#3A3A3C] text-[8px] uppercase font-bold px-2 py-0.5 tracking-widest z-20 rounded-none">Patrocinado: {smartAd.sponsor}</span>
-                <div className="md:w-1/2 flex justify-center z-10 pt-6 md:pt-0">
-                  <img src={smartAd.img} alt="Banner" className="max-h-48 object-contain group-hover:scale-105 transition-transform duration-500" />
+                <div className="relative w-full h-48 md:w-1/2 z-10 pt-6 md:pt-0">
+                  {isValidImageSrc(smartAd.img) && (
+                    <Image
+                      src={smartAd.img}
+                      alt="Banner"
+                      fill
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      className="object-contain group-hover:scale-105 transition-transform duration-500"
+                      unoptimized={!isOptimizableImageSrc(smartAd.img)}
+                    />
+                  )}
                 </div>
                 <div className="md:w-1/2 text-center md:text-left mt-6 md:mt-0 z-10 border-t md:border-t-0 md:border-l border-[#C0C0C0] pt-6 md:pt-0 md:pl-10">
                   <h3 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase leading-tight mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{smartAd.headline} <br/><span className="text-[#00BFFF]">{smartAd.highlight}</span></h3>
@@ -801,8 +823,19 @@ export default function RecomendadorPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {otherMatches.map(auto => (
                     <div key={`other_${auto.id}`} className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-row hover:border-[#0A1F33] transition-colors group h-32 rounded-none shadow-none">
-                      <div className="w-1/3 p-2 border-r border-[#C0C0C0]/30 bg-[#F8F9FA] flex items-center justify-center">
-                        <img src={auto.imgUrl} alt={auto.modelName} className="max-h-full object-contain group-hover:scale-105 transition-transform" />
+                      <div className="relative w-1/3 h-full p-2 border-r border-[#C0C0C0]/30 bg-[#F8F9FA]">
+                        {isValidImageSrc(auto.imgUrl) ? (
+                          <Image
+                            src={auto.imgUrl}
+                            alt={auto.modelName}
+                            fill
+                            sizes="(max-width: 768px) 33vw, 16vw"
+                            className="object-contain p-2 group-hover:scale-105 transition-transform"
+                            unoptimized={!isOptimizableImageSrc(auto.imgUrl)}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                        )}
                       </div>
                       <div className="w-2/3 p-4 flex flex-col justify-center">
                          <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{auto.brandName}</p>

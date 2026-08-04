@@ -3,11 +3,13 @@
 
 import React, { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
 import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
+import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 
 // ==========================================
 // INTERFACES (Alineadas a Matriz 4 y Ads)
@@ -162,7 +164,7 @@ function CatalogoContent() {
             versionName: baseVersion.name || '',
             tipo_carroceria: mData.tipo_carroceria || 'Vehículo',
             price: price,
-            img: mData.imgUrl || 'https://via.placeholder.com/400x200?text=Sin+Imagen',
+            img: isValidImageSrc(mData.imgUrl) ? mData.imgUrl : 'https://via.placeholder.com/400x200?text=Sin+Imagen',
             transmision: specs.transmision || '',
             combustible: specs.combustible || '',
             traccion: specs.traccion || '',
@@ -321,7 +323,17 @@ function CatalogoContent() {
           <p className="font-black text-2xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.price}</p>
         </div>
         <div className="mt-6 md:mt-0 flex justify-end z-10 relative h-32 w-full md:w-1/2">
-          <img src={adToShow.img} alt={adToShow.sponsor} className="absolute right-0 bottom-0 max-h-full object-contain group-hover:scale-105 transition-transform origin-right" />
+          {isValidImageSrc(adToShow.img) && (
+            <Image
+              src={adToShow.img}
+              alt={adToShow.sponsor}
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-contain group-hover:scale-105 transition-transform origin-right"
+              style={{ objectPosition: 'right bottom' }}
+              unoptimized={!isOptimizableImageSrc(adToShow.img)}
+            />
+          )}
         </div>
       </Link>
     );
@@ -459,8 +471,15 @@ function CatalogoContent() {
 
                     <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
-                        <div className="p-4 h-44 flex items-center justify-center bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
-                          <img src={auto.img} alt={auto.name} className="w-full max-h-full object-contain group-hover:scale-[1.02] transition-transform duration-300" />
+                        <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
+                          <Image
+                            src={auto.img}
+                            alt={auto.name}
+                            fill
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                            className="object-contain p-4 group-hover:scale-[1.02] transition-transform duration-300"
+                            unoptimized={!isOptimizableImageSrc(auto.img)}
+                          />
                         </div>
                         
                         <div className="p-5 flex flex-col">

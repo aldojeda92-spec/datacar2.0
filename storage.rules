@@ -1,0 +1,68 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // El rol de admin vive en Firestore (users/{uid}.role), no en un custom
+    // claim de Auth (ver app/admin/layout.tsx). El enfoque "correcto" según la
+    // doc de Firebase sería leer Firestore desde acá con firestore.get()/
+    // firestore.exists() ("cross-service rules"), pero se probó en vivo contra
+    // este proyecto (2026-08-03, ver storage.rules.bak) y siempre devuelve 403,
+    // incluso con un simple firestore.exists() sin más condiciones — algo en
+    // este proyecto no soporta esa función pese a estar documentada. Por eso
+    // se usa un allowlist de UIDs en su lugar: simple, 100% soportado, y como
+    // solo hay 3 admins que cambian rara vez, el costo de mantenimiento manual
+    // es bajo.
+    //
+    // IMPORTANTE: si se da de alta un admin nuevo desde el panel (/admin, tab
+    // "Accesos"), agregar su UID acá también y volver a deployar
+    // (`firebase deploy --only storage`) — si no, ese admin no podrá subir
+    // imágenes aunque el panel lo deje entrar.
+    function isAdmin() {
+      return request.auth != null && request.auth.uid in [
+        '89UFWWsbVwhSg8YjYGiW2OwSLEE3', // adairojeda.adm@gmail.com
+        '9hnyr0qaa8hXNyNKVxr4eU34bYx1', // antoninovazquezjara@gmail.com
+        'hyG0yLhxkoOXWhUBSd5IsaCTlMT2'  // aldojeda92@gmail.com
+      ];
+    }
+
+    function isImageUnder10MB() {
+      return request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    // Catálogo público: logos de marca, fotos de auto, banners.
+    match /brands/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isImageUnder10MB();
+      allow delete: if isAdmin();
+    }
+
+    match /models/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isImageUnder10MB();
+      allow delete: if isAdmin();
+    }
+
+    match /versions/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isImageUnder10MB();
+      allow delete: if isAdmin();
+    }
+
+    match /campaigns/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isImageUnder10MB();
+      allow delete: if isAdmin();
+    }
+
+    // Todo lo no listado explícitamente: denegado por defecto.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// Despliegue:
+// 1. Requiere que Storage ya esté activado en la consola de Firebase (Paso 1, ya hecho).
+// 2. firebase.json ya tiene la sección "storage": { "rules": "storage.rules" }.
+// 3. Ejecutar: firebase deploy --only storage

@@ -3,9 +3,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase'; // CORRECCIÓN CRÍTICA DE RUTA
+import { isOptimizableImageSrc, isValidImageSrc } from '../../../lib/imageSrc';
 
 // ==========================================
 // INTERFACES DE DATOS
@@ -128,7 +130,7 @@ export default function CatalogoMarcaPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {models.map((model) => (
+              {models.map((model, index) => (
                 <article key={model.id} className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group cursor-pointer shadow-none rounded-none">
                   
                   {/* Etiqueta Visual de Disponibilidad B2B */}
@@ -139,13 +141,16 @@ export default function CatalogoMarcaPage() {
                   </div>
 
                   {/* Imagen del Vehículo */}
-                  <div className="w-full aspect-[4/3] bg-[#F8F9FA] border-b border-[#C0C0C0] p-4 flex items-center justify-center overflow-hidden">
-                    {model.imgUrl ? (
-                      <img 
-                        src={model.imgUrl} 
-                        alt={`${brandName} ${model.name}`} 
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                        loading="lazy"
+                  <div className="relative w-full aspect-[4/3] bg-[#F8F9FA] border-b border-[#C0C0C0] overflow-hidden">
+                    {isValidImageSrc(model.imgUrl) ? (
+                      <Image
+                        src={model.imgUrl}
+                        alt={`${brandName} ${model.name}`}
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-contain p-4 group-hover:scale-105 transition-transform duration-500"
+                        preload={index === 0}
+                        unoptimized={!isOptimizableImageSrc(model.imgUrl)}
                       />
                     ) : (
                       <span className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</span>

@@ -3,12 +3,15 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, auth, storage } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
@@ -26,6 +29,67 @@ interface LeadData {
   concesionaria_destino: string;
   estado: string;
   createdAt: Date;
+}
+
+// ==========================================
+// CARGA DE IMÁGENES A FIREBASE STORAGE
+// ==========================================
+// Reemplaza los viejos inputs de "URL de imagen": sube el archivo elegido a
+// Storage bajo `folder/` y devuelve la download URL para guardarla en Firestore,
+// igual que antes se guardaba una URL externa pegada a mano.
+function ImageUploadField({ label, folder, value, onChange, accentClass }: {
+  label: string;
+  folder: string;
+  value: string;
+  onChange: (url: string) => void;
+  accentClass?: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError('');
+    setUploading(true);
+    try {
+      const path = `${folder}/${Date.now()}_${file.name}`;
+      const fileRef = ref(storage, path);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      onChange(url);
+    } catch (err: any) {
+      setError(err.message || 'Error al subir la imagen.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className={`text-[10px] font-bold uppercase block mb-1 ${accentClass || 'text-[#3A3A3C]'}`}>{label}</label>
+      {isValidImageSrc(value) && (
+        <Image
+          src={value}
+          alt="Vista previa"
+          width={96}
+          height={48}
+          className="h-12 w-auto object-contain mb-2 border border-[#C0C0C0]/50 p-1"
+          unoptimized={!isOptimizableImageSrc(value)}
+        />
+      )}
+      <input
+        type="file"
+        accept="image/*"
+        onChange={handleFile}
+        disabled={uploading}
+        className={`w-full border p-3 text-xs focus:outline-none disabled:opacity-50 ${accentClass ? 'border-[#00BFFF]/30 focus:border-[#00BFFF]' : 'focus:border-[#0A1F33]'}`}
+      />
+      {uploading && <p className="text-[10px] text-[#00BFFF] mt-1">Subiendo imagen...</p>}
+      {error && <p className="text-[10px] text-red-600 mt-1">{error}</p>}
+    </div>
+  );
 }
 
 export default function AdminDashboardPage() {
@@ -961,7 +1025,7 @@ export default function AdminDashboardPage() {
                   <form onSubmit={handleSaveMarca} className="flex flex-col gap-4">
                     <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Marca</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.name} onChange={e => setMarcaForm({...marcaForm, name: e.target.value})} required /></div>
                     <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen de la Marca</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.origen_marca} onChange={e => setMarcaForm({...marcaForm, origen_marca: e.target.value})} /></div>
-                    <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">URL del Logotipo</label><input type="text" className="w-full border border-[#00BFFF]/30 p-3 text-xs focus:outline-none focus:border-[#00BFFF]" value={marcaForm.logoUrl} onChange={e => setMarcaForm({...marcaForm, logoUrl: e.target.value})} placeholder="https://..." /></div>
+                    <ImageUploadField label="Logotipo" folder="brands" value={marcaForm.logoUrl} onChange={url => setMarcaForm({...marcaForm, logoUrl: url})} accentClass="text-[#00BFFF]" />
                     <div className="flex gap-2 mt-4">
                        {marcaForm.id && <button type="button" onClick={() => setMarcaForm({id:'', name:'', origen_marca:'', logoUrl:''})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
                        <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Guardar</button>
@@ -991,7 +1055,7 @@ export default function AdminDashboardPage() {
                       <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen (Fábrica)</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.origen} onChange={e => setModeloForm({...modeloForm, origen: e.target.value})} /></div>
                       <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio Inicial</label><input type="number" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.startingPrice} onChange={e => setModeloForm({...modeloForm, startingPrice: e.target.value})} required /></div>
                     </div>
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Imagen Catálogo</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.imgUrl} onChange={e => setModeloForm({...modeloForm, imgUrl: e.target.value})} /></div>
+                    <ImageUploadField label="Imagen Catálogo" folder="models" value={modeloForm.imgUrl} onChange={url => setModeloForm({...modeloForm, imgUrl: url})} />
                     <div className="flex gap-2 mt-4">
                        {modeloForm.id && <button type="button" onClick={() => setModeloForm({id:'', brandId:'', name:'', tipo_carroceria:'SUV', subsegmento:'', origen:'', startingPrice:'', imgUrl:'', isPopular: false})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
                        <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Guardar</button>
@@ -1115,14 +1179,14 @@ export default function AdminDashboardPage() {
                       ))}
                       {activeTab === 'marcas' && filteredMarcas.map(m => (
                         <tr key={m.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
-                          <td className="p-4">{m.logoUrl ? <img src={m.logoUrl} alt={m.name} className="h-8 object-contain" /> : <div className="h-8 w-8 bg-[#F5F5F5] flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase rounded-full">{m.name.substring(0,2)}</div>}</td>
+                          <td className="p-4">{isValidImageSrc(m.logoUrl) ? <Image src={m.logoUrl} alt={m.name} width={64} height={32} className="h-8 w-auto object-contain" unoptimized={!isOptimizableImageSrc(m.logoUrl)} /> : <div className="h-8 w-8 bg-[#F5F5F5] flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase rounded-full">{m.name.substring(0,2)}</div>}</td>
                           <td className="p-4 font-bold">{m.name} <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Origen: {m.origen_marca || 'N/A'}</span></td>
                           <td className="p-4 text-right flex gap-3 justify-end items-center mt-2"><button onClick={() => triggerEditMarca(m)} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button><button onClick={() => handleDelete('brands', m.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button></td>
                         </tr>
                       ))}
                       {activeTab === 'modelos' && filteredModelos.map(m => (
                         <tr key={m.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
-                          <td className="p-4">{m.imgUrl ? <img src={m.imgUrl} alt={m.name} className="h-8 object-contain" /> : <span className="text-[#C0C0C0] text-[9px] uppercase">Sin Foto</span>}</td>
+                          <td className="p-4">{isValidImageSrc(m.imgUrl) ? <Image src={m.imgUrl} alt={m.name} width={64} height={32} className="h-8 w-auto object-contain" unoptimized={!isOptimizableImageSrc(m.imgUrl)} /> : <span className="text-[#C0C0C0] text-[9px] uppercase">Sin Foto</span>}</td>
                           <td className="p-4 font-bold">
                             {m.name} {m.isPopular && <span className="ml-2 text-[8px] bg-[#00BFFF] text-[#0A1F33] px-2 py-0.5 uppercase tracking-widest">Destacado</span>}
                             <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Marca ID: {m.brandId} • {m.tipo_carroceria}</span>
@@ -1207,7 +1271,7 @@ export default function AdminDashboardPage() {
                   </div>
                   <div><label className="text-[10px] font-bold uppercase block mb-1">Precio Promo</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.price} onChange={e => setAdForm({...adForm, price: e.target.value})} /></div>
                   <div><label className="text-[10px] font-bold uppercase block mb-1">URL Enlace</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.link} onChange={e => setAdForm({...adForm, link: e.target.value})} /></div>
-                  <div><label className="text-[10px] font-bold uppercase block mb-1">Imagen URL</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.img} onChange={e => setAdForm({...adForm, img: e.target.value})} required /></div>
+                  <ImageUploadField label="Imagen del Banner" folder="campaigns" value={adForm.img} onChange={url => setAdForm({...adForm, img: url})} />
                   <button type="submit" disabled={loading} className="mt-2 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Inyectar Campaña</button>
                 </form>
               </div>
