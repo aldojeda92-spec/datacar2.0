@@ -11,6 +11,7 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../lib/compareStorage';
 import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
+import Modal from '../components/a11y/Modal';
 
 // ==========================================
 // INTERFACES (Estructura de Datos)
@@ -249,13 +250,17 @@ function ComparadorContent() {
 
     try {
       // 1. Guardar el Lead en la bóveda
+      // NOTA: 'telefono' es obligatorio en firestore.rules; este flujo solo pide
+      // correo, así que se envía el mismo sentinel 'No proporcionado' que
+      // firestore.rules acepta como alternativa a la validación de celular PY.
       await addDoc(collection(db, 'leads'), {
         email: shareEmail,
         nombre: 'Interesado Comparativa',
-        telefono: '-',
+        telefono: 'No proporcionado',
         origen: 'Generador Enlace Comparativa',
         vehiculo: compareItems.map(i=>i.name).join(' VS '),
-        enlace_generado: shareLink,
+        concesionaria_destino: 'A designar (Central DATACAR)',
+        concesionaria_destino_norm: 'A DESIGNAR',
         estado: 'Nuevo',
         createdAt: serverTimestamp()
       });
@@ -410,11 +415,11 @@ function ComparadorContent() {
                             </div>
                           </div>
                         ) : (
-                          <div className="h-full min-h-[300px] border border-dashed border-[#C0C0C0] flex flex-col justify-center items-center p-6 text-center bg-[#F8F9FA] hover:bg-[#F5FBFF] transition-colors cursor-pointer group" onClick={() => setSearchModalOpen(true)}>
+                          <button type="button" className="appearance-none h-full min-h-[300px] w-full border border-dashed border-[#C0C0C0] flex flex-col justify-center items-center p-6 text-center bg-[#F8F9FA] hover:bg-[#F5FBFF] transition-colors cursor-pointer group" onClick={() => setSearchModalOpen(true)}>
                             <svg className="w-8 h-8 text-[#C0C0C0] group-hover:text-[#00BFFF] mb-3 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
                             <p className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest mb-1">Espacio Disponible</p>
                             <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest">Clic para agregar auto</p>
-                          </div>
+                          </button>
                         )}
                       </th>
                     );
@@ -543,9 +548,12 @@ function ComparadorContent() {
       )}
 
       {/* MODAL: BUSCADOR PREDICTIVO */}
-      {searchModalOpen && (
-        <div className="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-[#FFFFFF] p-8 max-w-2xl w-full border-t-4 border-[#00BFFF] relative shadow-none">
+      <Modal
+        isOpen={searchModalOpen}
+        onClose={() => { setSearchModalOpen(false); setSearchTerm(''); }}
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-2xl w-full border-t-4 border-[#00BFFF] relative shadow-none"
+      >
             <button onClick={() => { setSearchModalOpen(false); setSearchTerm(''); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black text-lg border-none outline-none">✕</button>
             <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Agregar Auto</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">Busca modelo o versión específica para comparar</p>
@@ -562,24 +570,25 @@ function ComparadorContent() {
                 searchResults.map(v => {
                   const isAlreadyAdded = compareItems.some(ci => ci.id === v.id);
                   return (
-                    <div key={v.id} onClick={() => !isAlreadyAdded && handleAddVersion(v)} className={`p-4 border-b border-[#C0C0C0]/40 flex justify-between items-center transition-colors ${isAlreadyAdded ? 'opacity-50 cursor-not-allowed bg-[#E6E6E6]' : 'cursor-pointer hover:bg-[#FFFFFF] hover:border-l-4 hover:border-l-[#00BFFF]'}`}>
+                    <button type="button" key={v.id} disabled={isAlreadyAdded} onClick={() => !isAlreadyAdded && handleAddVersion(v)} className={`appearance-none text-left w-full p-4 border-b border-[#C0C0C0]/40 flex justify-between items-center transition-colors ${isAlreadyAdded ? 'opacity-50 cursor-not-allowed bg-[#E6E6E6]' : 'cursor-pointer hover:bg-[#FFFFFF] hover:border-l-4 hover:border-l-[#00BFFF]'}`}>
                       <div className="flex flex-col"><span className="font-bold text-xs text-[#0A1F33] uppercase">{v.brandName} {v.modelName}</span><span className="text-[10px] text-[#3A3A3C] uppercase tracking-widest">{v.versionName}</span></div>
                       <div className="flex items-center gap-4"><span className="text-[11px] font-black text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {v.price.toLocaleString()}</span>{isAlreadyAdded ? <span className="text-[9px] text-[#D93025] font-bold uppercase">Agregado</span> : <span className="text-[10px] text-[#00BFFF] font-black">+ Agregar</span>}</div>
-                    </div>
+                    </button>
                   )
                 })
               ) : (
                 <div className="p-8 text-center text-[#C0C0C0] text-[10px] font-bold uppercase tracking-widest">Sin resultados en el catálogo.</div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* MODAL: COMPARTIR ENLACE Y CAPTURA DE CORREO (LEAD MAGNET) */}
-      {shareModalOpen && (
-        <div className="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#00BFFF] relative shadow-none">
+      <Modal
+        isOpen={shareModalOpen}
+        onClose={() => { setShareModalOpen(false); setShareFeedback({type:'', message:''}); }}
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#00BFFF] relative shadow-none"
+      >
             <button onClick={() => { setShareModalOpen(false); setShareFeedback({type:'', message:''}); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black border-none outline-none">✕</button>
             <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Guardar Comparativa</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">Ingresá tu correo para recibir un enlace único y no perder tu búsqueda.</p>
@@ -594,9 +603,7 @@ function ComparadorContent() {
               </button>
               {shareFeedback.message && <p className={`text-[10px] text-center font-bold uppercase tracking-widest mt-2 ${shareFeedback.type==='error'?'text-[#D93025]':'text-[#1E8E3E]'}`}>{shareFeedback.message}</p>}
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* ==========================================
           INYECCIÓN DEL MODAL INTELIGENTE (LEAD B2B)

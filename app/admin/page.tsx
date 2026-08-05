@@ -12,6 +12,7 @@ import { parseCSVRow } from '../../lib/csv';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
+import { useToast } from '../context/ToastContext';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
@@ -94,7 +95,8 @@ function ImageUploadField({ label, folder, value, onChange, accentClass }: {
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  
+  const { showToast } = useToast();
+
   // ==========================================
   // ESTADOS DE AUTENTICACIÓN Y SEGURIDAD
   // ==========================================
@@ -327,7 +329,7 @@ export default function AdminDashboardPage() {
       await updateDoc(doc(db, 'leads', id), { estado: newStatus });
       setLeadsList(prev => prev.map(l => l.id === id ? { ...l, estado: newStatus } : l));
     } catch (err) {
-      alert("Error actualizando el estado del lead.");
+      showToast("Error actualizando el estado del lead.");
     }
   };
 
@@ -412,7 +414,7 @@ export default function AdminDashboardPage() {
       await updateDoc(doc(db, 'dealership_requests', reqId), { estado: newStatus });
       setSolicitudesList(prev => prev.map(r => r.id === reqId ? { ...r, estado: newStatus } : r));
     } catch (err) {
-      alert("Error actualizando solicitud.");
+      showToast("Error actualizando solicitud.");
     }
   };
 

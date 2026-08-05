@@ -8,6 +8,7 @@ import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'f
 import { db, auth } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
+import { useToast } from '../context/ToastContext';
 
 // ==========================================
 // INTERFACES B2B
@@ -21,6 +22,7 @@ interface UserData {
 interface RequestForm { nombre: string; cargo: string; concesionaria: string; marcas: string; telefono: string; email: string; }
 
 export default function PortalConcesionariasPage() {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   
@@ -270,7 +272,7 @@ export default function PortalConcesionariasPage() {
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, estado: newStatus } : l));
       await logAudit('UPDATE_LEAD_STATUS', leadId, `Cambió estado de ${leadName} a ${newStatus}`);
     } catch (error) {
-      alert("Error actualizando lead.");
+      showToast("Error actualizando lead.");
     }
   };
 
@@ -287,7 +289,7 @@ export default function PortalConcesionariasPage() {
       setFeedback({ type: 'success', message: 'Precio actualizado en toda la plataforma.' });
       setTimeout(() => setFeedback({ type: '', message: '' }), 3000);
     } catch (error) {
-      alert("Error actualizando precio.");
+      showToast("Error actualizando precio.");
     }
   };
 

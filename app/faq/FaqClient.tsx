@@ -88,8 +88,10 @@ export default function FaqClient() {
             
             return (
               <div key={index} className="border-b border-[#C0C0C0] last:border-b-0">
-                <button 
+                <button
                   onClick={() => toggleFAQ(index)}
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-page-panel-${index}`}
                   className="w-full text-left p-6 flex justify-between items-center bg-[#FFFFFF] hover:bg-[#F8F9FA] transition-colors outline-none cursor-pointer group"
                 >
                   <span 
@@ -103,7 +105,8 @@ export default function FaqClient() {
                   </div>
                 </button>
                 
-                <div 
+                <div
+                  id={`faq-page-panel-${index}`}
                   className={`overflow-hidden transition-all duration-300 ease-in-out bg-[#F8F9FA] ${isOpen ? 'max-h-[500px] opacity-100 border-t border-[#C0C0C0]/50' : 'max-h-0 opacity-0'}`}
                 >
                   <div className="p-6">

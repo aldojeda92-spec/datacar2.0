@@ -10,6 +10,8 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../../../../../lib/image
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../../lib/finance';
 import LeadModal from '../../../../components/LeadModal'; // INYECCIÓN B2B
 import NewsletterForm from '../../../../components/NewsletterForm'; // INYECCIÓN B2C
+import Modal from '../../../../components/a11y/Modal';
+import { useToast } from '../../../../context/ToastContext';
 import { FAQ_FICHA_VEHICULO as faqs } from '../../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../../lib/compareStorage';
 
@@ -63,6 +65,8 @@ export default function VersionDetailClient() {
   // Estados Footer (FAQ)
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
+  const { showToast } = useToast();
+
   useEffect(() => {
     const fetchData = async () => {
       if (!versionId) return;
@@ -113,7 +117,7 @@ export default function VersionDetailClient() {
 
   const handleComparar = () => {
     if (!version) return;
-    if (compareList.length >= 3) { alert('Matriz comparativa llena (Max 3 autos).'); return; }
+    if (compareList.length >= 3) { showToast('Matriz comparativa llena (Max 3 autos).'); return; }
     if (!compareList.find(v => v.id === version.id)) {
       const newItem = { id: version.id, name: `${brand?.name} ${model?.name} ${version.name}`, price: version.price };
       const newList = [...compareList, newItem];
@@ -335,9 +339,12 @@ export default function VersionDetailClient() {
         concesionariaDestino={version.concesionaria || brand?.name || 'Central DATACAR'}
       />
 
-      {showCalcular && (
-        <div className="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] rounded-none">
+      <Modal
+        isOpen={showCalcular}
+        onClose={() => { setShowCalcular(false); setCuotaCalculada(null); setFeedback({type:'', message:''}); }}
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] rounded-none"
+      >
             <button onClick={() => { setShowCalcular(false); setCuotaCalculada(null); setFeedback({type:'', message:''}); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black border-none outline-none">✕</button>
             <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Plan Financiero</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">Proyección base: US$ {version.price.toLocaleString()}</p>
@@ -359,9 +366,7 @@ export default function VersionDetailClient() {
                 </div>
               )}
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* DOCK DE COMPARACIÓN FLOTANTE */}
       {compareList.length > 0 && (
@@ -394,11 +399,16 @@ export default function VersionDetailClient() {
           <div className="md:w-2/3 w-full flex flex-col border-t border-[#C0C0C0]">
             {faqs.map((faq, index) => (
               <div key={index} className="border-b border-[#C0C0C0] py-6">
-                <button onClick={() => setOpenFaq(openFaq === index ? null : index)} className="w-full flex justify-between items-center text-left focus:outline-none group bg-transparent border-none">
+                <button
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                  aria-expanded={openFaq === index}
+                  aria-controls={`faq-version-panel-${index}`}
+                  className="w-full flex justify-between items-center text-left focus:outline-none group bg-transparent border-none"
+                >
                   <span className="font-bold text-sm text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors pr-4" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.q}</span>
                   <span className="text-[#0A1F33] text-2xl font-light">{openFaq === index ? '−' : '+'}</span>
                 </button>
-                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+                <div id={`faq-version-panel-${index}`} className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
                   <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium pr-8" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.a}</p>
                 </div>
               </div>

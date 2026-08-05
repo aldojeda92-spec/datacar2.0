@@ -124,6 +124,22 @@ export default function HomeClient() {
     }, 150);
   };
 
+  // Soporte de teclado para los mega-menús: se abren al enfocar el trigger y se
+  // cierran cuando el foco sale por completo del contenedor (Tab hacia afuera) o
+  // con Escape, sin tocar el comportamiento existente de mouse.
+  const handleMegaMenuBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setActiveMegaMenu(null);
+    }
+  };
+
+  const handleMegaMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      setActiveMegaMenu(null);
+      (e.currentTarget.querySelector('button') as HTMLButtonElement | null)?.focus();
+    }
+  };
+
   // 7. Filtros de Presupuesto (Dinámicos y Armónicos)
   const priceTabs = useMemo(() => [
     { id: 1, label: 'Hasta USD 15.000', filter: (p: number) => p > 0 && p <= 15000 },
@@ -251,8 +267,8 @@ export default function HomeClient() {
         <div className="hidden lg:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider h-full" style={{ fontFamily: 'Inter, sans-serif' }}>
           
           {/* Menú: Por Tipo */}
-          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('tipos')} onMouseLeave={handleMouseLeave}>
-            <button className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'tipos' ? 'text-[#00BFFF]' : ''}`}>
+          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('tipos')} onMouseLeave={handleMouseLeave} onBlur={handleMegaMenuBlur} onKeyDown={handleMegaMenuKeyDown}>
+            <button onFocus={() => handleMouseEnter('tipos')} aria-expanded={activeMegaMenu === 'tipos'} aria-haspopup="true" className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'tipos' ? 'text-[#00BFFF]' : ''}`}>
               Por Tipo <svg className={`w-3 h-3 transition-transform ${activeMegaMenu === 'tipos' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             {activeMegaMenu === 'tipos' && (
@@ -267,8 +283,8 @@ export default function HomeClient() {
           </div>
 
           {/* Menú: Por Marca */}
-          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('marcas')} onMouseLeave={handleMouseLeave}>
-            <button className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'marcas' ? 'text-[#00BFFF]' : ''}`}>
+          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('marcas')} onMouseLeave={handleMouseLeave} onBlur={handleMegaMenuBlur} onKeyDown={handleMegaMenuKeyDown}>
+            <button onFocus={() => handleMouseEnter('marcas')} aria-expanded={activeMegaMenu === 'marcas'} aria-haspopup="true" className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'marcas' ? 'text-[#00BFFF]' : ''}`}>
               Por Marca <svg className={`w-3 h-3 transition-transform ${activeMegaMenu === 'marcas' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             {activeMegaMenu === 'marcas' && (
@@ -283,8 +299,8 @@ export default function HomeClient() {
           </div>
 
           {/* Menú: Herramientas */}
-          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('herramientas')} onMouseLeave={handleMouseLeave}>
-            <button className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'herramientas' ? 'text-[#00BFFF]' : ''}`}>
+          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('herramientas')} onMouseLeave={handleMouseLeave} onBlur={handleMegaMenuBlur} onKeyDown={handleMegaMenuKeyDown}>
+            <button onFocus={() => handleMouseEnter('herramientas')} aria-expanded={activeMegaMenu === 'herramientas'} aria-haspopup="true" className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'herramientas' ? 'text-[#00BFFF]' : ''}`}>
               Herramientas <svg className={`w-3 h-3 transition-transform ${activeMegaMenu === 'herramientas' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             {activeMegaMenu === 'herramientas' && (
@@ -315,18 +331,29 @@ export default function HomeClient() {
         <div className="w-full max-w-4xl relative mb-6">
           <div className="flex bg-[#FFFFFF] border-2 border-transparent focus-within:border-[#00BFFF] transition-colors overflow-hidden">
             <div className="pl-6 flex items-center text-[#C0C0C0]"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
-            <input type="text" placeholder="Buscá por marca, modelo o versión exacta..." className="flex-1 py-5 px-4 text-sm md:text-base font-medium text-[#3A3A3C] focus:outline-none placeholder:text-[#C0C0C0]" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onFocus={() => searchTerm.length >= 2 && setIsDropdownOpen(true)} />
+            <input
+              type="text"
+              role="combobox"
+              aria-expanded={isDropdownOpen}
+              aria-controls="home-search-listbox"
+              aria-autocomplete="list"
+              placeholder="Buscá por marca, modelo o versión exacta..."
+              className="flex-1 py-5 px-4 text-sm md:text-base font-medium text-[#3A3A3C] focus:outline-none placeholder:text-[#C0C0C0]"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => searchTerm.length >= 2 && setIsDropdownOpen(true)}
+            />
           </div>
           
           {isDropdownOpen && (
             <div className="absolute top-full left-0 w-full bg-[#FFFFFF] border-2 border-t-0 border-[#00BFFF] max-h-80 overflow-y-auto z-50 mt-0">
-              <ul className="flex flex-col">
+              <ul id="home-search-listbox" role="listbox" className="flex flex-col">
                 {searchResults.length > 0 ? searchResults.map((item) => {
                     const dynamicUrl = item.type === 'Modelo' && item.brandId && item.modelId
                       ? `/catalogo/${item.brandId}/${item.modelId}`
                       : `/catalogo?marca=${encodeURIComponent(item.title)}`;
                     return (
-                      <li key={item.id} className="border-b border-[#C0C0C0]/40 last:border-0 hover:bg-[#F8F9FA] transition-colors">
+                      <li key={item.id} role="option" aria-selected="false" className="border-b border-[#C0C0C0]/40 last:border-0 hover:bg-[#F8F9FA] transition-colors">
                         <Link href={dynamicUrl} className="flex justify-between items-center px-6 py-4">
                           <div className="flex flex-col"><span className="font-bold text-sm text-[#0A1F33] uppercase">{item.title}</span>{item.subtitle && <span className="text-[10px] text-[#3A3A3C] font-medium uppercase mt-1">{item.subtitle}</span>}</div>
                           <span className={`text-[9px] font-bold uppercase tracking-widest px-3 py-1 border ${item.type === 'Marca' ? 'border-[#00BFFF] text-[#00BFFF]' : 'border-[#3A3A3C] text-[#3A3A3C]'}`}>{item.type}</span>

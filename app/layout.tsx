@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Montserrat, Inter } from "next/font/google";
 import "./globals.css";
 import { LeadProvider } from "./context/LeadContext"; // Inyección del contexto global
+import { ToastProvider } from "./context/ToastContext";
 
 // Configuración estricta según Manual de Marca
 const montserrat = Montserrat({ 
@@ -30,9 +31,11 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${montserrat.variable} ${inter.variable} font-inter bg-white text-dataCharcoal antialiased selection:bg-digitalCyan selection:text-authorityBlue`}>
         {/* El Provider envuelve toda la app, inyectando el Modal una sola vez en el DOM */}
-        <LeadProvider>
-          {children}
-        </LeadProvider>
+        <ToastProvider>
+          <LeadProvider>
+            {children}
+          </LeadProvider>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -4,8 +4,10 @@
 import React, { useState } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 // CORRECCIÓN BUGS DE RUTA: Subimos dos niveles (../../) para encontrar lib/firebase y lib/mailer
-import { db } from '../../lib/firebase'; 
+import { db } from '../../lib/firebase';
 import { sendLeadNotificationEmail } from '../../lib/mailer';
+import Modal from './a11y/Modal';
+import { useToast } from '../context/ToastContext';
 
 interface LeadModalProps {
   isOpen: boolean;
@@ -26,6 +28,7 @@ export default function LeadModal({
 }: LeadModalProps) {
   const [formData, setFormData] = useState({ nombre: '', telefono: '', email: '' });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const { showToast } = useToast();
 
   if (!isOpen) return null;
 
@@ -36,7 +39,7 @@ export default function LeadModal({
     // Validación estricta B2B de Paraguay
     const phoneRegex = /^09\d{8}$/;
     if (!phoneRegex.test(formData.telefono)) {
-      alert("El celular debe tener 10 dígitos y empezar con 09.");
+      showToast("El celular debe tener 10 dígitos y empezar con 09.");
       setStatus('idle');
       return;
     }
@@ -85,9 +88,13 @@ export default function LeadModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0A1F33]/90 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-[#FFFFFF] w-full max-w-md p-8 border-t-4 border-[#00BFFF] relative shadow-none rounded-none">
-        
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="fixed inset-0 bg-[#0A1F33]/90 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"
+      panelClassName="bg-[#FFFFFF] w-full max-w-md p-8 border-t-4 border-[#00BFFF] relative shadow-none rounded-none"
+    >
+
         {/* BOTÓN CERRAR FLAT */}
         <button 
           onClick={onClose} 
@@ -186,7 +193,6 @@ export default function LeadModal({
             </form>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

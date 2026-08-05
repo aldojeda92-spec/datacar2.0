@@ -9,6 +9,8 @@ import { db } from '../../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../lib/finance';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
+import Modal from '../components/a11y/Modal';
+import { useToast } from '../context/ToastContext';
 
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
@@ -77,7 +79,8 @@ interface WizardStep {
 }
 
 export default function RecomendadorPage() {
-  const [step, setStep] = useState<number>(0); 
+  const { showToast } = useToast();
+  const [step, setStep] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   
   const [loading, setLoading] = useState(true);
@@ -504,7 +507,7 @@ export default function RecomendadorPage() {
     const entregaNum = Number(calcForm.entrega) || 0;
     const plazoNum = Number(calcForm.plazo) || 36;
     
-    if (entregaNum >= calcVehicle.startingPrice) { alert('La entrega debe ser menor al precio total.'); return; }
+    if (entregaNum >= calcVehicle.startingPrice) { showToast('La entrega debe ser menor al precio total.'); return; }
 
     setCuotaCalculada(calcularCuotaFrancesa(calcVehicle.startingPrice, entregaNum, plazoNum, finConfig));
   };
@@ -864,9 +867,14 @@ export default function RecomendadorPage() {
       {/* ==========================================
           MODAL CALCULADORA
           ========================================== */}
-      {calcVehicle && (
-        <div className="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] shadow-none rounded-none">
+      <Modal
+        isOpen={!!calcVehicle}
+        onClose={() => { setCalcVehicle(null); setCuotaCalculada(null); }}
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] shadow-none rounded-none"
+      >
+        {calcVehicle && (
+          <>
             <button onClick={() => { setCalcVehicle(null); setCuotaCalculada(null); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black text-lg border-none outline-none">✕</button>
             <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Plan Financiero</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6 border-b border-[#C0C0C0]/50 pb-4">
@@ -899,9 +907,9 @@ export default function RecomendadorPage() {
                 </div>
               )}
             </form>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </main>
   );
 }

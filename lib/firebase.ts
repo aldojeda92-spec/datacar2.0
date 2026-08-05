@@ -5,15 +5,20 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
-const firebaseConfig = {
-  // Asegúrate de que aquí estén tus credenciales reales de Firebase
-apiKey: "AIzaSyCwLxbZ3sXtwwTtpDvLYtkdMI3HLI7_vFM",
-authDomain: "datacar2-0.firebaseapp.com",
-projectId: "datacar2-0",
-storageBucket: "datacar2-0.firebasestorage.app",
-messagingSenderId: "642794625733",
-appId: "1:642794625733:web:5702e681e726e3709f2eac"
+const requiredEnvVars = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
+
+for (const [key, value] of Object.entries(requiredEnvVars)) {
+  if (!value) throw new Error(`Falta la variable de entorno para Firebase: ${key} (revisá .env.local)`);
+}
+
+const firebaseConfig = requiredEnvVars as Record<keyof typeof requiredEnvVars, string>;
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);

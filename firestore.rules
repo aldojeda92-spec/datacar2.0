@@ -117,7 +117,8 @@ service cloud.firestore {
         request.resource.data.nombre is string &&
         request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() < 120 &&
         request.resource.data.telefono is string &&
-        request.resource.data.telefono.matches('^09[0-9]{8}$') &&
+        (request.resource.data.telefono == 'No proporcionado' ||
+         request.resource.data.telefono.matches('^09[0-9]{8}$')) &&
         request.resource.data.estado == 'Nuevo' &&
         request.resource.data.createdAt == request.time;
 

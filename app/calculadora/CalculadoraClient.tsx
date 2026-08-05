@@ -8,6 +8,7 @@ import { db } from '../../lib/firebase';
 // CORRECCIÓN DE RUTAS: Solo un nivel arriba (../) porque components está dentro de app/
 import LeadModal from '../components/LeadModal';
 import SimpleFooter from '../components/SimpleFooter';
+import { useToast } from '../context/ToastContext';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa, calcularPresupuestoInverso } from '../../lib/finance';
 import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/catalogCache';
 
@@ -19,6 +20,7 @@ interface ModelItem { id: string; brandId: string; name: string; }
 interface VersionItem { id: string; modelId: string; name: string; price: number; }
 
 export default function CalculadoraClient() {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
   
@@ -106,8 +108,8 @@ export default function CalculadoraClient() {
     e.preventDefault();
     const entregaNum = Number(entregaDirecto) || 0;
 
-    if (precioVehiculo <= 0) return alert('Seleccioná un vehículo válido primero.');
-    if (entregaNum >= precioVehiculo) return alert('La entrega inicial no puede ser mayor o igual al precio del vehículo.');
+    if (precioVehiculo <= 0) return showToast('Seleccioná un vehículo válido primero.');
+    if (entregaNum >= precioVehiculo) return showToast('La entrega inicial no puede ser mayor o igual al precio del vehículo.');
 
     setCuotaCalculada(calcularCuotaFrancesa(precioVehiculo, entregaNum, plazoDirecto, config));
   };
@@ -118,7 +120,7 @@ export default function CalculadoraClient() {
     const cuotaNum = Number(cuotaObjetivo) || 0;
     const entregaNum = Number(entregaInverso) || 0;
 
-    if (cuotaNum <= 0) return alert('Ingresá una cuota mensual válida.');
+    if (cuotaNum <= 0) return showToast('Ingresá una cuota mensual válida.');
 
     setPresupuestoBase(calcularPresupuestoInverso(cuotaNum, entregaNum, plazoInverso, config));
   };

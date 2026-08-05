@@ -12,6 +12,9 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../../../../lib/imageSrc
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../lib/finance';
 import LeadModal from '../../../components/LeadModal';
 import NewsletterForm from '../../../components/NewsletterForm';
+import Modal from '../../../components/a11y/Modal';
+import { useToast } from '../../../context/ToastContext';
+import { useDisclosure } from '../../../../lib/useDisclosure';
 import { FAQ_FICHA_VEHICULO as faqs } from '../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../lib/compareStorage';
 
@@ -59,9 +62,9 @@ export default function ModeloDetailClient() {
   const [showConsultar, setShowConsultar] = useState(false);
   const [versionToConsult, setVersionToConsult] = useState<VersionData | null>(null); // Nuevo estado dinámico para LeadModal
   const [showCalcular, setShowCalcular] = useState(false);
-  const [showAllConfort, setShowAllConfort] = useState(false);
-  const [showAllSecurity, setShowAllSecurity] = useState(false);
-  
+  const confortDisclosure = useDisclosure(false);
+  const securityDisclosure = useDisclosure(false);
+
   const [compareList, setCompareList] = useState<{id: string, name: string, price: number}[]>([]);
 
   // Formularios
@@ -70,6 +73,8 @@ export default function ModeloDetailClient() {
 
   // Estado Footer (FAQ)
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  const { showToast } = useToast();
 
   // ==========================================
   // 1. OBTENCIÓN Y CÁLCULO DE DATOS
@@ -129,7 +134,7 @@ export default function ModeloDetailClient() {
   };
 
   const handleComparar = (version: VersionData) => {
-    if (compareList.length >= 3) { alert('Límite de 3 autos en el comparador.'); return; }
+    if (compareList.length >= 3) { showToast('Límite de 3 autos en el comparador.'); return; }
     if (!compareList.find(v => v.id === version.id)) {
       const newItem = { id: version.id, name: `${brand?.name} ${model?.name} ${version.name}`, price: version.price };
       const newList = [...compareList, newItem];
@@ -351,14 +356,16 @@ export default function ModeloDetailClient() {
                 <div className="flex flex-col gap-2">
                   {baseVersion.features.seguridad_standard && baseVersion.features.seguridad_standard.length > 0 ? (
                     <>
-                      {(showAllSecurity ? baseVersion.features.seguridad_standard : baseVersion.features.seguridad_standard.slice(0, 4)).map((item, i) => (
-                        <div key={i} className="flex items-start gap-2 text-[11px] text-[#3A3A3C] font-medium leading-tight">
-                          <span className="text-[#00BFFF] text-lg leading-none mt-[-2px]">•</span> {item}
-                        </div>
-                      ))}
+                      <div {...securityDisclosure.panelProps} className="flex flex-col gap-2">
+                        {(securityDisclosure.isOpen ? baseVersion.features.seguridad_standard : baseVersion.features.seguridad_standard.slice(0, 4)).map((item, i) => (
+                          <div key={i} className="flex items-start gap-2 text-[11px] text-[#3A3A3C] font-medium leading-tight">
+                            <span className="text-[#00BFFF] text-lg leading-none mt-[-2px]">•</span> {item}
+                          </div>
+                        ))}
+                      </div>
                       {baseVersion.features.seguridad_standard.length > 4 && (
-                        <button onClick={() => setShowAllSecurity(!showAllSecurity)} className="text-left mt-2 text-[9px] font-bold text-[#0A1F33] hover:text-[#00BFFF] uppercase tracking-widest transition-colors border-none outline-none">
-                          {showAllSecurity ? 'Ocultar Detalle ↑' : `Ver ${baseVersion.features.seguridad_standard.length - 4} características más ↓`}
+                        <button onClick={securityDisclosure.toggle} {...securityDisclosure.buttonProps} className="text-left mt-2 text-[9px] font-bold text-[#0A1F33] hover:text-[#00BFFF] uppercase tracking-widest transition-colors border-none outline-none">
+                          {securityDisclosure.isOpen ? 'Ocultar Detalle ↑' : `Ver ${baseVersion.features.seguridad_standard.length - 4} características más ↓`}
                         </button>
                       )}
                     </>
@@ -385,14 +392,16 @@ export default function ModeloDetailClient() {
                   
                   {baseVersion.features.confort_conveniencia && baseVersion.features.confort_conveniencia.length > 0 && (
                     <>
-                      {(showAllConfort ? baseVersion.features.confort_conveniencia : baseVersion.features.confort_conveniencia.slice(0, 3)).map((item, i) => (
-                        <div key={i} className="flex items-start gap-2 text-[11px] text-[#3A3A3C] font-medium leading-tight">
-                          <span className="text-[#00BFFF] text-lg leading-none mt-[-2px]">•</span> {item}
-                        </div>
-                      ))}
+                      <div {...confortDisclosure.panelProps} className="flex flex-col gap-2">
+                        {(confortDisclosure.isOpen ? baseVersion.features.confort_conveniencia : baseVersion.features.confort_conveniencia.slice(0, 3)).map((item, i) => (
+                          <div key={i} className="flex items-start gap-2 text-[11px] text-[#3A3A3C] font-medium leading-tight">
+                            <span className="text-[#00BFFF] text-lg leading-none mt-[-2px]">•</span> {item}
+                          </div>
+                        ))}
+                      </div>
                       {baseVersion.features.confort_conveniencia.length > 3 && (
-                        <button onClick={() => setShowAllConfort(!showAllConfort)} className="text-left mt-2 text-[9px] font-bold text-[#0A1F33] hover:text-[#00BFFF] uppercase tracking-widest transition-colors border-none outline-none">
-                          {showAllConfort ? 'Ocultar Detalle ↑' : `Ver ${baseVersion.features.confort_conveniencia.length - 3} detalles más ↓`}
+                        <button onClick={confortDisclosure.toggle} {...confortDisclosure.buttonProps} className="text-left mt-2 text-[9px] font-bold text-[#0A1F33] hover:text-[#00BFFF] uppercase tracking-widest transition-colors border-none outline-none">
+                          {confortDisclosure.isOpen ? 'Ocultar Detalle ↑' : `Ver ${baseVersion.features.confort_conveniencia.length - 3} detalles más ↓`}
                         </button>
                       )}
                     </>
@@ -418,9 +427,12 @@ export default function ModeloDetailClient() {
         concesionariaDestino={versionToConsult?.concesionaria || baseVersion?.concesionaria || brand?.name || 'Central DATACAR'}
       />
 
-      {showCalcular && (
-        <div className="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] rounded-none">
+      <Modal
+        isOpen={showCalcular}
+        onClose={() => { setShowCalcular(false); setCuotaCalculada(null); setFeedback({type:'', message:''}); }}
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] rounded-none"
+      >
             <button onClick={() => { setShowCalcular(false); setCuotaCalculada(null); setFeedback({type:'', message:''}); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black border-none outline-none">✕</button>
             <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Plan Financiero</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">Proyección desde US$ {precioDesde.toLocaleString()}</p>
@@ -442,9 +454,7 @@ export default function ModeloDetailClient() {
                 </div>
               )}
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* DOCK DE COMPARACIÓN FLOTANTE */}
       {compareList.length > 0 && (
@@ -481,11 +491,16 @@ export default function ModeloDetailClient() {
           <div className="md:w-2/3 w-full flex flex-col border-t border-[#C0C0C0]">
             {faqs.map((faq, index) => (
               <div key={index} className="border-b border-[#C0C0C0] py-6">
-                <button onClick={() => setOpenFaq(openFaq === index ? null : index)} className="w-full flex justify-between items-center text-left focus:outline-none group bg-transparent border-none">
+                <button
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                  aria-expanded={openFaq === index}
+                  aria-controls={`faq-modelo-panel-${index}`}
+                  className="w-full flex justify-between items-center text-left focus:outline-none group bg-transparent border-none"
+                >
                   <span className="font-bold text-sm text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors pr-4" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.q}</span>
                   <span className="text-[#0A1F33] text-2xl font-light">{openFaq === index ? '−' : '+'}</span>
                 </button>
-                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+                <div id={`faq-modelo-panel-${index}`} className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
                   <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium pr-8" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.a}</p>
                 </div>
               </div>

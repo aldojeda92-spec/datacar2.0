@@ -295,13 +295,14 @@ function CatalogoContent() {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const FlatCheckbox = ({ label, value, category, subLabel }: { label: string, value?: string, category: keyof typeof activeFilters, subLabel?: string }) => {
+  const FlatCheckbox = ({ label, value, category, subLabel, onToggle }: { label: string, value?: string, category: keyof typeof activeFilters, subLabel?: string, onToggle: () => void }) => {
     const matchValue = value !== undefined ? value : label;
     const isChecked = activeFilters[category].some(item => item.toLowerCase() === matchValue.toLowerCase());
-    
+
     return (
       <label className="flex items-start gap-3 cursor-pointer group">
-        <div className={`mt-0.5 w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
+        <input type="checkbox" className="sr-only" checked={isChecked} onChange={onToggle} />
+        <div aria-hidden="true" className={`mt-0.5 w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
           {isChecked && <svg className="w-3 h-3 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
         </div>
         <div className="flex flex-col">
@@ -368,49 +369,49 @@ function CatalogoContent() {
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Marca Automotriz</h3>
               <div className="flex flex-col gap-3">
-                {marcasDisponibles.length > 0 ? marcasDisponibles.map(item => <div key={item} onClick={() => toggleFilter('marcas', item)}><FlatCheckbox label={item} category="marcas" /></div>) : <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>}
+                {marcasDisponibles.length > 0 ? marcasDisponibles.map(item => <FlatCheckbox key={item} label={item} category="marcas" onToggle={() => toggleFilter('marcas', item)} />) : <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>}
               </div>
             </div>
 
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tipo de Carrocería</h3>
               <div className="flex flex-col gap-3">
-                {tiposDisponibles.map(item => (<div key={item} onClick={() => toggleFilter('tipos', item)}><FlatCheckbox label={item} category="tipos" /></div>))}
+                {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" onToggle={() => toggleFilter('tipos', item)} />))}
               </div>
             </div>
 
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Transmisión</h3>
               <div className="flex flex-col gap-3">
-                {transmisionesOpciones.map(item => (<div key={item} onClick={() => toggleFilter('transmisiones', item)}><FlatCheckbox label={item} category="transmisiones" /></div>))}
+                {transmisionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="transmisiones" onToggle={() => toggleFilter('transmisiones', item)} />))}
               </div>
             </div>
 
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Motorización</h3>
               <div className="flex flex-col gap-3">
-                {combustiblesDisponibles.map(item => (<div key={item} onClick={() => toggleFilter('combustibles', item)}><FlatCheckbox label={item} category="combustibles" subLabel={combustibleLabels[item.toUpperCase()]} /></div>))}
+                {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="combustibles" subLabel={combustibleLabels[item.toUpperCase()]} onToggle={() => toggleFilter('combustibles', item)} />))}
               </div>
             </div>
 
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tracción</h3>
               <div className="flex flex-col gap-3">
-                {traccionesOpciones.map(item => (<div key={item} onClick={() => toggleFilter('tracciones', item)}><FlatCheckbox label={item} category="tracciones" /></div>))}
+                {traccionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="tracciones" onToggle={() => toggleFilter('tracciones', item)} />))}
               </div>
             </div>
 
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Capacidad</h3>
               <div className="flex flex-col gap-3">
-                {plazasDisponibles.map(item => (<div key={item} onClick={() => toggleFilter('plazas', item)}><FlatCheckbox label={`${item} Plazas`} value={item} category="plazas" /></div>))}
+                {plazasDisponibles.map(item => (<FlatCheckbox key={item} label={`${item} Plazas`} value={item} category="plazas" onToggle={() => toggleFilter('plazas', item)} />))}
               </div>
             </div>
 
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Origen de Marca</h3>
               <div className="flex flex-col gap-3">
-                {origenesDisponibles.map(item => (<div key={item} onClick={() => toggleFilter('origenes', item)}><FlatCheckbox label={item} category="origenes" /></div>))}
+                {origenesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="origenes" onToggle={() => toggleFilter('origenes', item)} />))}
               </div>
             </div>
             
@@ -634,15 +635,17 @@ function CatalogoFooter() {
         <div className="md:w-2/3 w-full flex flex-col border-t border-[#C0C0C0]">
           {faqs.map((faq, index) => (
             <div key={index} className="border-b border-[#C0C0C0] py-6">
-              <button 
+              <button
                 onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                aria-expanded={openFaq === index}
+                aria-controls={`faq-catalogo-panel-${index}`}
                 className="w-full flex justify-between items-center text-left focus:outline-none group border-none bg-transparent"
               >
                 <span className="font-bold text-sm text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors pr-4" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.q}</span>
                 <span className="text-[#0A1F33] text-2xl font-light">{openFaq === index ? '−' : '+'}</span>
               </button>
-              
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+
+              <div id={`faq-catalogo-panel-${index}`} className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
                 <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium pr-8" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.a}</p>
               </div>
             </div>
