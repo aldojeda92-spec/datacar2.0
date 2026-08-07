@@ -560,7 +560,7 @@ function ComparadorContent() {
 
             <div className="flex border border-[#0A1F33] mb-4 bg-[#FFFFFF]">
               <div className="pl-4 flex items-center text-[#C0C0C0]"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
-              <input type="text" placeholder="Ej: Kia Sportage EX..." className="w-full p-4 text-sm focus:outline-none text-[#3A3A3C]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} autoFocus />
+              <input type="text" aria-label="Buscar vehículo por marca o modelo" placeholder="Ej: Kia Sportage EX..." className="w-full p-4 text-sm focus:outline-none text-[#3A3A3C]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} autoFocus />
             </div>
 
             <div className="max-h-80 overflow-y-auto border border-[#C0C0C0] custom-scrollbar bg-[#F8F9FA]">
@@ -595,8 +595,8 @@ function ComparadorContent() {
             
             <form onSubmit={handleShareSubmit} className="flex flex-col gap-4">
               <div>
-                <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Correo Electrónico <span className="text-[#D93025]">*</span></label>
-                <input type="email" placeholder="ejemplo@empresa.com" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" required value={shareEmail} onChange={e=>setShareEmail(e.target.value)} />
+                <label htmlFor="comparador-share-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Correo Electrónico <span className="text-[#D93025]">*</span></label>
+                <input id="comparador-share-email" type="email" placeholder="ejemplo@empresa.com" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" required value={shareEmail} onChange={e=>setShareEmail(e.target.value)} />
               </div>
               <button type="submit" className="w-full bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors mt-2 border border-transparent">
                 Obtener Enlace

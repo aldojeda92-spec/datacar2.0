@@ -1,7 +1,7 @@
 // app/components/LeadModal.tsx (Ajusta la ruta del comentario si es diferente)
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 // CORRECCIÓN BUGS DE RUTA: Subimos dos niveles (../../) para encontrar lib/firebase y lib/mailer
 import { db } from '../../lib/firebase';
@@ -29,6 +29,10 @@ export default function LeadModal({
   const [formData, setFormData] = useState({ nombre: '', telefono: '', email: '' });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const { showToast } = useToast();
+  const idPrefix = useId();
+  const nombreId = `${idPrefix}-nombre`;
+  const telefonoId = `${idPrefix}-telefono`;
+  const emailId = `${idPrefix}-email`;
 
   if (!isOpen) return null;
 
@@ -133,27 +137,29 @@ export default function LeadModal({
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4" style={{ fontFamily: 'Inter, sans-serif' }}>
               <div>
-                <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Nombre y Apellido <span className="text-[#D93025]">*</span></label>
-                <input 
-                  type="text" 
-                  required 
+                <label htmlFor={nombreId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Nombre y Apellido <span className="text-[#D93025]">*</span></label>
+                <input
+                  id={nombreId}
+                  type="text"
+                  required
                   disabled={status === 'loading'}
-                  className="w-full border border-[#C0C0C0] bg-[#F8F9FA] p-3 text-xs focus:outline-none focus:border-[#0A1F33] transition-colors rounded-none disabled:opacity-50" 
+                  className="w-full border border-[#C0C0C0] bg-[#F8F9FA] p-3 text-xs focus:outline-none focus:border-[#0A1F33] transition-colors rounded-none disabled:opacity-50"
                   placeholder="Ej: Juan Pérez"
                   value={formData.nombre}
                   onChange={(e) => setFormData({...formData, nombre: e.target.value})}
                 />
               </div>
-              
+
               <div>
-                <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Celular (WhatsApp) <span className="text-[#D93025]">*</span></label>
-                <input 
-                  type="tel" 
-                  required 
+                <label htmlFor={telefonoId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Celular (WhatsApp) <span className="text-[#D93025]">*</span></label>
+                <input
+                  id={telefonoId}
+                  type="tel"
+                  required
                   disabled={status === 'loading'}
                   minLength={10}
                   maxLength={10}
-                  className="w-full border border-[#C0C0C0] bg-[#F8F9FA] p-3 text-xs focus:outline-none focus:border-[#0A1F33] transition-colors rounded-none disabled:opacity-50" 
+                  className="w-full border border-[#C0C0C0] bg-[#F8F9FA] p-3 text-xs focus:outline-none focus:border-[#0A1F33] transition-colors rounded-none disabled:opacity-50"
                   placeholder="Ej: 0981234567"
                   value={formData.telefono}
                   onChange={(e) => setFormData({...formData, telefono: e.target.value})}
@@ -161,11 +167,12 @@ export default function LeadModal({
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Correo Electrónico <span className="text-[#C0C0C0] font-normal">(Opcional)</span></label>
-                <input 
-                  type="email" 
+                <label htmlFor={emailId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Correo Electrónico <span className="text-[#C0C0C0] font-normal">(Opcional)</span></label>
+                <input
+                  id={emailId}
+                  type="email"
                   disabled={status === 'loading'}
-                  className="w-full border border-[#C0C0C0] bg-[#F8F9FA] p-3 text-xs focus:outline-none focus:border-[#0A1F33] transition-colors rounded-none disabled:opacity-50" 
+                  className="w-full border border-[#C0C0C0] bg-[#F8F9FA] p-3 text-xs focus:outline-none focus:border-[#0A1F33] transition-colors rounded-none disabled:opacity-50"
                   placeholder="ejemplo@correo.com"
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}

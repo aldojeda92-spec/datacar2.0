@@ -129,10 +129,11 @@ export default function NegociamosClient() {
               <form onSubmit={(e) => { e.preventDefault(); setIsModalOpen(true); }} className="flex flex-col gap-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">1. Marca de Interés</label>
-                    <select 
-                      className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] appearance-none rounded-none" 
-                      value={selectedBrand} 
+                    <label htmlFor="negociamos-brand" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">1. Marca de Interés</label>
+                    <select
+                      id="negociamos-brand"
+                      className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] appearance-none rounded-none"
+                      value={selectedBrand}
                       onChange={e => { setSelectedBrand(e.target.value); setSelectedModel(''); }}
                       required
                     >
@@ -141,10 +142,11 @@ export default function NegociamosClient() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">2. Modelo Deseado</label>
-                    <select 
-                      className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] appearance-none disabled:bg-[#F8F9FA] rounded-none" 
-                      value={selectedModel} 
+                    <label htmlFor="negociamos-model" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">2. Modelo Deseado</label>
+                    <select
+                      id="negociamos-model"
+                      className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] appearance-none disabled:bg-[#F8F9FA] rounded-none"
+                      value={selectedModel}
                       onChange={e => setSelectedModel(e.target.value)}
                       disabled={!selectedBrand}
                     >

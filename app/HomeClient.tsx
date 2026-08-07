@@ -337,6 +337,7 @@ export default function HomeClient() {
               aria-expanded={isDropdownOpen}
               aria-controls="home-search-listbox"
               aria-autocomplete="list"
+              aria-label="Buscar marca, modelo o versión"
               placeholder="Buscá por marca, modelo o versión exacta..."
               className="flex-1 py-5 px-4 text-sm md:text-base font-medium text-[#3A3A3C] focus:outline-none placeholder:text-[#C0C0C0]"
               value={searchTerm}

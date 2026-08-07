@@ -57,9 +57,10 @@ export default function AdminLoginPage() {
         {/* Formulario Estricto B2B */}
         <form onSubmit={handleLogin} className="flex flex-col gap-6" style={{ fontFamily: 'Inter, sans-serif' }}>
           <div>
-            <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Correo Corporativo</label>
-            <input 
-              type="email" 
+            <label htmlFor="admin-login-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Correo Corporativo</label>
+            <input
+              id="admin-login-email"
+              type="email"
               className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] text-[#3A3A3C]"
               placeholder="ejemplo@datacar.com.py"
               value={email}
@@ -69,9 +70,10 @@ export default function AdminLoginPage() {
           </div>
 
           <div>
-            <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Clave de Acceso</label>
-            <input 
-              type="password" 
+            <label htmlFor="admin-login-password" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Clave de Acceso</label>
+            <input
+              id="admin-login-password"
+              type="password"
               className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] text-[#3A3A3C]"
               placeholder="••••••••"
               value={password}

@@ -214,22 +214,22 @@ export default function CalculadoraClient() {
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-b border-[#C0C0C0]/50 pb-8">
                 <div>
-                  <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">1. Marca</label>
-                  <select className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer" value={selectedBrand} onChange={e => { setSelectedBrand(e.target.value); setSelectedModel(''); setSelectedVersion(''); }}>
+                  <label htmlFor="calc-directo-brand" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">1. Marca</label>
+                  <select id="calc-directo-brand" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer" value={selectedBrand} onChange={e => { setSelectedBrand(e.target.value); setSelectedModel(''); setSelectedVersion(''); }}>
                     <option value="">Seleccionar...</option>
                     {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">2. Modelo</label>
-                  <select className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer disabled:bg-[#F8F9FA] disabled:cursor-not-allowed" value={selectedModel} onChange={e => { setSelectedModel(e.target.value); setSelectedVersion(''); }} disabled={!selectedBrand}>
+                  <label htmlFor="calc-directo-model" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">2. Modelo</label>
+                  <select id="calc-directo-model" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer disabled:bg-[#F8F9FA] disabled:cursor-not-allowed" value={selectedModel} onChange={e => { setSelectedModel(e.target.value); setSelectedVersion(''); }} disabled={!selectedBrand}>
                     <option value="">Seleccionar...</option>
                     {filteredModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">3. Versión Exacta</label>
-                  <select className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer disabled:bg-[#F8F9FA] disabled:cursor-not-allowed" value={selectedVersion} onChange={e => setSelectedVersion(e.target.value)} disabled={!selectedModel}>
+                  <label htmlFor="calc-directo-version" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">3. Versión Exacta</label>
+                  <select id="calc-directo-version" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer disabled:bg-[#F8F9FA] disabled:cursor-not-allowed" value={selectedVersion} onChange={e => setSelectedVersion(e.target.value)} disabled={!selectedModel}>
                     <option value="">Seleccionar...</option>
                     {filteredVersions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
@@ -245,12 +245,12 @@ export default function CalculadoraClient() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Entrega Inicial (USD)</label>
-                  <input type="number" placeholder="Ej: 10000" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={entregaDirecto} onChange={e => setEntregaDirecto(e.target.value)} required />
+                  <label htmlFor="calc-directo-entrega" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Entrega Inicial (USD)</label>
+                  <input id="calc-directo-entrega" type="number" placeholder="Ej: 10000" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={entregaDirecto} onChange={e => setEntregaDirecto(e.target.value)} required />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Plazo de Financiación</label>
-                  <select className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer" value={plazoDirecto} onChange={e => setPlazoDirecto(Number(e.target.value))}>
+                  <label htmlFor="calc-directo-plazo" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Plazo de Financiación</label>
+                  <select id="calc-directo-plazo" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer" value={plazoDirecto} onChange={e => setPlazoDirecto(Number(e.target.value))}>
                     <option value={12}>12 Meses</option>
                     <option value={24}>24 Meses</option>
                     <option value={36}>36 Meses</option>
@@ -293,16 +293,16 @@ export default function CalculadoraClient() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Cuota Máxima Mensual (USD)</label>
-                  <input type="number" placeholder="Ej: 500" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#00BFFF] bg-[#F5FBFF] rounded-none" value={cuotaObjetivo} onChange={e => setCuotaObjetivo(e.target.value)} required />
+                  <label htmlFor="calc-inverso-cuota" className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Cuota Máxima Mensual (USD)</label>
+                  <input id="calc-inverso-cuota" type="number" placeholder="Ej: 500" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#00BFFF] bg-[#F5FBFF] rounded-none" value={cuotaObjetivo} onChange={e => setCuotaObjetivo(e.target.value)} required />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Capital Inicial Disponible (USD)</label>
-                  <input type="number" placeholder="Ej: 5000" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={entregaInverso} onChange={e => setEntregaInverso(e.target.value)} required />
+                  <label htmlFor="calc-inverso-entrega" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Capital Inicial Disponible (USD)</label>
+                  <input id="calc-inverso-entrega" type="number" placeholder="Ej: 5000" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={entregaInverso} onChange={e => setEntregaInverso(e.target.value)} required />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Plazo de Financiación Deseado</label>
-                  <select className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer" value={plazoInverso} onChange={e => setPlazoInverso(Number(e.target.value))}>
+                  <label htmlFor="calc-inverso-plazo" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Plazo de Financiación Deseado</label>
+                  <select id="calc-inverso-plazo" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none appearance-none cursor-pointer" value={plazoInverso} onChange={e => setPlazoInverso(Number(e.target.value))}>
                     <option value={12}>12 Meses</option>
                     <option value={24}>24 Meses</option>
                     <option value={36}>36 Meses</option>

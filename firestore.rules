@@ -113,14 +113,17 @@ service cloud.firestore {
       allow create: if
         request.resource.data.keys().hasOnly(
           ['nombre','telefono','email','vehiculo','origen',
-           'concesionaria_destino','concesionaria_destino_norm','estado','createdAt']) &&
+           'concesionaria_destino','concesionaria_destino_norm','estado','createdAt',
+           'preferencias_wizard']) &&
         request.resource.data.nombre is string &&
         request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() < 120 &&
         request.resource.data.telefono is string &&
         (request.resource.data.telefono == 'No proporcionado' ||
          request.resource.data.telefono.matches('^09[0-9]{8}$')) &&
         request.resource.data.estado == 'Nuevo' &&
-        request.resource.data.createdAt == request.time;
+        request.resource.data.createdAt == request.time &&
+        (!('preferencias_wizard' in request.resource.data) ||
+         request.resource.data.preferencias_wizard is map);
 
       // El cliente concesionaria DEBE consultar con
       // where('concesionaria_destino_norm','==', <su dealership normalizado>)

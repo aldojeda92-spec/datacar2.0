@@ -60,9 +60,10 @@ export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: st
   return (
     <div className="w-full max-w-md mt-6">
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-0">
-        <input 
-          type="email" 
-          placeholder="Tu correo electrónico" 
+        <input
+          type="email"
+          aria-label="Correo electrónico para newsletter"
+          placeholder="Tu correo electrónico"
           disabled={status === 'loading'}
           value={email}
           onChange={(e) => setEmail(e.target.value)}

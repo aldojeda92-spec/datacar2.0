@@ -1,7 +1,7 @@
 // app/admin/page.tsx
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc } from 'firebase/firestore';
@@ -47,6 +47,7 @@ function ImageUploadField({ label, folder, value, onChange, accentClass }: {
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const inputId = useId();
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,7 +70,7 @@ function ImageUploadField({ label, folder, value, onChange, accentClass }: {
 
   return (
     <div>
-      <label className={`text-[10px] font-bold uppercase block mb-1 ${accentClass || 'text-[#3A3A3C]'}`}>{label}</label>
+      <label htmlFor={inputId} className={`text-[10px] font-bold uppercase block mb-1 ${accentClass || 'text-[#3A3A3C]'}`}>{label}</label>
       {isValidImageSrc(value) && (
         <Image
           src={value}
@@ -81,6 +82,7 @@ function ImageUploadField({ label, folder, value, onChange, accentClass }: {
         />
       )}
       <input
+        id={inputId}
         type="file"
         accept="image/*"
         onChange={handleFile}
@@ -697,23 +699,23 @@ export default function AdminDashboardPage() {
                   
                   <form onSubmit={handleSaveUserB2B} className="flex flex-col gap-3">
                     <div>
-                      <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">UID de Firebase Auth</label>
-                      <input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.uid} onChange={e => setUserB2BForm({...userB2BForm, uid: e.target.value})} placeholder="Ej: g8YxZ1a2..." required disabled={!!userB2BForm.uid && userB2BForm.email !== ''} />
+                      <label htmlFor="userB2BForm-uid" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">UID de Firebase Auth</label>
+                      <input id="userB2BForm-uid" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.uid} onChange={e => setUserB2BForm({...userB2BForm, uid: e.target.value})} placeholder="Ej: g8YxZ1a2..." required disabled={!!userB2BForm.uid && userB2BForm.email !== ''} />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email del Gerente</label>
-                      <input type="email" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.email} onChange={e => setUserB2BForm({...userB2BForm, email: e.target.value})} placeholder="gerente@concesionaria.com" required />
+                      <label htmlFor="userB2BForm-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email del Gerente</label>
+                      <input id="userB2BForm-email" type="email" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.email} onChange={e => setUserB2BForm({...userB2BForm, email: e.target.value})} placeholder="gerente@concesionaria.com" required />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Concesionaria Asignada</label>
-                      <select className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.dealershipName} onChange={e => setUserB2BForm({...userB2BForm, dealershipName: e.target.value})} required>
+                      <label htmlFor="userB2BForm-dealership" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Concesionaria Asignada</label>
+                      <select id="userB2BForm-dealership" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.dealershipName} onChange={e => setUserB2BForm({...userB2BForm, dealershipName: e.target.value})} required>
                         <option value="">Seleccionar concesionaria...</option>
                         {concesionariasList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>
-                    
+
                     <div className="border border-[#C0C0C0] p-3 bg-[#F8F9FA] mt-1">
-                      <label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-2 border-b border-[#C0C0C0]/50 pb-2">Marcas Permitidas (Scope)</label>
+                      <span className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-2 border-b border-[#C0C0C0]/50 pb-2">Marcas Permitidas (Scope)</span>
                       <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar pr-2">
                         {marcasList.map(m => (
                           <label key={m.id} className="flex items-center gap-2 cursor-pointer group">
@@ -741,12 +743,12 @@ export default function AdminDashboardPage() {
                   
                   <form onSubmit={handleSaveAdminAccess} className="flex flex-col gap-3">
                     <div>
-                      <label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">UID de Firebase Auth</label>
-                      <input type="text" className="w-full border-none p-2 text-xs focus:outline-none bg-[#FFFFFF] rounded-none text-[#0A1F33]" value={adminAccessForm.uid} onChange={e => setAdminAccessForm({...adminAccessForm, uid: e.target.value})} placeholder="Copiar desde Auth..." required />
+                      <label htmlFor="adminAccessForm-uid" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">UID de Firebase Auth</label>
+                      <input id="adminAccessForm-uid" type="text" className="w-full border-none p-2 text-xs focus:outline-none bg-[#FFFFFF] rounded-none text-[#0A1F33]" value={adminAccessForm.uid} onChange={e => setAdminAccessForm({...adminAccessForm, uid: e.target.value})} placeholder="Copiar desde Auth..." required />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Email del Administrador</label>
-                      <input type="email" className="w-full border-none p-2 text-xs focus:outline-none bg-[#FFFFFF] rounded-none text-[#0A1F33]" value={adminAccessForm.email} onChange={e => setAdminAccessForm({...adminAccessForm, email: e.target.value})} placeholder="equipo@datacarpy.com" required />
+                      <label htmlFor="adminAccessForm-email" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Email del Administrador</label>
+                      <input id="adminAccessForm-email" type="email" className="w-full border-none p-2 text-xs focus:outline-none bg-[#FFFFFF] rounded-none text-[#0A1F33]" value={adminAccessForm.email} onChange={e => setAdminAccessForm({...adminAccessForm, email: e.target.value})} placeholder="equipo@datacarpy.com" required />
                     </div>
                     
                     <button type="submit" disabled={loading} className="w-full bg-[#00BFFF] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#FFFFFF] transition-colors border border-transparent rounded-none mt-2">Dar Acceso Total</button>
@@ -762,7 +764,7 @@ export default function AdminDashboardPage() {
                 <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col shadow-none rounded-none h-1/2">
                   <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex justify-between items-center shrink-0">
                     <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Solicitudes de Alta (Portal)</span>
-                    <input type="text" placeholder="Buscar solicitud..." className="border border-[#C0C0C0] px-3 py-2 text-xs w-full md:w-48 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    <input type="text" aria-label="Buscar solicitud" placeholder="Buscar solicitud..." className="border border-[#C0C0C0] px-3 py-2 text-xs w-full md:w-48 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   </div>
                   <div className="overflow-auto flex-grow custom-scrollbar">
                     <table className="w-full text-left border-collapse whitespace-nowrap min-w-[700px]">
@@ -901,40 +903,40 @@ export default function AdminDashboardPage() {
                 <h3 className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest border-b border-[#C0C0C0] pb-2">Panel de Filtros</h3>
                 <div className="flex flex-col xl:flex-row gap-4 justify-between items-end">
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 w-full">
-                    <div className="flex flex-col gap-1"><label className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Desde</label><input type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Hasta</label><input type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} /></div>
+                    <div className="flex flex-col gap-1"><label htmlFor="filter-date-from" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Desde</label><input id="filter-date-from" type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} /></div>
+                    <div className="flex flex-col gap-1"><label htmlFor="filter-date-to" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Hasta</label><input id="filter-date-to" type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} /></div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Estado</label>
-                      <select className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                      <label htmlFor="filter-status" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Estado</label>
+                      <select id="filter-status" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                         <option value="Todos">Todos</option><option value="Nuevo">Nuevo</option><option value="Contactado">Contactado</option><option value="En Negociación">En Negociación</option><option value="Cerrado">Cerrado</option><option value="Perdido">Perdido</option>
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Origen</label>
-                      <select className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" value={filterOrigin} onChange={(e) => setFilterOrigin(e.target.value)}>
+                      <label htmlFor="filter-origin" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Origen</label>
+                      <select id="filter-origin" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" value={filterOrigin} onChange={(e) => setFilterOrigin(e.target.value)}>
                         <option value="Todos">Todos</option>{origenesUnicos.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Marca</label>
-                      <select className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF]" value={filterMarca} onChange={(e) => { setFilterMarca(e.target.value); setFilterModelo('Todos'); }}>
+                      <label htmlFor="filter-marca" className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Marca</label>
+                      <select id="filter-marca" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF]" value={filterMarca} onChange={(e) => { setFilterMarca(e.target.value); setFilterModelo('Todos'); }}>
                         <option value="Todas">Todas</option>{marcasList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Modelo</label>
-                      <select className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] disabled:bg-[#F8F9FA]" value={filterModelo} onChange={(e) => setFilterModelo(e.target.value)} disabled={filterMarca === 'Todas'}>
+                      <label htmlFor="filter-modelo" className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Modelo</label>
+                      <select id="filter-modelo" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] disabled:bg-[#F8F9FA]" value={filterModelo} onChange={(e) => setFilterModelo(e.target.value)} disabled={filterMarca === 'Todas'}>
                         <option value="Todos">Todos</option>{modelosFiltradosParaSelect.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Concesionaria</label>
-                      <select className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF]" value={filterConcesionaria} onChange={(e) => setFilterConcesionaria(e.target.value)}>
+                      <label htmlFor="filter-concesionaria" className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Concesionaria</label>
+                      <select id="filter-concesionaria" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF]" value={filterConcesionaria} onChange={(e) => setFilterConcesionaria(e.target.value)}>
                         <option value="Todas">Todas</option>{concesionariasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   </div>
-                  <div className="w-full xl:w-64 shrink-0"><input type="text" placeholder="Búsqueda rápida..." className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterText} onChange={e => setFilterText(e.target.value)} /></div>
+                  <div className="w-full xl:w-64 shrink-0"><input type="text" aria-label="Búsqueda rápida" placeholder="Búsqueda rápida..." className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterText} onChange={e => setFilterText(e.target.value)} /></div>
                 </div>
               </div>
               <div className="bg-[#FFFFFF] border border-[#C0C0C0] overflow-x-auto flex-grow">
@@ -983,10 +985,10 @@ export default function AdminDashboardPage() {
               <h2 className="font-bold text-[#0A1F33] text-lg uppercase border-b border-[#C0C0C0] pb-4 mb-6">Configuración de Motor Matemático</h2>
               <form onSubmit={handleSaveFinancial} className="flex flex-col gap-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Tasa de Interés Anual Nominal</label><input type="number" step="0.001" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" value={finForm.tasa_anual} onChange={e => setFinForm({...finForm, tasa_anual: parseFloat(e.target.value)})} required /></div>
-                  <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Gastos Administrativos</label><input type="number" step="0.001" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" value={finForm.gastos_admin} onChange={e => setFinForm({...finForm, gastos_admin: parseFloat(e.target.value)})} required /></div>
-                  <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Seguro de Vida</label><input type="number" step="0.001" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" value={finForm.seguro_vida} onChange={e => setFinForm({...finForm, seguro_vida: parseFloat(e.target.value)})} required /></div>
-                  <div className="bg-[#E6F4EA] p-4 border border-[#1E8E3E]/20 flex flex-col justify-center"><label className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest block mb-1">Retención Total del Banco</label><span className="font-black text-2xl text-[#1E8E3E]">{((finForm.gastos_admin + finForm.seguro_vida) * 100).toFixed(1)}%</span></div>
+                  <div><label htmlFor="fin-tasa-anual" className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Tasa de Interés Anual Nominal</label><input id="fin-tasa-anual" type="number" step="0.001" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" value={finForm.tasa_anual} onChange={e => setFinForm({...finForm, tasa_anual: parseFloat(e.target.value)})} required /></div>
+                  <div><label htmlFor="fin-gastos-admin" className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Gastos Administrativos</label><input id="fin-gastos-admin" type="number" step="0.001" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" value={finForm.gastos_admin} onChange={e => setFinForm({...finForm, gastos_admin: parseFloat(e.target.value)})} required /></div>
+                  <div><label htmlFor="fin-seguro-vida" className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Seguro de Vida</label><input id="fin-seguro-vida" type="number" step="0.001" className="w-full border border-[#C0C0C0] p-4 text-sm focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA]" value={finForm.seguro_vida} onChange={e => setFinForm({...finForm, seguro_vida: parseFloat(e.target.value)})} required /></div>
+                  <div className="bg-[#E6F4EA] p-4 border border-[#1E8E3E]/20 flex flex-col justify-center"><span className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest block mb-1">Retención Total del Banco</span><span className="font-black text-2xl text-[#1E8E3E]">{((finForm.gastos_admin + finForm.seguro_vida) * 100).toFixed(1)}%</span></div>
                 </div>
                 <div className="border-t border-[#C0C0C0] pt-6 flex justify-end">
                   <button type="submit" disabled={loading} className="bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-10 hover:bg-[#00BFFF] transition-colors">Actualizar Servidor</button>
@@ -1008,10 +1010,10 @@ export default function AdminDashboardPage() {
 
                 {activeTab === 'concesionarias' && (
                   <form onSubmit={handleSaveConcesionaria} className="flex flex-col gap-4">
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Comercial</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.name} onChange={e => setConcesionariaForm({...concesionariaForm, name: e.target.value})} required /></div>
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email Gerencia (Recepción Leads)</label><input type="email" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.email_gerencia} onChange={e => setConcesionariaForm({...concesionariaForm, email_gerencia: e.target.value})} placeholder="gerente@concesionaria.com" /></div>
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Estado</label>
-                      <select className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.status} onChange={e => setConcesionariaForm({...concesionariaForm, status: e.target.value})}>
+                    <div><label htmlFor="concesionariaForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Comercial</label><input id="concesionariaForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.name} onChange={e => setConcesionariaForm({...concesionariaForm, name: e.target.value})} required /></div>
+                    <div><label htmlFor="concesionariaForm-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email Gerencia (Recepción Leads)</label><input id="concesionariaForm-email" type="email" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.email_gerencia} onChange={e => setConcesionariaForm({...concesionariaForm, email_gerencia: e.target.value})} placeholder="gerente@concesionaria.com" /></div>
+                    <div><label htmlFor="concesionariaForm-status" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Estado</label>
+                      <select id="concesionariaForm-status" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.status} onChange={e => setConcesionariaForm({...concesionariaForm, status: e.target.value})}>
                         <option value="active">Activa</option>
                         <option value="inactive">Inactiva</option>
                       </select>
@@ -1025,8 +1027,8 @@ export default function AdminDashboardPage() {
 
                 {activeTab === 'marcas' && (
                   <form onSubmit={handleSaveMarca} className="flex flex-col gap-4">
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Marca</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.name} onChange={e => setMarcaForm({...marcaForm, name: e.target.value})} required /></div>
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen de la Marca</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.origen_marca} onChange={e => setMarcaForm({...marcaForm, origen_marca: e.target.value})} /></div>
+                    <div><label htmlFor="marcaForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Marca</label><input id="marcaForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.name} onChange={e => setMarcaForm({...marcaForm, name: e.target.value})} required /></div>
+                    <div><label htmlFor="marcaForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen de la Marca</label><input id="marcaForm-origen" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.origen_marca} onChange={e => setMarcaForm({...marcaForm, origen_marca: e.target.value})} /></div>
                     <ImageUploadField label="Logotipo" folder="brands" value={marcaForm.logoUrl} onChange={url => setMarcaForm({...marcaForm, logoUrl: url})} accentClass="text-[#00BFFF]" />
                     <div className="flex gap-2 mt-4">
                        {marcaForm.id && <button type="button" onClick={() => setMarcaForm({id:'', name:'', origen_marca:'', logoUrl:''})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
@@ -1037,14 +1039,14 @@ export default function AdminDashboardPage() {
 
                 {activeTab === 'modelos' && (
                   <form onSubmit={handleSaveModelo} className="flex flex-col gap-4">
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Marca</label>
-                      <select className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.brandId} onChange={e => setModeloForm({...modeloForm, brandId: e.target.value})} required>
+                    <div><label htmlFor="modeloForm-brandId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Marca</label>
+                      <select id="modeloForm-brandId" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.brandId} onChange={e => setModeloForm({...modeloForm, brandId: e.target.value})} required>
                         <option value="">Seleccionar...</option>
                         {marcasList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </div>
-                    <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Modelo</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.name} onChange={e => setModeloForm({...modeloForm, name: e.target.value})} required /></div>
-                    
+                    <div><label htmlFor="modeloForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Modelo</label><input id="modeloForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.name} onChange={e => setModeloForm({...modeloForm, name: e.target.value})} required /></div>
+
                     {/* Checkbox para Lo más Buscado */}
                     <div className="flex items-center gap-2 mt-2 bg-[#F8F9FA] p-3 border border-[#C0C0C0]/50">
                       <input type="checkbox" id="isPopular" checked={modeloForm.isPopular} onChange={e => setModeloForm({...modeloForm, isPopular: e.target.checked})} className="w-4 h-4 accent-[#00BFFF]" />
@@ -1052,10 +1054,10 @@ export default function AdminDashboardPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Categoría</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.tipo_carroceria} onChange={e => setModeloForm({...modeloForm, tipo_carroceria: e.target.value})} /></div>
-                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Subsegmento</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.subsegmento} onChange={e => setModeloForm({...modeloForm, subsegmento: e.target.value})} /></div>
-                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen (Fábrica)</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.origen} onChange={e => setModeloForm({...modeloForm, origen: e.target.value})} /></div>
-                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio Inicial</label><input type="number" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.startingPrice} onChange={e => setModeloForm({...modeloForm, startingPrice: e.target.value})} required /></div>
+                      <div><label htmlFor="modeloForm-tipo" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Categoría</label><input id="modeloForm-tipo" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.tipo_carroceria} onChange={e => setModeloForm({...modeloForm, tipo_carroceria: e.target.value})} /></div>
+                      <div><label htmlFor="modeloForm-subsegmento" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Subsegmento</label><input id="modeloForm-subsegmento" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.subsegmento} onChange={e => setModeloForm({...modeloForm, subsegmento: e.target.value})} /></div>
+                      <div><label htmlFor="modeloForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen (Fábrica)</label><input id="modeloForm-origen" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.origen} onChange={e => setModeloForm({...modeloForm, origen: e.target.value})} /></div>
+                      <div><label htmlFor="modeloForm-precio" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio Inicial</label><input id="modeloForm-precio" type="number" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.startingPrice} onChange={e => setModeloForm({...modeloForm, startingPrice: e.target.value})} required /></div>
                     </div>
                     <ImageUploadField label="Imagen Catálogo" folder="models" value={modeloForm.imgUrl} onChange={url => setModeloForm({...modeloForm, imgUrl: url})} />
                     <div className="flex gap-2 mt-4">
@@ -1071,76 +1073,76 @@ export default function AdminDashboardPage() {
                       <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Datos Principales</legend>
                       <div className="flex flex-col gap-3">
                         <div>
-                          <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Modelo Vinculado</label>
-                          <select className="w-full border p-2 text-xs bg-[#FFFFFF] focus:outline-none focus:border-[#0A1F33]" value={versionForm.modelId} onChange={e => setVersionForm({...versionForm, modelId: e.target.value})} required>
+                          <label htmlFor="versionForm-modelId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Modelo Vinculado</label>
+                          <select id="versionForm-modelId" className="w-full border p-2 text-xs bg-[#FFFFFF] focus:outline-none focus:border-[#0A1F33]" value={versionForm.modelId} onChange={e => setVersionForm({...versionForm, modelId: e.target.value})} required>
                             <option value="">Seleccionar...</option>
                             {modelosList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                           </select>
                         </div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre de Versión</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.name} onChange={e => setVersionForm({...versionForm, name: e.target.value})} required /></div>
+                        <div><label htmlFor="versionForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre de Versión</label><input id="versionForm-name" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.name} onChange={e => setVersionForm({...versionForm, name: e.target.value})} required /></div>
                         <div className="grid grid-cols-2 gap-3">
-                          <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio (USD)</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.price} onChange={e => setVersionForm({...versionForm, price: e.target.value})} required /></div>
-                          <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Promoción</label><input type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.promocion} onChange={e => setVersionForm({...versionForm, promocion: e.target.value})} /></div>
+                          <div><label htmlFor="versionForm-price" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio (USD)</label><input id="versionForm-price" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.price} onChange={e => setVersionForm({...versionForm, price: e.target.value})} required /></div>
+                          <div><label htmlFor="versionForm-promocion" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Promoción</label><input id="versionForm-promocion" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.promocion} onChange={e => setVersionForm({...versionForm, promocion: e.target.value})} /></div>
                         </div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Oficial (Ficha Técnica)</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.url_auto} onChange={e => setVersionForm({...versionForm, url_auto: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-url_auto" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Oficial (Ficha Técnica)</label><input id="versionForm-url_auto" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.url_auto} onChange={e => setVersionForm({...versionForm, url_auto: e.target.value})} /></div>
                       </div>
                     </fieldset>
 
                     <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
                       <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Motor y Transmisión</legend>
                       <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Combustible Base</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.combustible} onChange={e => setVersionForm({...versionForm, combustible: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Motor</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.motor} onChange={e => setVersionForm({...versionForm, motor: e.target.value})} /></div>
-                        <div className="col-span-2"><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Alimentación Detallada</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.alimentacion} onChange={e => setVersionForm({...versionForm, alimentacion: e.target.value})} placeholder="Ej: Inyección Directa Turbo" /></div>
-                        <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Autonomía EV (km)</label><input type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.autonomi_electrica} onChange={e => setVersionForm({...versionForm, autonomi_electrica: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Caja / Transmisión</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.transmision} onChange={e => setVersionForm({...versionForm, transmision: e.target.value})} /></div>
-                        <div className="col-span-2"><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tracción</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.traccion} onChange={e => setVersionForm({...versionForm, traccion: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-combustible" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Combustible Base</label><input id="versionForm-combustible" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.combustible} onChange={e => setVersionForm({...versionForm, combustible: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-motor" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Motor</label><input id="versionForm-motor" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.motor} onChange={e => setVersionForm({...versionForm, motor: e.target.value})} /></div>
+                        <div className="col-span-2"><label htmlFor="versionForm-alimentacion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Alimentación Detallada</label><input id="versionForm-alimentacion" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.alimentacion} onChange={e => setVersionForm({...versionForm, alimentacion: e.target.value})} placeholder="Ej: Inyección Directa Turbo" /></div>
+                        <div><label htmlFor="versionForm-autonomia" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Autonomía EV (km)</label><input id="versionForm-autonomia" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.autonomi_electrica} onChange={e => setVersionForm({...versionForm, autonomi_electrica: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-transmision" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Caja / Transmisión</label><input id="versionForm-transmision" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.transmision} onChange={e => setVersionForm({...versionForm, transmision: e.target.value})} /></div>
+                        <div className="col-span-2"><label htmlFor="versionForm-traccion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tracción</label><input id="versionForm-traccion" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.traccion} onChange={e => setVersionForm({...versionForm, traccion: e.target.value})} /></div>
                       </div>
                     </fieldset>
 
                     <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
                       <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Chasis y Dinámica</legend>
                       <div className="grid grid-cols-2 gap-3">
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Suspensión Detalle</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.detalle_suspension} onChange={e => setVersionForm({...versionForm, detalle_suspension: e.target.value})} placeholder="Ej: MacPherson / Multi-link" /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Frenos Detalle</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.detalles_freno} onChange={e => setVersionForm({...versionForm, detalles_freno: e.target.value})} placeholder="Ej: Discos ventilados" /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Neumáticos</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.medida_neumatico} onChange={e => setVersionForm({...versionForm, medida_neumatico: e.target.value})} placeholder="Ej: 225/60 R18" /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tipo de Llanta</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.tipo_llanta} onChange={e => setVersionForm({...versionForm, tipo_llanta: e.target.value})} placeholder="Ej: Aleación 18''" /></div>
+                        <div><label htmlFor="versionForm-suspension" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Suspensión Detalle</label><input id="versionForm-suspension" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.detalle_suspension} onChange={e => setVersionForm({...versionForm, detalle_suspension: e.target.value})} placeholder="Ej: MacPherson / Multi-link" /></div>
+                        <div><label htmlFor="versionForm-frenos" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Frenos Detalle</label><input id="versionForm-frenos" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.detalles_freno} onChange={e => setVersionForm({...versionForm, detalles_freno: e.target.value})} placeholder="Ej: Discos ventilados" /></div>
+                        <div><label htmlFor="versionForm-neumaticos" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Neumáticos</label><input id="versionForm-neumaticos" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.medida_neumatico} onChange={e => setVersionForm({...versionForm, medida_neumatico: e.target.value})} placeholder="Ej: 225/60 R18" /></div>
+                        <div><label htmlFor="versionForm-llanta" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tipo de Llanta</label><input id="versionForm-llanta" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.tipo_llanta} onChange={e => setVersionForm({...versionForm, tipo_llanta: e.target.value})} placeholder="Ej: Aleación 18''" /></div>
                       </div>
                     </fieldset>
 
                     <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
                       <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Arquitectura (mm)</legend>
                       <div className="grid grid-cols-3 gap-3">
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Largo</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.largo} onChange={e => setVersionForm({...versionForm, largo: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Ancho</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.ancho} onChange={e => setVersionForm({...versionForm, ancho: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Alto</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.alto} onChange={e => setVersionForm({...versionForm, alto: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Despeje</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.despeje_suelo} onChange={e => setVersionForm({...versionForm, despeje_suelo: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Baulera (L)</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.baulera_litros} onChange={e => setVersionForm({...versionForm, baulera_litros: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nº Plazas</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.plazas} onChange={e => setVersionForm({...versionForm, plazas: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-largo" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Largo</label><input id="versionForm-largo" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.largo} onChange={e => setVersionForm({...versionForm, largo: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-ancho" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Ancho</label><input id="versionForm-ancho" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.ancho} onChange={e => setVersionForm({...versionForm, ancho: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-alto" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Alto</label><input id="versionForm-alto" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.alto} onChange={e => setVersionForm({...versionForm, alto: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-despeje" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Despeje</label><input id="versionForm-despeje" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.despeje_suelo} onChange={e => setVersionForm({...versionForm, despeje_suelo: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-baulera" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Baulera (L)</label><input id="versionForm-baulera" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.baulera_litros} onChange={e => setVersionForm({...versionForm, baulera_litros: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-plazas" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nº Plazas</label><input id="versionForm-plazas" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.plazas} onChange={e => setVersionForm({...versionForm, plazas: e.target.value})} /></div>
                       </div>
                     </fieldset>
 
                     <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
                       <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Equipamiento y Seguridad</legend>
                       <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Airbags Totales</label><input type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.airbags} onChange={e => setVersionForm({...versionForm, airbags: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Cámaras</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.camaras} onChange={e => setVersionForm({...versionForm, camaras: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Pantalla (")</label><input type="number" step="0.1" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.tamanho_pantalla} onChange={e => setVersionForm({...versionForm, tamanho_pantalla: e.target.value})} /></div>
-                        <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Conectividad</label><input type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.conectividad} onChange={e => setVersionForm({...versionForm, conectividad: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-airbags" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Airbags Totales</label><input id="versionForm-airbags" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.airbags} onChange={e => setVersionForm({...versionForm, airbags: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-camaras" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Cámaras</label><input id="versionForm-camaras" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.camaras} onChange={e => setVersionForm({...versionForm, camaras: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-pantalla" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Pantalla (")</label><input id="versionForm-pantalla" type="number" step="0.1" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.tamanho_pantalla} onChange={e => setVersionForm({...versionForm, tamanho_pantalla: e.target.value})} /></div>
+                        <div><label htmlFor="versionForm-conectividad" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Conectividad</label><input id="versionForm-conectividad" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.conectividad} onChange={e => setVersionForm({...versionForm, conectividad: e.target.value})} /></div>
                       </div>
-                      
+
                       <div className="flex flex-col gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Seguridad Standard (Separa con ; )</label>
-                          <textarea rows={3} className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] resize-none" value={versionForm.seguridad_standard} onChange={e => setVersionForm({...versionForm, seguridad_standard: e.target.value})} placeholder="6 Airbags; Frenos ABS + EBD; Control de estabilidad..."></textarea>
+                          <label htmlFor="versionForm-seguridad" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Seguridad Standard (Separa con ; )</label>
+                          <textarea id="versionForm-seguridad" rows={3} className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] resize-none" value={versionForm.seguridad_standard} onChange={e => setVersionForm({...versionForm, seguridad_standard: e.target.value})} placeholder="6 Airbags; Frenos ABS + EBD; Control de estabilidad..."></textarea>
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Confort y Conveniencia (Separa con ; )</label>
-                          <textarea rows={3} className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] resize-none" value={versionForm.confort_conveniencia} onChange={e => setVersionForm({...versionForm, confort_conveniencia: e.target.value})} placeholder="Climatizador automático; Asiento de cuero; Cargador inalámbrico..."></textarea>
+                          <label htmlFor="versionForm-confort" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Confort y Conveniencia (Separa con ; )</label>
+                          <textarea id="versionForm-confort" rows={3} className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] resize-none" value={versionForm.confort_conveniencia} onChange={e => setVersionForm({...versionForm, confort_conveniencia: e.target.value})} placeholder="Climatizador automático; Asiento de cuero; Cargador inalámbrico..."></textarea>
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Sistemas Avanzados ADAS (Separa con | )</label>
-                          <input type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.adas} onChange={e => setVersionForm({...versionForm, adas: e.target.value})} placeholder="Alerta colisión | Mantenimiento carril" />
+                          <label htmlFor="versionForm-adas" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Sistemas Avanzados ADAS (Separa con | )</label>
+                          <input id="versionForm-adas" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.adas} onChange={e => setVersionForm({...versionForm, adas: e.target.value})} placeholder="Alerta colisión | Mantenimiento carril" />
                         </div>
                       </div>
                     </fieldset>
@@ -1246,19 +1248,19 @@ export default function AdminDashboardPage() {
                 <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-6 border-b border-[#C0C0C0] pb-2">Crear Anuncio B2B</h2>
                 <form onSubmit={handleCreateAd} className="flex flex-col gap-4">
                   <div className="grid grid-cols-2 gap-2">
-                    <div><label className="text-[9px] font-bold uppercase block mb-1">Inicio Vigencia</label><input type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.startDate} onChange={e => setAdForm({...adForm, startDate: e.target.value})} required /></div>
-                    <div><label className="text-[9px] font-bold uppercase block mb-1">Fin Vigencia</label><input type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.endDate} onChange={e => setAdForm({...adForm, endDate: e.target.value})} required /></div>
+                    <div><label htmlFor="adForm-startDate" className="text-[9px] font-bold uppercase block mb-1">Inicio Vigencia</label><input id="adForm-startDate" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.startDate} onChange={e => setAdForm({...adForm, startDate: e.target.value})} required /></div>
+                    <div><label htmlFor="adForm-endDate" className="text-[9px] font-bold uppercase block mb-1">Fin Vigencia</label><input id="adForm-endDate" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.endDate} onChange={e => setAdForm({...adForm, endDate: e.target.value})} required /></div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold uppercase block mb-1">Ubicación</label>
-                    <select className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.location} onChange={e => setAdForm({...adForm, location: e.target.value})}>
+                    <label htmlFor="adForm-location" className="text-[10px] font-bold uppercase block mb-1">Ubicación</label>
+                    <select id="adForm-location" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.location} onChange={e => setAdForm({...adForm, location: e.target.value})}>
                       <option value="ambos">Impactar en toda la plataforma</option><option value="home">Exclusivo en Home</option><option value="catalogo">Exclusivo en Catálogo</option><option value="recomendador">Exclusivo en Recomendador</option>
                     </select>
                   </div>
-                  
+
                   <div>
-                    <label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Categoría Objetivo (Contextual)</label>
-                    <select className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={adForm.targetCategory} onChange={e => setAdForm({...adForm, targetCategory: e.target.value})}>
+                    <label htmlFor="adForm-targetCategory" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Categoría Objetivo (Contextual)</label>
+                    <select id="adForm-targetCategory" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={adForm.targetCategory} onChange={e => setAdForm({...adForm, targetCategory: e.target.value})}>
                       <option value="Todas">Todas (Impacto Global)</option>
                       {categoriasUnicas.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
@@ -1266,13 +1268,13 @@ export default function AdminDashboardPage() {
                     </select>
                   </div>
 
-                  <div><label className="text-[10px] font-bold uppercase block mb-1">Patrocinador (Marca/Empresa)</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.sponsor} onChange={e => setAdForm({...adForm, sponsor: e.target.value})} required /></div>
+                  <div><label htmlFor="adForm-sponsor" className="text-[10px] font-bold uppercase block mb-1">Patrocinador (Marca/Empresa)</label><input id="adForm-sponsor" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.sponsor} onChange={e => setAdForm({...adForm, sponsor: e.target.value})} required /></div>
                   <div className="grid grid-cols-2 gap-2">
-                     <div><label className="text-[10px] font-bold uppercase block mb-1">Titular Corto</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.headline} onChange={e => setAdForm({...adForm, headline: e.target.value})} required /></div>
-                     <div><label className="text-[10px] font-bold uppercase block mb-1">Resalte Cyan</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.highlight} onChange={e => setAdForm({...adForm, highlight: e.target.value})} /></div>
+                     <div><label htmlFor="adForm-headline" className="text-[10px] font-bold uppercase block mb-1">Titular Corto</label><input id="adForm-headline" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.headline} onChange={e => setAdForm({...adForm, headline: e.target.value})} required /></div>
+                     <div><label htmlFor="adForm-highlight" className="text-[10px] font-bold uppercase block mb-1">Resalte Cyan</label><input id="adForm-highlight" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.highlight} onChange={e => setAdForm({...adForm, highlight: e.target.value})} /></div>
                   </div>
-                  <div><label className="text-[10px] font-bold uppercase block mb-1">Precio Promo</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.price} onChange={e => setAdForm({...adForm, price: e.target.value})} /></div>
-                  <div><label className="text-[10px] font-bold uppercase block mb-1">URL Enlace</label><input type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.link} onChange={e => setAdForm({...adForm, link: e.target.value})} /></div>
+                  <div><label htmlFor="adForm-price" className="text-[10px] font-bold uppercase block mb-1">Precio Promo</label><input id="adForm-price" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.price} onChange={e => setAdForm({...adForm, price: e.target.value})} /></div>
+                  <div><label htmlFor="adForm-link" className="text-[10px] font-bold uppercase block mb-1">URL Enlace</label><input id="adForm-link" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.link} onChange={e => setAdForm({...adForm, link: e.target.value})} /></div>
                   <ImageUploadField label="Imagen del Banner" folder="campaigns" value={adForm.img} onChange={url => setAdForm({...adForm, img: url})} />
                   <button type="submit" disabled={loading} className="mt-2 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Inyectar Campaña</button>
                 </form>
