@@ -53,10 +53,12 @@ interface VersionData {
   equipScore: number; 
 }
 
+interface MatchReason { label: string; matched: boolean; }
+
 interface ScoredModel {
-  id: string; brandId: string; brandName: string; modelName: string; 
+  id: string; brandId: string; brandName: string; modelName: string;
   tipo_carroceria: string; imgUrl: string; startingPrice: number;
-  availableFuels: string[]; availableTransmissions: string[]; maxPlazas: number; 
+  availableFuels: string[]; availableTransmissions: string[]; maxPlazas: number;
   topFeatures: string[]; dealershipStatus: string;
   score: number; matchPercentage: number; equipScore: number; badge?: string;
   origen: string;
@@ -65,6 +67,7 @@ interface ScoredModel {
   has4x4: boolean;
   hasTecho: boolean;
   hasCamara: boolean;
+  matchReasons: MatchReason[];
 }
 
 interface AdCampaign { id: string; sponsor: string; headline: string; highlight: string; price: string; link: string; img: string; location: string; isActive: boolean; targetCategory?: string; }
@@ -306,114 +309,127 @@ export default function RecomendadorPage() {
   // 4. ALGORITMO B2B DE RANKING Y ETIQUETADO
   // ==========================================
   const runAlgorithm = () => {
-    const consolidatedModels: ScoredModel[] = rawModels.map(model => {
+    // DEAL-BREAKERS (Excluyentes) — se evalúan por VERSIÓN, no por modelo,
+    // para no premiar a los modelos con más trims con un simple OR entre versiones.
+    const budgetMap: Record<string, number> = { '18000': 18000, '25000': 25000, '40000': 40000, '999999': 9999999 };
+    const maxBudget = budgetMap[answers['presupuesto']] || 9999999;
+    const reqPlazas = (answers['plazas'] && answers['plazas'] !== 'any') ? Number(answers['plazas']) : null;
+
+    const scoredList = rawModels.map(model => {
       const mVersions = rawVersions.filter(v => v.modelId === model.id);
-      
-      const startingPrice = mVersions.length > 0 ? Math.min(...mVersions.map(v => v.price)) : 9999999;
+
+      // Solo consideramos versiones que efectivamente pasan los filtros duros.
+      const passingVersions = mVersions.filter(v =>
+        v.price <= maxBudget * 1.15 &&
+        (reqPlazas === null || v.plazas >= reqPlazas)
+      );
+      if (passingVersions.length === 0) return null; // Ningún trim de este modelo es viable
+
+      // Versión representativa: la más barata que cumple los filtros duros.
+      // Es contra ESTA versión puntual que se puntúan combustible/transmisión/features,
+      // no contra "si alguna versión del modelo lo tiene".
+      const repVersion = [...passingVersions].sort((a, b) => a.price - b.price)[0];
+      const maxEquipScore = Math.max(...passingVersions.map(v => v.equipScore));
+
       const fuels = Array.from(new Set(mVersions.map(v => v.combustible)));
       const trans = Array.from(new Set(mVersions.map(v => v.transmision)));
-      const maxPlazas = mVersions.length > 0 ? Math.max(...mVersions.map(v => v.plazas)) : 5;
-      
-      const maxEquipScore = mVersions.length > 0 ? Math.max(...mVersions.map(v => v.equipScore)) : 0;
+      const maxPlazas = Math.max(...mVersions.map(v => v.plazas));
 
-      const modelRawFeatures = mVersions.map(v => v.features_raw).join(' ');
-      const hasAdas = ALIAS.ADAS.some(alias => modelRawFeatures.includes(alias));
-      const hasCuero = ALIAS.CUERO.some(alias => modelRawFeatures.includes(alias));
-      const hasTecho = ALIAS.TECHO.some(alias => modelRawFeatures.includes(alias));
-      const hasCamara = ALIAS.CAMARA.some(alias => modelRawFeatures.includes(alias));
-      const has4x4 = ALIAS.TRACCION_4X4.some(alias => modelRawFeatures.includes(alias)) || mVersions.some(v => ALIAS.TRACCION_4X4.some(alias => v.traccion.includes(alias)));
+      const hasAdas = ALIAS.ADAS.some(alias => repVersion.features_raw.includes(alias));
+      const hasCuero = ALIAS.CUERO.some(alias => repVersion.features_raw.includes(alias));
+      const hasTecho = ALIAS.TECHO.some(alias => repVersion.features_raw.includes(alias));
+      const hasCamara = ALIAS.CAMARA.some(alias => repVersion.features_raw.includes(alias));
+      const has4x4 = ALIAS.TRACCION_4X4.some(alias => repVersion.features_raw.includes(alias) || repVersion.traccion.includes(alias));
 
-      // Extracción de Píldoras para UI
+      // Extracción de Píldoras para UI (reflejan la versión recomendada puntual)
       const extractedFeatures = [];
-      if(hasAdas) extractedFeatures.push('ADAS');
-      if(hasCuero) extractedFeatures.push('Tapizado de Cuero');
-      if(hasCamara) extractedFeatures.push('Cámara 360/Reversa');
-      if(hasTecho) extractedFeatures.push('Techo Panorámico');
-      if(has4x4) extractedFeatures.push('Tracción 4x4');
+      if (hasAdas) extractedFeatures.push('ADAS');
+      if (hasCuero) extractedFeatures.push('Tapizado de Cuero');
+      if (hasCamara) extractedFeatures.push('Cámara 360/Reversa');
+      if (hasTecho) extractedFeatures.push('Techo Panorámico');
+      if (has4x4) extractedFeatures.push('Tracción 4x4');
 
-      // Cálculo de competencia de concesionarias
       const dealershipCount = new Set(mVersions.map(v => v.concesionaria).filter(Boolean)).size;
       const dealershipStatus = dealershipCount > 1 ? `${dealershipCount} concesionarias compiten` : '1 concesionaria disponible';
 
-      return {
-        id: model.id, brandId: model.brandId, brandName: model.brandName, modelName: model.name,
-        tipo_carroceria: model.tipo_carroceria, imgUrl: model.imgUrl, startingPrice,
-        availableFuels: fuels, availableTransmissions: trans, maxPlazas,
-        hasAdas, hasCuero, has4x4, hasTecho, hasCamara, 
-        topFeatures: extractedFeatures.slice(0, 4), dealershipStatus,
-        score: 0, matchPercentage: 0, equipScore: maxEquipScore,
-        origen: model.origen
-      };
-    });
+      // SOFT PREFERENCES (puntuables) — un punto por cada pregunta que el usuario
+      // realmente contestó, trazable 1 a 1 en matchReasons.
+      let score = 10;
+      let maxScore = 10;
+      const matchReasons: MatchReason[] = [];
 
-    const scoredList = consolidatedModels.map(auto => {
-      let score = 10; 
-      let maxScore = 10; 
-
-      // DEAL-BREAKERS (Excluyentes)
-      const budgetMap: Record<string, number> = { '18000': 18000, '25000': 25000, '40000': 40000, '999999': 9999999 };
-      const maxBudget = budgetMap[answers['presupuesto']] || 9999999;
-      if (auto.startingPrice > maxBudget * 1.15) return null; // Hard Reject: Fuera de presupuesto
-
-      if (answers['plazas'] && answers['plazas'] !== 'any') {
-        const reqPlazas = Number(answers['plazas']);
-        if (reqPlazas === 7 && auto.maxPlazas < 7) return null; // Hard Reject: Faltan plazas
-        if (reqPlazas === 5 && auto.maxPlazas < 4) return null; // Hard Reject
-      }
-
-      // SOFT PREFERENCES (Puntuables)
       const ansCarroceria = answers['carroceria'] || [];
       if (!ansCarroceria.includes('any') && ansCarroceria.length > 0) {
         maxScore += 20;
-        if (ansCarroceria.some((c: string) => auto.tipo_carroceria === c)) score += 20;
+        const matched = ansCarroceria.some((c: string) => model.tipo_carroceria === c);
+        if (matched) score += 20;
+        matchReasons.push({ label: 'Tipo de carrocería', matched });
       }
 
       const ansMarcas = answers['marcas'] || [];
       if (!ansMarcas.includes('any') && ansMarcas.length > 0) {
         maxScore += 20;
-        if (ansMarcas.some((m: string) => auto.brandName === m)) score += 20;
+        const matched = ansMarcas.some((m: string) => model.brandName === m);
+        if (matched) score += 20;
+        matchReasons.push({ label: 'Marca preferida', matched });
       }
 
       const ansOrigen = answers['origen'] || [];
       if (!ansOrigen.includes('any') && ansOrigen.length > 0) {
         maxScore += 10;
-        if (ansOrigen.some((o: string) => auto.origen === o)) score += 10;
+        const matched = ansOrigen.some((o: string) => model.origen === o);
+        if (matched) score += 10;
+        matchReasons.push({ label: 'Origen de fabricación', matched });
       }
 
       const ansComb = answers['combustible'] || [];
       if (!ansComb.includes('any') && ansComb.length > 0) {
         maxScore += 15;
-        if (auto.availableFuels.some(f => ansComb.includes(f))) score += 15;
+        const matched = ansComb.includes(repVersion.combustible);
+        if (matched) score += 15;
+        matchReasons.push({ label: 'Combustible', matched });
       }
 
-      const autoTransStr = auto.availableTransmissions.join(' ');
       if (answers['transmision'] && answers['transmision'] !== 'any') {
         maxScore += 15;
-        if (answers['transmision'] === 'Automatica' && ALIAS.AUTO.some(a => autoTransStr.includes(a))) score += 15;
-        if (answers['transmision'] === 'Manual' && ALIAS.MANUAL.some(a => autoTransStr.includes(a))) score += 15;
+        let matched = false;
+        if (answers['transmision'] === 'Automatica' && ALIAS.AUTO.some(a => repVersion.transmision.includes(a))) matched = true;
+        if (answers['transmision'] === 'Manual' && ALIAS.MANUAL.some(a => repVersion.transmision.includes(a))) matched = true;
+        if (matched) score += 15;
+        matchReasons.push({ label: 'Tipo de transmisión', matched });
       }
 
+      const featureLabels: Record<string, string> = {
+        camara: 'Cámara / Sensores', adas: 'Asistencias de manejo (ADAS)',
+        cuero: 'Asientos de cuero', techo: 'Techo panorámico', '4x4': 'Tracción 4x4 / integral'
+      };
+      const featureFlags: Record<string, boolean> = { camara: hasCamara, adas: hasAdas, cuero: hasCuero, techo: hasTecho, '4x4': has4x4 };
       const ansFeat = answers['features'] || [];
       if (!ansFeat.includes('any') && ansFeat.length > 0) {
         ansFeat.forEach((feat: string) => {
           maxScore += 10;
-          if (feat === 'camara' && auto.hasCamara) score += 10;
-          if (feat === 'adas' && auto.hasAdas) score += 10;
-          if (feat === 'cuero' && auto.hasCuero) score += 10;
-          if (feat === 'techo' && auto.hasTecho) score += 10;
-          if (feat === '4x4' && auto.has4x4) score += 10;
+          const matched = !!featureFlags[feat];
+          if (matched) score += 10;
+          matchReasons.push({ label: featureLabels[feat] || feat, matched });
         });
       }
 
-      let matchPercentage = Math.round((score / maxScore) * 100);
-      if (matchPercentage > 99) matchPercentage = 98 + Math.floor(Math.random() * 2); 
-      if (matchPercentage < 35) matchPercentage = 35 + Math.floor(Math.random() * 15); 
+      const matchPercentage = Math.round((score / maxScore) * 100);
 
-      return { ...auto, score, matchPercentage };
-    }).filter(a => a !== null); // Limpiamos los rechazados
+      return {
+        id: model.id, brandId: model.brandId, brandName: model.brandName, modelName: model.name,
+        tipo_carroceria: model.tipo_carroceria, imgUrl: model.imgUrl, startingPrice: repVersion.price,
+        availableFuels: fuels, availableTransmissions: trans, maxPlazas,
+        hasAdas, hasCuero, has4x4, hasTecho, hasCamara,
+        topFeatures: extractedFeatures.slice(0, 4), dealershipStatus,
+        score, matchPercentage, equipScore: maxEquipScore,
+        origen: model.origen, matchReasons
+      };
+    }).filter((a): a is ScoredModel => a !== null);
 
-    // Ordenamiento Base
-    let validMatches = (scoredList as ScoredModel[]).sort((a, b) => b.score - a.score);
+    // Ordenamiento: por score, y a igualdad de score, el más accesible primero
+    // (desempate honesto y explicable, no orden arbitrario de inserción).
+    let validMatches = scoredList.sort((a, b) => b.score - a.score || a.startingPrice - b.startingPrice);
     
     // Categorización de Pestañas Top 3
     let finalTop3: ScoredModel[] = [];
@@ -750,6 +766,17 @@ export default function RecomendadorPage() {
                         <span key={idx} className="bg-[#F5F5F5] border border-[#C0C0C0]/50 text-[#3A3A3C] text-[8px] font-bold uppercase px-2 py-1 rounded-none">{feat}</span>
                       ))}
                     </div>
+
+                    {/* DESGLOSE: por qué coincide (o no) con lo que se preguntó */}
+                    {model.matchReasons.length > 0 && (
+                      <ul className="flex flex-col gap-1 mb-6 text-[10px] font-bold uppercase tracking-wide">
+                        {model.matchReasons.map((reason, idx) => (
+                          <li key={idx} className={`flex items-center gap-1.5 ${reason.matched ? 'text-[#1E8E3E]' : 'text-[#C0C0C0]'}`}>
+                            <span>{reason.matched ? '✓' : '✕'}</span> {reason.label}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
 
                     <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50">
                       <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio Desde</span>
