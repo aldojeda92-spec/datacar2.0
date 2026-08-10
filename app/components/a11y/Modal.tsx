@@ -20,6 +20,13 @@ export default function Modal({ isOpen, onClose, children, overlayClassName, pan
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  // Foco inicial (y su restauración al cerrar) SOLO debe dispararse en la
+  // transición de abrir/cerrar, nunca en cada re-render. Si dependiera de
+  // `onClose` -- que en la mayoría de los call-sites es una arrow function
+  // inline, recreada en cada render del padre -- el efecto se re-ejecutaría
+  // en cada tecla que el usuario escribe dentro del modal, robándole el foco
+  // de vuelta al primer elemento enfocable (ej: el botón "✕") y dejando
+  // que solo se pueda tipear una letra a la vez.
   useEffect(() => {
     if (!isOpen) return;
 
@@ -28,12 +35,25 @@ export default function Modal({ isOpen, onClose, children, overlayClassName, pan
     const focusables = panel?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
     (focusables?.[0] ?? panel)?.focus();
 
+    return () => {
+      previouslyFocused.current?.focus();
+    };
+  }, [isOpen]);
+
+  // La trampa de foco (Tab/Shift+Tab) y el cierre con Escape sí pueden
+  // depender de `onClose` sin problema: volver a registrar el listener no
+  // tiene efecto visible para el usuario.
+  useEffect(() => {
+    if (!isOpen) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
         return;
       }
-      if (e.key === 'Tab' && panel) {
+      if (e.key === 'Tab') {
+        const panel = panelRef.current;
+        if (!panel) return;
         const items = panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
         if (items.length === 0) return;
         const first = items[0];
@@ -49,10 +69,7 @@ export default function Modal({ isOpen, onClose, children, overlayClassName, pan
     };
 
     document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      previouslyFocused.current?.focus();
-    };
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;

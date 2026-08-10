@@ -38,6 +38,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# datos de negocio (catalogo/precios de concesionarias, no es codigo)
+/database
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

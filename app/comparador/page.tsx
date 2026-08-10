@@ -128,7 +128,7 @@ function ComparadorContent() {
                 const bSnap = await getDoc(doc(db, 'brands', mData.brandId));
                 if (bSnap.exists()) brandName = bSnap.data().name;
               }
-              loadedData.push({ ...vData, id: vSnap.id, brandName, modelName, imgUrl: isValidImageSrc(imgUrl) ? imgUrl : 'https://via.placeholder.com/400x200?text=Auto' });
+              loadedData.push({ ...vData, id: vSnap.id, brandName, modelName, imgUrl: imgUrl || '' });
               hydratedCompareItems.push({ id: vSnap.id, name: `${brandName} ${modelName} ${vData.name}`, price: Number(vData.price) || 0 });
             }
           }
@@ -391,14 +391,18 @@ function ComparadorContent() {
                             
                             <div>
                               <div className="relative h-24 md:h-32 mb-4 bg-[#FFFFFF] p-2 border-b border-[#C0C0C0]/20">
-                                <Image
-                                  src={veh.imgUrl || ''}
-                                  alt={veh.name}
-                                  fill
-                                  sizes="25vw"
-                                  className="object-contain p-2"
-                                  unoptimized={!isOptimizableImageSrc(veh.imgUrl)}
-                                />
+                                {isValidImageSrc(veh.imgUrl) ? (
+                                  <Image
+                                    src={veh.imgUrl}
+                                    alt={veh.name}
+                                    fill
+                                    sizes="25vw"
+                                    className="object-contain p-2"
+                                    unoptimized={!isOptimizableImageSrc(veh.imgUrl)}
+                                  />
+                                ) : (
+                                  <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                                )}
                               </div>
                               <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{veh.brandName}</p>
                               <h3 className="font-black text-base md:text-lg text-[#0A1F33] uppercase leading-tight line-clamp-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{veh.modelName}</h3>

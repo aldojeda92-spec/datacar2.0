@@ -101,7 +101,14 @@ export default function RecomendadorPage() {
 
   const [topMatches, setTopMatches] = useState<ScoredModel[]>([]);
   const [otherMatches, setOtherMatches] = useState<ScoredModel[]>([]);
-  
+
+  // "¿Ya tenés un modelo en mente?" -- se compara aparte de las recomendaciones
+  const [wantsReference, setWantsReference] = useState<boolean | null>(null);
+  const [referenceModelId, setReferenceModelId] = useState<string | null>(null);
+  const [referenceMatch, setReferenceMatch] = useState<ScoredModel | null>(null);
+  const [refSearchTerm, setRefSearchTerm] = useState('');
+
+
   const [leadForm, setLeadForm] = useState({ nombre: '', telefono: '', email: '' });
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [isSubmittingLead, setIsSubmittingLead] = useState(false);
@@ -211,7 +218,7 @@ export default function RecomendadorPage() {
       ]
     },
     {
-      id: 'carroceria', title: '¿Qué tipo de auto buscás?', subtitle: 'Leemos directamente del mercado. Podés elegir varios.', isMultiple: true,
+      id: 'carroceria', title: '¿Qué tipo de auto buscás?', subtitle: 'Buscamos solo entre estos tipos, en todas las marcas. Podés elegir varios.', isMultiple: true,
       options: [
         ...tiposDisponibles.map(t => ({ label: t, value: t, icon: '🚗' })),
         { label: 'Sin preferencia', value: 'any', icon: '⚖️' }
@@ -241,7 +248,7 @@ export default function RecomendadorPage() {
       ]
     },
     {
-      id: 'plazas', title: '¿Cuántas plazas necesitás?', subtitle: 'Pensá en el uso habitual.', isMultiple: false,
+      id: 'plazas', title: '¿Cuántas plazas necesitás?', subtitle: 'Es un mínimo: también te mostramos opciones con más capacidad si entran en tu presupuesto.', isMultiple: false,
       options: [
         ...plazasDisponibles.map(p => ({ label: `${p} Plazas`, desc: `Capacidad para ${p} ocupantes`, value: p.toString(), icon: '👨‍👩‍👧‍👦' })),
         { label: 'Sin preferencia', value: 'any', icon: '⚖️' }
@@ -315,15 +322,31 @@ export default function RecomendadorPage() {
     const maxBudget = budgetMap[answers['presupuesto']] || 9999999;
     const reqPlazas = (answers['plazas'] && answers['plazas'] !== 'any') ? Number(answers['plazas']) : null;
 
-    const scoredList = rawModels.map(model => {
-      const mVersions = rawVersions.filter(v => v.modelId === model.id);
+    // Carrocería es LIMITANTE (excluyente): si el usuario eligió un segmento,
+    // solo se buscan autos de ese segmento en todas las marcas -- no suma puntos,
+    // directamente descarta lo que no coincide.
+    const ansCarroceria = answers['carroceria'] || [];
+    const carroceriaEsFiltroDuro = !ansCarroceria.includes('any') && ansCarroceria.length > 0;
 
-      // Solo consideramos versiones que efectivamente pasan los filtros duros.
-      const passingVersions = mVersions.filter(v =>
-        v.price <= maxBudget * 1.15 &&
-        (reqPlazas === null || v.plazas >= reqPlazas)
-      );
-      if (passingVersions.length === 0) return null; // Ningún trim de este modelo es viable
+    // opts.bypassHardFilters se usa para el modelo de referencia que el usuario
+    // eligió a mano ("¿ya tenés un modelo en mente?") -- ese SIEMPRE se muestra
+    // y se puntúa para comparar, así esté fuera de presupuesto o de segmento.
+    const scoreModel = (model: ModelData, opts?: { bypassHardFilters?: boolean }): ScoredModel | null => {
+      const bypass = !!opts?.bypassHardFilters;
+      if (!bypass && carroceriaEsFiltroDuro && !ansCarroceria.some((c: string) => model.tipo_carroceria === c)) return null;
+
+      const mVersions = rawVersions.filter(v => v.modelId === model.id);
+      if (mVersions.length === 0) return null;
+
+      // Solo el presupuesto es filtro duro por versión. Plazas es PREFERENCIA,
+      // no excluyente: pedir 4 plazas no descarta autos de 4 a 8, solo puntúa
+      // mejor a los que cumplen -- se resuelve más abajo, junto al resto de
+      // las preferencias puntuables.
+      let passingVersions = mVersions.filter(v => v.price <= maxBudget * 1.15);
+      if (passingVersions.length === 0) {
+        if (!bypass) return null; // Ningún trim de este modelo es viable
+        passingVersions = mVersions; // El modelo de referencia se muestra igual, aunque no entre en el presupuesto
+      }
 
       // Versión representativa: la más barata que cumple los filtros duros.
       // Es contra ESTA versión puntual que se puntúan combustible/transmisión/features,
@@ -358,12 +381,17 @@ export default function RecomendadorPage() {
       let maxScore = 10;
       const matchReasons: MatchReason[] = [];
 
-      const ansCarroceria = answers['carroceria'] || [];
-      if (!ansCarroceria.includes('any') && ansCarroceria.length > 0) {
-        maxScore += 20;
-        const matched = ansCarroceria.some((c: string) => model.tipo_carroceria === c);
-        if (matched) score += 20;
-        matchReasons.push({ label: 'Tipo de carrocería', matched });
+      // Carrocería ya se filtró como excluyente arriba: si el modelo llegó
+      // hasta acá es porque coincide, se muestra en el desglose como confirmación.
+      if (carroceriaEsFiltroDuro) {
+        matchReasons.push({ label: 'Tipo de carrocería', matched: true });
+      }
+
+      if (reqPlazas !== null) {
+        maxScore += 15;
+        const matched = repVersion.plazas >= reqPlazas;
+        if (matched) score += 15;
+        matchReasons.push({ label: `Plazas (mínimo ${reqPlazas})`, matched });
       }
 
       const ansMarcas = answers['marcas'] || [];
@@ -425,7 +453,18 @@ export default function RecomendadorPage() {
         score, matchPercentage, equipScore: maxEquipScore,
         origen: model.origen, matchReasons
       };
-    }).filter((a): a is ScoredModel => a !== null);
+    };
+
+    // Modelo de referencia ("¿ya tenés un modelo en mente?"): se puntúa aparte,
+    // siempre se muestra, y se saca de la lista general para no aparecer duplicado.
+    const referenceModel = referenceModelId ? rawModels.find(m => m.id === referenceModelId) : null;
+    const referenceMatch = referenceModel ? scoreModel(referenceModel, { bypassHardFilters: true }) : null;
+    setReferenceMatch(referenceMatch);
+
+    const scoredList = rawModels
+      .filter(model => model.id !== referenceModelId)
+      .map(model => scoreModel(model))
+      .filter((a): a is ScoredModel => a !== null);
 
     // Ordenamiento: por score, y a igualdad de score, el más accesible primero
     // (desempate honesto y explicable, no orden arbitrario de inserción).
@@ -510,7 +549,7 @@ export default function RecomendadorPage() {
       });
 
       runAlgorithm();
-      setStep(WIZARD_STEPS.length + 2); // Salta a Resultados
+      setStep(WIZARD_STEPS.length + 3); // Salta a Resultados
     } catch (error) {
       console.error('Error guardando el lead del recomendador:', error);
       setFeedback({ type: 'error', message: 'Error de conexión. Intenta nuevamente.' });
@@ -573,6 +612,9 @@ export default function RecomendadorPage() {
           {/* Barra de Progreso */}
           <div className="w-full bg-[#FFFFFF] py-6 px-4 md:px-8 border-b border-[#C0C0C0] flex flex-col items-center">
             <div className="max-w-3xl w-full flex justify-between items-center mb-2">
+               <button onClick={() => setStep(step - 1)} className="flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors">
+                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver
+               </button>
                <span className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">Pregunta {step} de {WIZARD_STEPS.length}</span>
                <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest">{Math.round((step/WIZARD_STEPS.length)*100)}%</span>
             </div>
@@ -638,11 +680,85 @@ export default function RecomendadorPage() {
                 </div>
               )}
 
-              {step > 1 && (
-                <button onClick={() => setStep(step - 1)} className="mt-12 text-[10px] font-bold text-[#C0C0C0] hover:text-[#0A1F33] uppercase tracking-widest flex items-center justify-center w-full transition-colors border-none bg-transparent">
-                  ← Volver a la pregunta anterior
-                </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ==========================================
+          PASO ADICIONAL: ¿YA TENÉS UN MODELO EN MENTE?
+          ========================================== */}
+      {step === WIZARD_STEPS.length + 1 && (
+        <section className="flex-grow flex flex-col">
+          <div className="w-full bg-[#FFFFFF] py-6 px-4 md:px-8 border-b border-[#C0C0C0] flex justify-center">
+            <button onClick={() => setStep(step - 1)} className="max-w-3xl w-full flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver
+            </button>
+          </div>
+
+          <div className="flex-grow flex flex-col items-center justify-start pt-12 p-4">
+            <div className="max-w-3xl w-full">
+              <div className="mb-10 text-center">
+                <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>¿Ya tenés un modelo en mente?</h2>
+                <p className="text-sm text-[#C0C0C0] font-medium">Lo comparamos directo contra las recomendaciones que arme DATACAR para vos.</p>
+              </div>
+
+              {wantsReference === null && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button onClick={() => setWantsReference(true)} className="bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#00BFFF] p-6 transition-colors flex items-center gap-4 text-left group rounded-none">
+                    <div className="w-10 h-10 flex items-center justify-center text-xl shrink-0">🎯</div>
+                    <span className="font-bold text-sm text-[#3A3A3C] group-hover:text-[#0A1F33]">Sí, quiero compararlo</span>
+                  </button>
+                  <button onClick={() => { setWantsReference(false); setReferenceModelId(null); setStep(step + 1); }} className="bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#0A1F33] p-6 transition-colors flex items-center gap-4 text-left group rounded-none">
+                    <div className="w-10 h-10 flex items-center justify-center text-xl shrink-0">⚖️</div>
+                    <span className="font-bold text-sm text-[#3A3A3C] group-hover:text-[#0A1F33]">No, sorprendeme</span>
+                  </button>
+                </div>
               )}
+
+              {wantsReference === true && !referenceModelId && (
+                <div>
+                  <div className="flex border border-[#0A1F33] mb-4 bg-[#FFFFFF]">
+                    <div className="pl-4 flex items-center text-[#C0C0C0]"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
+                    <input type="text" aria-label="Buscar modelo" placeholder="Ej: Toyota Corolla" className="w-full p-4 text-sm focus:outline-none text-[#3A3A3C]" value={refSearchTerm} onChange={e => setRefSearchTerm(e.target.value)} autoFocus />
+                  </div>
+                  <div className="max-h-80 overflow-y-auto border border-[#C0C0C0] custom-scrollbar bg-[#F8F9FA]">
+                    {refSearchTerm.length < 2 ? (
+                      <div className="p-8 text-center text-[#C0C0C0] text-[10px] font-bold uppercase tracking-widest">Escribí al menos 2 caracteres...</div>
+                    ) : (() => {
+                      const term = refSearchTerm.toLowerCase();
+                      const results = rawModels.filter(m => `${m.brandName} ${m.name}`.toLowerCase().includes(term)).slice(0, 8);
+                      return results.length > 0 ? results.map(m => (
+                        <button type="button" key={m.id} onClick={() => setReferenceModelId(m.id)} className="appearance-none text-left w-full p-4 border-b border-[#C0C0C0]/40 flex justify-between items-center transition-colors cursor-pointer hover:bg-[#FFFFFF] hover:border-l-4 hover:border-l-[#00BFFF]">
+                          <span className="font-bold text-xs text-[#0A1F33] uppercase">{m.brandName} {m.name}</span>
+                          <span className="text-[10px] text-[#00BFFF] font-black">+ Elegir</span>
+                        </button>
+                      )) : <div className="p-8 text-center text-[#C0C0C0] text-[10px] font-bold uppercase tracking-widest">Sin resultados en el catálogo.</div>;
+                    })()}
+                  </div>
+                  <button onClick={() => setWantsReference(null)} className="block mx-auto mt-6 text-[10px] text-[#C0C0C0] hover:text-[#0A1F33] font-bold uppercase tracking-widest underline">
+                    Cancelar
+                  </button>
+                </div>
+              )}
+
+              {wantsReference === true && referenceModelId && (() => {
+                const chosen = rawModels.find(m => m.id === referenceModelId);
+                return (
+                  <div className="text-center border border-[#00BFFF] bg-[#F5FBFF] p-8">
+                    <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-1">Vas a comparar contra</p>
+                    <p className="font-black text-xl text-[#0A1F33] uppercase mb-6">{chosen?.brandName} {chosen?.name}</p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <button onClick={() => setStep(step + 1)} className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-12 transition-colors rounded-none">
+                        Continuar →
+                      </button>
+                      <button onClick={() => { setReferenceModelId(null); setRefSearchTerm(''); }} className="border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-xs uppercase tracking-widest py-4 px-8 transition-colors rounded-none">
+                        Cambiar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </section>
@@ -651,7 +767,7 @@ export default function RecomendadorPage() {
       {/* ==========================================
           PASO 11: LEAD CAPTURE (Gatillo B2B)
           ========================================== */}
-      {step === WIZARD_STEPS.length + 1 && (
+      {step === WIZARD_STEPS.length + 2 && (
         <section className="flex-grow flex flex-col items-center justify-center p-4 py-16 relative">
           {/* Skeleton Falso de Fondo (Psicología de Recompensa) */}
           <div className="absolute inset-0 flex justify-center items-center opacity-10 pointer-events-none -z-10 overflow-hidden">
@@ -663,6 +779,9 @@ export default function RecomendadorPage() {
           </div>
 
           <div className="max-w-xl w-full bg-[#FFFFFF] border-t-4 border-[#00BFFF] border-l border-r border-b border-[#C0C0C0] p-10 shadow-none z-10">
+            <button onClick={() => setStep(WIZARD_STEPS.length + 1)} className="flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors mb-6">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver a modificar respuestas
+            </button>
             <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'Montserrat, sans-serif' }}>Generando Reporte</h2>
             <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">100% analizado. Encontramos tus opciones ideales.</p>
             
@@ -699,7 +818,7 @@ export default function RecomendadorPage() {
       {/* ==========================================
           PASO 12: RESULTADOS (LA REVELACIÓN B2B)
           ========================================== */}
-      {step === WIZARD_STEPS.length + 2 && (
+      {step === WIZARD_STEPS.length + 3 && (
         <section className="flex-grow w-full pb-20">
           <div className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] py-12 px-4 text-center">
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Tu Resultado</span>
@@ -709,7 +828,63 @@ export default function RecomendadorPage() {
           </div>
 
           <div className="max-w-[1200px] mx-auto px-4 lg:px-8 mt-12">
-            
+
+            {/* TU OPCIÓN DE REFERENCIA (si eligió un modelo para comparar) */}
+            {referenceMatch && (
+              <div className="mb-12">
+                <h3 className="font-bold text-[#3A3A3C] text-sm uppercase tracking-widest mb-6 border-b border-[#C0C0C0]/50 pb-2">Tu opción</h3>
+                <div className="max-w-sm">
+                  <article className="bg-[#FFFFFF] border border-[#00BFFF] border-t-4 border-t-[#00BFFF] flex flex-col relative rounded-none shadow-none">
+                    <div className="absolute top-4 left-4 bg-[#F8F9FA] border border-[#C0C0C0] text-[#3A3A3C] font-black text-[10px] uppercase tracking-widest px-3 py-1.5 z-10 flex items-center gap-2">
+                      <span className="text-[#00BFFF]">•</span> {referenceMatch.matchPercentage}% Match
+                    </div>
+                    <div className="absolute top-4 right-4 bg-[#00BFFF] text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest px-3 py-1.5 z-10">
+                      🎯 Tu Opción
+                    </div>
+                    <div className="relative p-4 h-56 border-b border-[#C0C0C0]/20 bg-[#F8F9FA]">
+                      {isValidImageSrc(referenceMatch.imgUrl) ? (
+                        <Image src={referenceMatch.imgUrl} alt={referenceMatch.modelName} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain p-4" unoptimized={!isOptimizableImageSrc(referenceMatch.imgUrl)} />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                      )}
+                    </div>
+                    <div className="p-6 flex flex-col flex-grow">
+                      <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{referenceMatch.brandName}</p>
+                      <h3 className="font-black text-xl text-[#0A1F33] uppercase leading-tight mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>{referenceMatch.modelName}</h3>
+                      {referenceMatch.matchReasons.length > 0 && (
+                        <ul className="flex flex-col gap-1 mb-6 text-[10px] font-bold uppercase tracking-wide">
+                          {referenceMatch.matchReasons.map((reason, idx) => (
+                            <li key={idx} className={`flex items-center gap-1.5 ${reason.matched ? 'text-[#1E8E3E]' : 'text-[#C0C0C0]'}`}>
+                              <span>{reason.matched ? '✓' : '✕'}</span> {reason.label}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50">
+                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio Desde</span>
+                        <span className="font-black text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {referenceMatch.startingPrice.toLocaleString()}</span>
+                        <Link href={`/catalogo/${referenceMatch.brandId}/${referenceMatch.id}`} className="w-full text-center block bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-3 transition-colors rounded-none">
+                          Ver Detalles Técnicos
+                        </Link>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            )}
+
+            {/* SIN RESULTADOS: la carrocería es excluyente, puede no haber ningún auto de ese segmento dentro del presupuesto */}
+            {topMatches.length === 0 && (
+              <div className="bg-[#FFE6E6] border border-[#D93025] p-6 mb-8 flex gap-4 items-start shadow-none rounded-none">
+                <div className="w-6 h-6 bg-[#D93025] text-[#FFFFFF] flex items-center justify-center font-black rounded-none shrink-0">!</div>
+                <div>
+                  <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">No encontramos autos con esa combinación exacta</p>
+                  <p className="text-xs text-[#3A3A3C] mb-3">No hay vehículos del tipo de carrocería que elegiste dentro de tu presupuesto. Probá ampliando el presupuesto o eligiendo otro tipo de carrocería.</p>
+                  <button onClick={() => setStep(2)} className="text-[10px] font-bold text-[#D93025] uppercase tracking-widest underline">Volver a elegir tipo de carrocería</button>
+                </div>
+              </div>
+            )}
+
             {/* ALERTA DE CONTINGENCIA (Flat Design) */}
             {topMatches.length > 0 && topMatches[0].matchPercentage < 80 && (
               <div className="bg-[#F5FBFF] border border-[#00BFFF] p-6 mb-8 flex gap-4 items-start shadow-none rounded-none">

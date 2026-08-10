@@ -164,7 +164,7 @@ function CatalogoContent() {
             versionName: baseVersion.name || '',
             tipo_carroceria: mData.tipo_carroceria || 'Vehículo',
             price: price,
-            img: isValidImageSrc(mData.imgUrl) ? mData.imgUrl : 'https://via.placeholder.com/400x200?text=Sin+Imagen',
+            img: mData.imgUrl || '',
             transmision: specs.transmision || '',
             combustible: specs.combustible || '',
             traccion: specs.traccion || '',
@@ -473,14 +473,18 @@ function CatalogoContent() {
                     <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
                         <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
-                          <Image
-                            src={auto.img}
-                            alt={auto.name}
-                            fill
-                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                            className="object-contain p-4 group-hover:scale-[1.02] transition-transform duration-300"
-                            unoptimized={!isOptimizableImageSrc(auto.img)}
-                          />
+                          {isValidImageSrc(auto.img) ? (
+                            <Image
+                              src={auto.img}
+                              alt={auto.name}
+                              fill
+                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                              className="object-contain p-4 group-hover:scale-[1.02] transition-transform duration-300"
+                              unoptimized={!isOptimizableImageSrc(auto.img)}
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                          )}
                         </div>
                         
                         <div className="p-5 flex flex-col">

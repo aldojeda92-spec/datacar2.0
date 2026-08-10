@@ -186,7 +186,7 @@ export default function HomeClient() {
             name: data.name,
             category: cleanCategory,
             price: Number(data.startingPrice) || 0,
-            img: isValidImageSrc(data.imgUrl) ? data.imgUrl : 'https://via.placeholder.com/400x200?text=Auto',
+            img: data.imgUrl || '',
             isPopular: data.isPopular || false
           };
         });
@@ -252,7 +252,7 @@ export default function HomeClient() {
     if (!activePriceTab) return [];
     const currentTab = priceTabs.find(t => t.id === activePriceTab);
     if (!currentTab) return [];
-    return autos.filter(auto => currentTab.filter(auto.price)).slice(0, 5);
+    return autos.filter(auto => currentTab.filter(auto.price));
   }, [autos, activePriceTab, priceTabs]);
 
   return (
@@ -431,14 +431,18 @@ export default function HomeClient() {
             <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block">
               <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group">
                 <div className="relative p-4 flex-grow h-28 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/30">
-                  <Image
-                    src={auto.img}
-                    alt={auto.name}
-                    fill
-                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
-                    className="object-contain p-4 group-hover:scale-105 transition-transform"
-                    unoptimized={!isOptimizableImageSrc(auto.img)}
-                  />
+                  {isValidImageSrc(auto.img) ? (
+                    <Image
+                      src={auto.img}
+                      alt={auto.name}
+                      fill
+                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                      className="object-contain p-4 group-hover:scale-105 transition-transform"
+                      unoptimized={!isOptimizableImageSrc(auto.img)}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                  )}
                 </div>
                 <div className="p-4 flex flex-col">
                   <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
@@ -578,14 +582,18 @@ export default function HomeClient() {
                     </span>
                   </div>
                   <div className="relative p-4 pt-0 shrink-0 h-32 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors">
-                    <Image
-                      src={auto.img}
-                      alt={auto.name}
-                      fill
-                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                      className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
-                      unoptimized={!isOptimizableImageSrc(auto.img)}
-                    />
+                    {isValidImageSrc(auto.img) ? (
+                      <Image
+                        src={auto.img}
+                        alt={auto.name}
+                        fill
+                        sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                        className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
+                        unoptimized={!isOptimizableImageSrc(auto.img)}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                    )}
                   </div>
                   <div className="p-4 flex flex-col flex-grow border-t border-[#C0C0C0] bg-[#F8F9FA]">
                     <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
