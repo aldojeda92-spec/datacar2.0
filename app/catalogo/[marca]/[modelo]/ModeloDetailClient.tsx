@@ -9,6 +9,7 @@ import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firesto
 // CORRECCIÓN DE RUTAS: 4 niveles para lib (raíz), 3 niveles para components (dentro de app)
 import { db } from '../../../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../../lib/imageSrc';
+import { normalizeCarroceria } from '../../../../lib/carroceria';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../lib/finance';
 import LeadModal from '../../../components/LeadModal';
 import NewsletterForm from '../../../components/NewsletterForm';
@@ -205,7 +206,7 @@ export default function ModeloDetailClient() {
               {brand?.name} <span className="font-black text-[#0A1F33] text-3xl md:text-4xl block" style={{ fontFamily: 'Montserrat, sans-serif' }}>{model.name}</span>
             </h1>
             <p className="text-[11px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-6">
-              {model.tipo_carroceria} | Origen: {model.origen || brand?.origen_marca || 'Consultar'}
+              {normalizeCarroceria(model.tipo_carroceria)} | Origen: {model.origen || brand?.origen_marca || 'Consultar'}
             </p>
 
             <div className="mb-6 border-l-2 border-[#00BFFF] pl-4">
@@ -302,7 +303,7 @@ export default function ModeloDetailClient() {
                  <div className="w-10 h-10 bg-[#F8F9FA] border border-[#C0C0C0] flex items-center justify-center text-[#3A3A3C]">
                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                  </div>
-                 <div><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest">Carrocería</p><p className="font-bold text-xs text-[#0A1F33] uppercase">{model.tipo_carroceria}</p></div>
+                 <div><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest">Carrocería</p><p className="font-bold text-xs text-[#0A1F33] uppercase">{normalizeCarroceria(model.tipo_carroceria)}</p></div>
                </div>
                <div className="flex items-center gap-4">
                  <div className="w-10 h-10 bg-[#F8F9FA] border border-[#C0C0C0] flex items-center justify-center text-[#3A3A3C]">

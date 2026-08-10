@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../../../lib/imageSrc';
+import { normalizeCarroceria } from '../../../../../lib/carroceria';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../../lib/finance';
 import LeadModal from '../../../../components/LeadModal'; // INYECCIÓN B2B
 import NewsletterForm from '../../../../components/NewsletterForm'; // INYECCIÓN B2C
@@ -191,7 +192,7 @@ export default function VersionDetailClient() {
                 {brand?.name} {model.name} <span className="font-black text-[#0A1F33] text-2xl md:text-3xl block mt-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{version.name}</span>
               </h1>
               <p className="text-[11px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-6">
-                {model.tipo_carroceria} | Origen: {model.origen || brand?.origen_marca || 'Consultar'} | ID: {version.id}
+                {normalizeCarroceria(model.tipo_carroceria)} | Origen: {model.origen || brand?.origen_marca || 'Consultar'} | ID: {version.id}
               </p>
 
               <div className="mb-8 border-l-4 border-[#0A1F33] pl-4 bg-[#FFFFFF] p-4 border-t border-r border-b border-[#C0C0C0]">

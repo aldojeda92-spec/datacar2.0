@@ -10,6 +10,7 @@ import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
 import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
+import { normalizeCarroceria } from '../../lib/carroceria';
 
 // ==========================================
 // INTERFACES (Alineadas a Matriz 4 y Ads)
@@ -162,7 +163,7 @@ function CatalogoContent() {
             brand: brandInfo.name,
             name: mData.name || '',
             versionName: baseVersion.name || '',
-            tipo_carroceria: mData.tipo_carroceria || 'Vehículo',
+            tipo_carroceria: normalizeCarroceria(mData.tipo_carroceria),
             price: price,
             img: mData.imgUrl || '',
             transmision: specs.transmision || '',
@@ -182,7 +183,7 @@ function CatalogoContent() {
             modelsTemp.set(uniqueKey, autoData);
           }
 
-          if (mData.tipo_carroceria) tempTipos.add(mData.tipo_carroceria);
+          if (mData.tipo_carroceria) tempTipos.add(normalizeCarroceria(mData.tipo_carroceria));
           if (specs.plazas) tempPlazas.add(specs.plazas.toString());
           if (specs.combustible) tempCombustibles.add(specs.combustible);
         });

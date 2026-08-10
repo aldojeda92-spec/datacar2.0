@@ -8,6 +8,7 @@ import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'f
 import { db, auth } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
+import { normalizeCarroceria } from '../../lib/carroceria';
 import { useToast } from '../context/ToastContext';
 
 // ==========================================
@@ -297,7 +298,7 @@ export default function PortalConcesionariasPage() {
     e.preventDefault(); if (!modeloForm.name || !modeloForm.brandId) return;
     try {
       const id = generarSlug(`${modeloForm.brandId}-${modeloForm.name}`);
-      await setDoc(doc(db, 'models', id), { ...modeloForm, name: modeloForm.name.toUpperCase(), startingPrice: Number(modeloForm.startingPrice) || 0, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'models', id), { ...modeloForm, name: modeloForm.name.toUpperCase(), tipo_carroceria: normalizeCarroceria(modeloForm.tipo_carroceria), startingPrice: Number(modeloForm.startingPrice) || 0, updatedAt: serverTimestamp() }, { merge: true });
       await logAudit('CREATE_MODEL', id, `Modelo creado: ${modeloForm.name.toUpperCase()}`);
       setFeedback({ type: 'success', message: 'Modelo guardado correctamente. Ahora puedes agregarle versiones.' });
       setModeloForm({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', origen: '', startingPrice: '', imgUrl: '' }); 
@@ -382,7 +383,7 @@ export default function PortalConcesionariasPage() {
         const precioValue = fila.precio_usd || fila.precio || 0;
 
         batch.set(doc(db, 'models', idModelo), { 
-          brandId: idMarca, name: fila.modelo.toUpperCase(), tipo_carroceria: (fila.tipo_carroceria || 'SUV').trim().toUpperCase(), startingPrice: Number(precioValue) || 0, updatedAt: serverTimestamp() 
+          brandId: idMarca, name: fila.modelo.toUpperCase(), tipo_carroceria: normalizeCarroceria(fila.tipo_carroceria), startingPrice: Number(precioValue) || 0, updatedAt: serverTimestamp()
         }, { merge: true }); 
         operationCount++;
 

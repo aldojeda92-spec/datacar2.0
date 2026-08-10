@@ -8,6 +8,7 @@ import { getCachedBrands, getCachedModels, getCachedCampaigns } from '../lib/cat
 // CORRECCIÓN BUGS DE RUTA: Apuntamos al directorio actual porque components está dentro de app/
 import NewsletterForm from './components/NewsletterForm';
 import { isOptimizableImageSrc, isValidImageSrc } from '../lib/imageSrc';
+import { normalizeCarroceria } from '../lib/carroceria';
 
 // ==========================================
 // INTERFACES B2B 
@@ -174,8 +175,7 @@ export default function HomeClient() {
 
         const fetchedAutos: AutoModel[] = modelsData.map((data) => {
           const brandName = brandsMap[data.brandId] || 'MARCA';
-          const rawCategory = data.tipo_carroceria || 'Vehículo';
-          const cleanCategory = rawCategory.trim().toUpperCase();
+          const cleanCategory = normalizeCarroceria(data.tipo_carroceria);
           tempTipos.add(cleanCategory);
 
           tempSearchIndex.push({ id: `m_${data.id}`, type: 'Modelo', title: `${brandName} ${data.name}`, subtitle: cleanCategory, brandId: data.brandId, modelId: data.id });

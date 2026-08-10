@@ -9,6 +9,7 @@ import { db } from '../../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../lib/finance';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
+import { normalizeCarroceria } from '../../lib/carroceria';
 import Modal from '../components/a11y/Modal';
 import { useToast } from '../context/ToastContext';
 
@@ -146,7 +147,7 @@ export default function RecomendadorPage() {
         const tempTipos = new Set<string>();
 
         const modelsList: ModelData[] = modelsData.map((data) => {
-          const cleanTipo = (data.tipo_carroceria || 'Vehículo').trim().toUpperCase();
+          const cleanTipo = normalizeCarroceria(data.tipo_carroceria);
           tempTipos.add(cleanTipo);
 
           return {

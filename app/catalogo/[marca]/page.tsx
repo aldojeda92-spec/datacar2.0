@@ -8,6 +8,7 @@ import { useParams } from 'next/navigation';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase'; // CORRECCIÓN CRÍTICA DE RUTA
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../lib/imageSrc';
+import { normalizeCarroceria } from '../../../lib/carroceria';
 
 // ==========================================
 // INTERFACES DE DATOS
@@ -165,7 +166,7 @@ export default function CatalogoMarcaPage() {
                     </h2>
                     
                     <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest font-bold mt-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-                      {model.tipo_carroceria}
+                      {normalizeCarroceria(model.tipo_carroceria)}
                     </p>
 
                     <div className="mt-auto pt-6">

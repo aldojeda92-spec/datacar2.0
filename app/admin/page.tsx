@@ -9,6 +9,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
+import { normalizeCarroceria } from '../../lib/carroceria';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
@@ -263,7 +264,7 @@ export default function AdminDashboardPage() {
   
   const categoriasUnicas = useMemo(() => {
     const cats = modelosList.map(m => m.tipo_carroceria).filter(Boolean);
-    return Array.from(new Set(cats.map(c => c.trim().toUpperCase()))).sort();
+    return Array.from(new Set(cats.map((c: string) => normalizeCarroceria(c)))).sort();
   }, [modelosList]);
 
   const filteredLeads = useMemo(() => {
@@ -495,7 +496,7 @@ export default function AdminDashboardPage() {
         const precioValue = fila.precio_usd || fila.precio || 0;
         const camaraValue = fila.camaras || fila.camara || '';
         const origenMarcaValue = fila.origen_marca || fila['origen-marca'] || '';
-        const cleanCategory = (fila.tipo_carroceria || 'SUV').trim().toUpperCase(); 
+        const cleanCategory = normalizeCarroceria(fila.tipo_carroceria);
         
         nuevasMarcasSet.add(fila.marca.toUpperCase());
         nuevosModelosSet.add(fila.modelo.toUpperCase());
@@ -555,7 +556,7 @@ export default function AdminDashboardPage() {
     e.preventDefault(); if (!modeloForm.name || !modeloForm.brandId) return; setLoading(true);
     try {
       const id = modeloForm.id || generarSlug(modeloForm.name);
-      await setDoc(doc(db, 'models', id), { ...modeloForm, name: modeloForm.name.toUpperCase(), startingPrice: Number(modeloForm.startingPrice) || 0, isPopular: modeloForm.isPopular, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'models', id), { ...modeloForm, name: modeloForm.name.toUpperCase(), tipo_carroceria: normalizeCarroceria(modeloForm.tipo_carroceria), startingPrice: Number(modeloForm.startingPrice) || 0, isPopular: modeloForm.isPopular, updatedAt: serverTimestamp() }, { merge: true });
       setFeedback({ type: 'success', message: 'Modelo guardado correctamente.' });
       setModeloForm({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', subsegmento: '', origen: '', startingPrice: '', imgUrl: '', isPopular: false }); fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
@@ -597,7 +598,7 @@ export default function AdminDashboardPage() {
   };
 
   const triggerEditMarca = (m: any) => { setMarcaForm({ id: m.id, name: m.name || '', origen_marca: m.origen_marca || '', logoUrl: m.logoUrl || '' }); window.scrollTo(0,0); };
-  const triggerEditModelo = (m: any) => { setModeloForm({ id: m.id, brandId: m.brandId || '', name: m.name || '', tipo_carroceria: m.tipo_carroceria || 'SUV', subsegmento: m.subsegmento || '', origen: m.origen || '', startingPrice: m.startingPrice?.toString() || '', imgUrl: m.imgUrl || '', isPopular: m.isPopular || false }); window.scrollTo(0,0); };
+  const triggerEditModelo = (m: any) => { setModeloForm({ id: m.id, brandId: m.brandId || '', name: m.name || '', tipo_carroceria: normalizeCarroceria(m.tipo_carroceria), subsegmento: m.subsegmento || '', origen: m.origen || '', startingPrice: m.startingPrice?.toString() || '', imgUrl: m.imgUrl || '', isPopular: m.isPopular || false }); window.scrollTo(0,0); };
   
   const triggerEditVersion = (v: any) => { 
     setVersionForm({ 
@@ -1193,7 +1194,7 @@ export default function AdminDashboardPage() {
                           <td className="p-4">{isValidImageSrc(m.imgUrl) ? <Image src={m.imgUrl} alt={m.name} width={64} height={32} className="h-8 w-auto object-contain" unoptimized={!isOptimizableImageSrc(m.imgUrl)} /> : <span className="text-[#C0C0C0] text-[9px] uppercase">Sin Foto</span>}</td>
                           <td className="p-4 font-bold">
                             {m.name} {m.isPopular && <span className="ml-2 text-[8px] bg-[#00BFFF] text-[#0A1F33] px-2 py-0.5 uppercase tracking-widest">Destacado</span>}
-                            <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Marca ID: {m.brandId} • {m.tipo_carroceria}</span>
+                            <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Marca ID: {m.brandId} • {normalizeCarroceria(m.tipo_carroceria)}</span>
                           </td>
                           <td className="p-4 text-right flex gap-3 justify-end items-center mt-2"><button onClick={() => triggerEditModelo(m)} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button><button onClick={() => handleDelete('models', m.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button></td>
                         </tr>
