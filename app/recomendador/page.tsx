@@ -540,11 +540,17 @@ export default function RecomendadorPage() {
       setIsSubmittingLead(false); return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(leadForm.email)) {
+      setFeedback({ type: 'error', message: 'Ingresá un correo electrónico válido.' });
+      setIsSubmittingLead(false); return;
+    }
+
     try {
       await addDoc(collection(db, 'leads'), {
         nombre: leadForm.nombre,
         telefono: leadForm.telefono,
-        email: leadForm.email || 'No proporcionado',
+        email: leadForm.email,
         vehiculo: 'Perfilado por Recomendador Interactivo',
         origen: 'Recomendador Interactivo',
         estado: 'Nuevo',
@@ -786,12 +792,19 @@ export default function RecomendadorPage() {
           ========================================== */}
       {step === WIZARD_STEPS.length + 2 && (
         <section className="flex-grow flex flex-col items-center justify-center p-4 py-16 relative">
-          {/* Skeleton Falso de Fondo (Psicología de Recompensa) */}
-          <div className="absolute inset-0 flex justify-center items-center opacity-10 pointer-events-none -z-10 overflow-hidden">
-            <div className="grid grid-cols-3 gap-6 w-full max-w-[1200px]">
-              <div className="h-64 bg-[#C0C0C0] w-full animate-pulse"></div>
-              <div className="h-64 bg-[#C0C0C0] w-full animate-pulse"></div>
-              <div className="h-64 bg-[#C0C0C0] w-full animate-pulse"></div>
+          {/* Preview Blureado del Dossier (Psicología de Recompensa: generar expectativa
+              de lo que se desbloquea al completar el formulario, sin revelar datos reales) */}
+          <div className="absolute inset-0 flex justify-center items-center pointer-events-none -z-10 overflow-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-[1200px] px-4 blur-sm md:blur-md opacity-25 select-none">
+              {['💰 Más Económico', '💎 Tope de Gama', '⚖️ Opción Equilibrada'].map((badge) => (
+                <div key={badge} className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-4">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#00BFFF] bg-[#F5FBFF] border border-[#00BFFF]/30 px-2 py-1 w-max">{badge}</span>
+                  <div className="h-32 bg-[#F5F5F5] w-full"></div>
+                  <div className="h-3 bg-[#C0C0C0] w-3/4"></div>
+                  <div className="h-3 bg-[#C0C0C0] w-1/2"></div>
+                  <div className="h-8 bg-[#0A1F33] w-2/3 mt-2"></div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -799,8 +812,8 @@ export default function RecomendadorPage() {
             <button onClick={() => setStep(WIZARD_STEPS.length + 1)} className="flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors mb-6">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver a modificar respuestas
             </button>
-            <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'Montserrat, sans-serif' }}>Generando Reporte</h2>
-            <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">100% analizado. Encontramos tus opciones ideales.</p>
+            <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'Montserrat, sans-serif' }}>Ya casi tenés las mejores opciones</h2>
+            <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos tus datos para que podamos compartírtelo.</p>
             
             <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 text-center rounded-none">
               <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">Validación de Identidad</p>
@@ -815,7 +828,7 @@ export default function RecomendadorPage() {
                 <input type="tel" minLength={10} maxLength={10} aria-label="Celular" placeholder="Celular (Ej: 0981234567)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.telefono} onChange={e=>setLeadForm({...leadForm, telefono: e.target.value})} />
               </div>
               <div>
-                <input type="email" aria-label="Correo electrónico (opcional)" placeholder="Correo Electrónico (Opcional)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
+                <input type="email" aria-label="Correo electrónico" placeholder="Correo Electrónico" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
               </div>
               
               <button type="submit" disabled={isSubmittingLead} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-5 transition-colors mt-2 disabled:opacity-50 flex items-center justify-center gap-2 rounded-none">
