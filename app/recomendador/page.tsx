@@ -229,7 +229,7 @@ export default function RecomendadorPage() {
     {
       id: 'marcas', title: '¿Tenés alguna marca en mente?', subtitle: 'Podés elegir varias o ninguna.', isMultiple: true,
       options: [
-        ...marcasDisponibles.slice(0, 14).map(m => ({ label: m, value: m })),
+        ...marcasDisponibles.map(m => ({ label: m, value: m })),
         { label: 'Sin preferencia', value: 'any' }
       ]
     },
