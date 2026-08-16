@@ -109,7 +109,40 @@ export const sendComparisonLinkEmail = async (userEmail: string, shareLink: stri
 };
 
 // ==========================================
-// 4. MAILING PARA ALTA B2B (portal de concesionarias)
+// 4. MAILING PARA RESULTADOS DEL RECOMENDADOR (B2C)
+// ==========================================
+export interface RecommendationMatch {
+  brandName: string;
+  modelName: string;
+  startingPrice: number;
+  matchPercentage: number;
+  badge?: string;
+  brandId: string;
+  modelId: string;
+}
+
+export const sendRecommendationResultsEmail = async (userEmail: string, matches: RecommendationMatch[]): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'recommendation_results',
+        destinatarios: [userEmail],
+        data: { matches },
+      }),
+    });
+
+    if (!response.ok) throw new Error('Fallo al enviar los resultados del recomendador');
+    return true;
+  } catch (error) {
+    console.error("❌ Error enviando resultados del recomendador:", error);
+    return false;
+  }
+};
+
+// ==========================================
+// 5. MAILING PARA ALTA B2B (portal de concesionarias)
 // ==========================================
 export interface DealershipRequestParams {
   concesionaria: string;

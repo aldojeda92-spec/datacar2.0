@@ -10,7 +10,7 @@ import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
-import { sendLeadNotificationEmail } from '../../lib/mailer';
+import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../../lib/mailer';
 import Modal from '../components/a11y/Modal';
 import { useToast } from '../context/ToastContext';
 
@@ -317,7 +317,7 @@ export default function RecomendadorPage() {
   // ==========================================
   // 4. ALGORITMO B2B DE RANKING Y ETIQUETADO
   // ==========================================
-  const runAlgorithm = () => {
+  const runAlgorithm = (): ScoredModel[] => {
     // DEAL-BREAKERS (Excluyentes) — se evalúan por VERSIÓN, no por modelo,
     // para no premiar a los modelos con más trims con un simple OR entre versiones.
     const budgetMap: Record<string, number> = { '18000': 18000, '25000': 25000, '40000': 40000, '999999': 9999999 };
@@ -524,6 +524,7 @@ export default function RecomendadorPage() {
       };
     }
     setSmartAd(selectedAd);
+    return finalTop3;
   };
 
   // ==========================================
@@ -571,7 +572,11 @@ export default function RecomendadorPage() {
         concesionariaDestino: 'A designar (Central DATACAR)'
       });
 
-      runAlgorithm();
+      const finalTop3 = runAlgorithm();
+      await sendRecommendationResultsEmail(leadForm.email, finalTop3.map(m => ({
+        brandName: m.brandName, modelName: m.modelName, startingPrice: m.startingPrice,
+        matchPercentage: m.matchPercentage, badge: m.badge, brandId: m.brandId, modelId: m.id
+      })));
       setStep(WIZARD_STEPS.length + 3); // Salta a Resultados
     } catch (error) {
       console.error('Error guardando el lead del recomendador:', error);

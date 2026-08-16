@@ -12,7 +12,7 @@ import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '.
 import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 import Modal from '../components/a11y/Modal';
-import { sendComparisonLinkEmail } from '../../lib/mailer';
+import { sendComparisonLinkEmail, sendLeadNotificationEmail } from '../../lib/mailer';
 
 // ==========================================
 // INTERFACES (Estructura de Datos)
@@ -268,6 +268,16 @@ function ComparadorContent() {
 
       // 2. Disparo de correo B2C (el servidor arma y escapa el HTML, acá solo se manda el link)
       const emailSent = await sendComparisonLinkEmail(shareEmail, shareLink);
+
+      // 2b. Notificación a Aldo (Central DATACAR) de que se pidió una comparativa
+      sendLeadNotificationEmail({
+        leadName: 'Interesado Comparativa',
+        leadPhone: 'No proporcionado',
+        leadEmail: shareEmail,
+        vehicleOfInterest: compareItems.map(i=>i.name).join(' VS '),
+        origen: 'Generador Enlace Comparativa',
+        concesionariaDestino: 'A designar (Central DATACAR)'
+      });
 
       // 3. Por UX, le copiamos el link directamente al portapapeles (pase lo que pase con el correo)
       await navigator.clipboard.writeText(shareLink);

@@ -140,6 +140,44 @@ function buildWelcomeHtml(): string {
   `;
 }
 
+function buildRecommendationResultsHtml(d: any): string {
+  const matches: any[] = Array.isArray(d?.matches) ? d.matches : [];
+  const cards = matches.map((m) => {
+    const badgeHtml = m?.badge
+      ? `<p style="color: #00BFFF; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin: 0 0 8px 0;">${escapeHtml(m.badge)}</p>`
+      : '';
+    const detailLink = `https://datacarpy.com/catalogo/${escapeHtml(m?.brandId)}/${escapeHtml(m?.modelId)}`;
+    const price = Number(m?.startingPrice) || 0;
+    return `
+      <div style="border: 1px solid #C0C0C0; background-color: #FFFFFF; padding: 24px; margin-bottom: 16px; text-align: left;">
+        ${badgeHtml}
+        <h3 style="color: #0A1F33; font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 900; text-transform: uppercase; margin: 0 0 8px 0;">${escapeHtml(m?.brandName)} ${escapeHtml(m?.modelName)}</h3>
+        <p style="color: #3A3A3C; font-size: 14px; margin: 0 0 4px 0;">Desde US$ ${escapeHtml(price.toLocaleString('en-US'))}</p>
+        <p style="color: #1E8E3E; font-size: 12px; font-weight: 700; margin: 0 0 16px 0;">${escapeHtml(m?.matchPercentage)}% de coincidencia</p>
+        <a href="${detailLink}" style="background-color: #0A1F33; color: #FFFFFF; padding: 12px 24px; text-decoration: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: inline-block;">Ver Ficha</a>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #F8F9FA;">
+      <div style="background-color: #0A1F33; border-bottom: 4px solid #00BFFF; padding: 32px 24px; text-align: center;">
+        <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 28px; font-weight: 900; letter-spacing: 2px; margin: 0;">DATA<span style="font-weight: 300;">CAR</span></h1>
+      </div>
+      <div style="padding: 40px 32px;">
+        <h2 style="color: #0A1F33; font-family: 'Montserrat', sans-serif; font-size: 20px; font-weight: 900; text-transform: uppercase; margin-top: 0; margin-bottom: 24px; text-align: center;">Tus Resultados del Recomendador</h2>
+        ${cards}
+        <div style="margin-top: 32px; text-align: center;">
+          <a href="https://datacarpy.com/catalogo" style="background-color: #00BFFF; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">Ver Catálogo Completo</a>
+        </div>
+      </div>
+      <div style="background-color: #F8F9FA; padding: 24px; text-align: center; font-size: 10px; color: #C0C0C0; border-top: 1px solid #C0C0C0;">
+        © ${new Date().getFullYear()} DATACAR Paraguay. Todos los derechos reservados.
+      </div>
+    </div>
+  `;
+}
+
 export async function POST(request: Request) {
   const origin = request.headers.get('origin') || request.headers.get('referer') || '';
   if (!ALLOWED_ORIGINS.some((o) => origin.startsWith(o))) {
@@ -189,6 +227,9 @@ export async function POST(request: Request) {
   } else if (type === 'dealership_request') {
     subject = `🚨 ALTA B2B: ${escapeHtml(data?.concesionaria)} quiere unirse a DATACAR`;
     html = buildDealershipRequestHtml(data);
+  } else if (type === 'recommendation_results') {
+    subject = 'Tus resultados del Recomendador - DATACAR';
+    html = buildRecommendationResultsHtml(data);
   } else {
     return NextResponse.json({ error: 'Tipo de correo no soportado' }, { status: 400 });
   }
