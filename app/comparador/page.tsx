@@ -12,6 +12,7 @@ import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '.
 import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 import Modal from '../components/a11y/Modal';
+import { sendComparisonLinkEmail } from '../../lib/mailer';
 
 // ==========================================
 // INTERFACES (Estructura de Datos)
@@ -265,45 +266,22 @@ function ComparadorContent() {
         createdAt: serverTimestamp()
       });
 
-      // 2. Disparo de correo B2C usando la API de Next.js ya existente
-      const htmlTemplate = `
-        <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #FFFFFF;">
-          <div style="background-color: #0A1F33; border-bottom: 4px solid #00BFFF; padding: 32px 24px; text-align: center;">
-            <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 28px; font-weight: 900; letter-spacing: 2px; margin: 0;">DATA<span style="font-weight: 300;">CAR</span></h1>
-          </div>
-          <div style="padding: 40px 32px; text-align: center;">
-            <h2 style="color: #0A1F33; font-family: 'Montserrat', sans-serif; font-size: 20px; font-weight: 900; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">Tu Comparativa Guardada</h2>
-            <p style="color: #3A3A3C; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">Aquí tienes el enlace seguro para acceder a la comparativa de vehículos que acabas de generar.</p>
-            <div style="margin-top: 32px; margin-bottom: 32px;">
-              <a href="${shareLink}" style="background-color: #00BFFF; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">Ver Comparativa</a>
-            </div>
-          </div>
-          <div style="background-color: #F8F9FA; padding: 24px; text-align: center; font-size: 10px; color: #C0C0C0; border-top: 1px solid #C0C0C0;">
-            © ${new Date().getFullYear()} DATACAR Paraguay. Todos los derechos reservados.
-          </div>
-        </div>
-      `;
+      // 2. Disparo de correo B2C (el servidor arma y escapa el HTML, acá solo se manda el link)
+      const emailSent = await sendComparisonLinkEmail(shareEmail, shareLink);
 
-      const response = await fetch('/api/mail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          destinatarios: [shareEmail],
-          subject: '⚖️ Tu Comparativa Guardada - DATACAR',
-          html: htmlTemplate
-        }),
+      // 3. Por UX, le copiamos el link directamente al portapapeles (pase lo que pase con el correo)
+      await navigator.clipboard.writeText(shareLink);
+      setShareFeedback({
+        type: emailSent ? 'success' : 'error',
+        message: emailSent
+          ? '¡Enviado a tu correo y copiado al portapapeles!'
+          : 'No pudimos enviar el correo, pero copiamos el enlace a tu portapapeles.'
       });
 
-      if (!response.ok) throw new Error('Error despachando correo');
-
-      // 3. Por UX, le copiamos el link directamente al portapapeles
-      await navigator.clipboard.writeText(shareLink);
-      setShareFeedback({ type: 'success', message: '¡Enviado a tu correo y copiado al portapapeles!' });
-      
-      setTimeout(() => { 
-        setShareModalOpen(false); 
-        setShareFeedback({ type:'', message:'' }); 
-        setShareEmail(''); 
+      setTimeout(() => {
+        setShareModalOpen(false);
+        setShareFeedback({ type:'', message:'' });
+        setShareEmail('');
       }, 3500);
     } catch (error) {
       setShareFeedback({ type: 'error', message: 'Error de conexión. Intenta nuevamente.' });
@@ -616,7 +594,7 @@ function ComparadorContent() {
         isOpen={!!consultingVehicle} 
         onClose={() => setConsultingVehicle(null)} 
         vehiculoInteres={consultingVehicle?.name || ''} 
-        marcaVehiculo={`${consultingVehicle?.brandName} ${consultingVehicle?.modelName}`} 
+        marcaVehiculo={consultingVehicle?.brandName || ''}
         origenLead="Comparador B2C" 
         concesionariaDestino={consultingVehicle?.concesionaria || ''} 
       />

@@ -114,7 +114,7 @@ service cloud.firestore {
         request.resource.data.keys().hasOnly(
           ['nombre','telefono','email','vehiculo','origen',
            'concesionaria_destino','concesionaria_destino_norm','estado','createdAt',
-           'preferencias_wizard']) &&
+           'preferencias_wizard','marca']) &&
         request.resource.data.nombre is string &&
         request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() < 120 &&
         request.resource.data.telefono is string &&
@@ -123,7 +123,8 @@ service cloud.firestore {
         request.resource.data.estado == 'Nuevo' &&
         request.resource.data.createdAt == request.time &&
         (!('preferencias_wizard' in request.resource.data) ||
-         request.resource.data.preferencias_wizard is map);
+         request.resource.data.preferencias_wizard is map) &&
+        (!('marca' in request.resource.data) || request.resource.data.marca is string);
 
       // El cliente concesionaria DEBE consultar con
       // where('concesionaria_destino_norm','==', <su dealership normalizado>)

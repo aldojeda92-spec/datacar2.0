@@ -11,6 +11,7 @@ import { LeadProvider } from '../context/LeadContext';
 import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
+import { normalizeExternalUrl } from '../../lib/externalUrl';
 
 // ==========================================
 // INTERFACES (Alineadas a Matriz 4 y Ads)
@@ -318,7 +319,7 @@ function CatalogoContent() {
   const renderAdBanner = () => {
     if (!adToShow) return null;
     return (
-      <Link href={adToShow.link} key={`injected-ad-${adToShow.id}`} className="col-span-full block w-full bg-[#3A3A3C] border-2 border-transparent hover:border-[#00BFFF] flex flex-col md:flex-row justify-between items-center p-8 relative transition-colors group overflow-hidden mb-2 mt-2 rounded-none">
+      <a href={normalizeExternalUrl(adToShow.link)} target="_blank" rel="noopener noreferrer" key={`injected-ad-${adToShow.id}`} className="col-span-full block w-full bg-[#3A3A3C] border-2 border-transparent hover:border-[#00BFFF] flex flex-col md:flex-row justify-between items-center p-8 relative transition-colors group overflow-hidden mb-2 mt-2 rounded-none">
         <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Patrocinado: {adToShow.sponsor}</span>
         <div className="flex flex-col text-left z-10">
           <p className="font-black text-4xl text-[#FFFFFF] uppercase leading-none mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.headline} <span className="text-[#00BFFF]">{adToShow.highlight}</span></p>
@@ -337,7 +338,7 @@ function CatalogoContent() {
             />
           )}
         </div>
-      </Link>
+      </a>
     );
   };
 

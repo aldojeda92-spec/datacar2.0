@@ -9,6 +9,7 @@ import { getCachedBrands, getCachedModels, getCachedCampaigns } from '../lib/cat
 import NewsletterForm from './components/NewsletterForm';
 import { isOptimizableImageSrc, isValidImageSrc } from '../lib/imageSrc';
 import { normalizeCarroceria } from '../lib/carroceria';
+import { normalizeExternalUrl } from '../lib/externalUrl';
 
 // ==========================================
 // INTERFACES B2B 
@@ -252,7 +253,7 @@ export default function HomeClient() {
     if (!activePriceTab) return [];
     const currentTab = priceTabs.find(t => t.id === activePriceTab);
     if (!currentTab) return [];
-    return autos.filter(auto => currentTab.filter(auto.price));
+    return autos.filter(auto => currentTab.filter(auto.price)).slice(0, 10);
   }, [autos, activePriceTab, priceTabs]);
 
   return (
@@ -395,7 +396,7 @@ export default function HomeClient() {
           ========================================== */}
       {activeAd && (
         <section className="max-w-[1400px] mx-auto px-4 md:px-8 mt-12 mb-4 w-full">
-            <Link href={activeAd.link} className="block w-full bg-[#3A3A3C] border-2 border-[#3A3A3C] flex flex-col md:flex-row justify-between items-center p-10 relative hover:border-[#00BFFF] transition-colors group overflow-hidden">
+            <a href={normalizeExternalUrl(activeAd.link)} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#3A3A3C] border-2 border-[#3A3A3C] flex flex-col md:flex-row justify-between items-center p-10 relative hover:border-[#00BFFF] transition-colors group overflow-hidden">
               <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Auspicio Oficial: {activeAd.sponsor}</span>
               <div className="flex flex-col text-left md:w-1/2 z-10">
                 <p className="font-black text-5xl md:text-6xl text-[#FFFFFF] uppercase leading-none mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.headline} <span className="text-[#00BFFF]">{activeAd.highlight}</span></p>
@@ -414,7 +415,7 @@ export default function HomeClient() {
                   />
                 )}
               </div>
-            </Link>
+            </a>
         </section>
       )}
 

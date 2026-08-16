@@ -10,6 +10,7 @@ import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { useToast } from '../context/ToastContext';
+import { sendDealershipRequestEmail } from '../../lib/mailer';
 
 // ==========================================
 // INTERFACES B2B
@@ -120,10 +121,17 @@ export default function PortalConcesionariasPage() {
       setInventario(invEnriquecido);
 
       // ==============================================
-      // RESOLUCIÓN: LEADS (ya filtrados server-side por la query)
+      // RESOLUCIÓN: LEADS (filtrados server-side por concesionaria, y acá
+      // client-side por marca -- una concesionaria puede representar varias
+      // marcas pero un usuario B2B puntual solo tiene acceso a la suya).
+      // Los leads viejos sin campo `marca` (creados antes de este fix, o
+      // generados por flujos que no tienen una marca específica asociada,
+      // ej. "Negociamos por vos") se muestran igual para no ocultar leads
+      // reales por falta de dato histórico.
       // ==============================================
       const myLeads = leadsSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
+        .filter((lead: any) => !lead.marca || permitidasNormalizadas.includes(String(lead.marca).toUpperCase().trim()))
         .sort((a: any, b: any) => b.createdAt?.toDate() - a.createdAt?.toDate());
 
       setLeads(myLeads);
@@ -231,28 +239,10 @@ export default function PortalConcesionariasPage() {
         createdAt: serverTimestamp()
       });
 
-      const htmlAdmin = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #C0C0C0;">
-          <h2 style="color: #0A1F33; border-bottom: 2px solid #00BFFF; padding-bottom: 10px;">NUEVA SOLICITUD DE ALTA B2B</h2>
-          <p><strong>Concesionaria:</strong> ${reqForm.concesionaria}</p>
-          <p><strong>Solicitante:</strong> ${reqForm.nombre} (${reqForm.cargo})</p>
-          <p><strong>Marcas Representadas:</strong> ${reqForm.marcas}</p>
-          <p><strong>Teléfono:</strong> ${reqForm.telefono}</p>
-          <p><strong>Email:</strong> ${reqForm.email}</p>
-          <hr style="margin: 20px 0; border: none; border-top: 1px solid #C0C0C0;" />
-          <p style="font-size: 12px; color: #3A3A3C;">Ingresa a Firebase Auth y crea manualmente este usuario. Luego, asígnale sus permisos en el panel de administrador.</p>
-        </div>
-      `;
-
-      await fetch('/api/mail', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          destinatarios: ['aldo.ojeda@datacarpy.com'],
-          subject: `🚨 ALTA B2B: ${reqForm.concesionaria} quiere unirse a DATACAR`,
-          html: htmlAdmin
-        }),
-      });
+      const emailSent = await sendDealershipRequestEmail(reqForm);
+      if (!emailSent) {
+        console.error('La solicitud de alta B2B se guardó, pero no se pudo notificar por correo a la gerencia.');
+      }
 
       setFeedback({ type: 'success', message: 'Solicitud enviada a la gerencia de DATACAR. Nos pondremos en contacto.' });
       setReqForm({ nombre: '', cargo: '', concesionaria: '', marcas: '', telefono: '', email: '' });

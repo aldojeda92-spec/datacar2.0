@@ -68,6 +68,42 @@ function buildLeadHtml(d: any): string {
   `;
 }
 
+function buildComparisonHtml(d: any): string {
+  const shareLink = escapeHtml(d?.shareLink);
+  return `
+    <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #FFFFFF;">
+      <div style="background-color: #0A1F33; border-bottom: 4px solid #00BFFF; padding: 32px 24px; text-align: center;">
+        <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 28px; font-weight: 900; letter-spacing: 2px; margin: 0;">DATA<span style="font-weight: 300;">CAR</span></h1>
+      </div>
+      <div style="padding: 40px 32px; text-align: center;">
+        <h2 style="color: #0A1F33; font-family: 'Montserrat', sans-serif; font-size: 20px; font-weight: 900; text-transform: uppercase; margin-top: 0; margin-bottom: 16px;">Tu Comparativa Guardada</h2>
+        <p style="color: #3A3A3C; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">Aquí tienes el enlace seguro para acceder a la comparativa de vehículos que acabas de generar.</p>
+        <div style="margin-top: 32px; margin-bottom: 32px;">
+          <a href="${shareLink}" style="background-color: #00BFFF; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">Ver Comparativa</a>
+        </div>
+      </div>
+      <div style="background-color: #F8F9FA; padding: 24px; text-align: center; font-size: 10px; color: #C0C0C0; border-top: 1px solid #C0C0C0;">
+        © ${new Date().getFullYear()} DATACAR Paraguay. Todos los derechos reservados.
+      </div>
+    </div>
+  `;
+}
+
+function buildDealershipRequestHtml(d: any): string {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #C0C0C0;">
+      <h2 style="color: #0A1F33; border-bottom: 2px solid #00BFFF; padding-bottom: 10px;">NUEVA SOLICITUD DE ALTA B2B</h2>
+      <p><strong>Concesionaria:</strong> ${escapeHtml(d?.concesionaria)}</p>
+      <p><strong>Solicitante:</strong> ${escapeHtml(d?.nombre)} (${escapeHtml(d?.cargo)})</p>
+      <p><strong>Marcas Representadas:</strong> ${escapeHtml(d?.marcas)}</p>
+      <p><strong>Teléfono:</strong> ${escapeHtml(d?.telefono)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(d?.email)}</p>
+      <hr style="margin: 20px 0; border: none; border-top: 1px solid #C0C0C0;" />
+      <p style="font-size: 12px; color: #3A3A3C;">Ingresa a Firebase Auth y crea manualmente este usuario. Luego, asígnale sus permisos en el panel de administrador.</p>
+    </div>
+  `;
+}
+
 function buildWelcomeHtml(): string {
   return `
     <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #FFFFFF;">
@@ -147,6 +183,12 @@ export async function POST(request: Request) {
   } else if (type === 'welcome') {
     subject = 'Bienvenido a DATACAR 🚘';
     html = buildWelcomeHtml();
+  } else if (type === 'comparison_link') {
+    subject = '⚖️ Tu Comparativa Guardada - DATACAR';
+    html = buildComparisonHtml(data);
+  } else if (type === 'dealership_request') {
+    subject = `🚨 ALTA B2B: ${escapeHtml(data?.concesionaria)} quiere unirse a DATACAR`;
+    html = buildDealershipRequestHtml(data);
   } else {
     return NextResponse.json({ error: 'Tipo de correo no soportado' }, { status: 400 });
   }

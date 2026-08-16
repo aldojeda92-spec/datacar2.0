@@ -55,6 +55,7 @@ export default function LeadModal({
         telefono: formData.telefono.trim(),
         email: formData.email.trim() || 'No proporcionado',
         vehiculo: `${marcaVehiculo} ${vehiculoInteres}`,
+        marca: marcaVehiculo,
         origen: origenLead,
         concesionaria_destino: concesionariaDestino || 'A designar (Central DATACAR)',
         concesionaria_destino_norm: (concesionariaDestino || 'A DESIGNAR').toUpperCase().trim(),

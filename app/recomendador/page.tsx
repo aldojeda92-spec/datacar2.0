@@ -10,6 +10,7 @@ import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
+import { sendLeadNotificationEmail } from '../../lib/mailer';
 import Modal from '../components/a11y/Modal';
 import { useToast } from '../context/ToastContext';
 
@@ -514,7 +515,11 @@ export default function RecomendadorPage() {
         id: 'fallback_datacar', sponsor: 'Servicio DATACAR',
         headline: '¿Cansado de negociar', highlight: 'con vendedores?',
         price: 'Asesoría Premium', link: '/negociamos-por-vos',
-        img: 'https://via.placeholder.com/600x400/0A1F33/00BFFF?text=Negociamos+por+vos', 
+        // Sin img: via.placeholder.com (usado antes acá) es un servicio externo
+        // caído/poco confiable -- mismo patrón que el resto del sitio (HomeClient,
+        // CatalogoClient, comparador). isValidImageSrc('') es false, así que el
+        // bloque de imagen simplemente no se renderiza en vez de mostrarse roto.
+        img: '',
         location: 'recomendador', isActive: true
       };
     }
@@ -547,6 +552,17 @@ export default function RecomendadorPage() {
         concesionaria_destino: 'A designar (Central DATACAR)',
         concesionaria_destino_norm: 'A DESIGNAR',
         createdAt: serverTimestamp()
+      });
+
+      // Disparo de correo B2B a la gerencia (fail-safe: el lead ya está guardado
+      // en DB, sendLeadNotificationEmail nunca throwea, solo loguea si falla).
+      await sendLeadNotificationEmail({
+        leadName: leadForm.nombre,
+        leadPhone: leadForm.telefono,
+        leadEmail: leadForm.email,
+        vehicleOfInterest: 'Perfilado por Recomendador Interactivo',
+        origen: 'Recomendador Interactivo',
+        concesionariaDestino: 'A designar (Central DATACAR)'
       });
 
       runAlgorithm();

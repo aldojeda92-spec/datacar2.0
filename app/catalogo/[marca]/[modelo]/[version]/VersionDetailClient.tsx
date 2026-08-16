@@ -335,7 +335,7 @@ export default function VersionDetailClient() {
         isOpen={showConsultar}
         onClose={() => setShowConsultar(false)}
         vehiculoInteres={version.name}
-        marcaVehiculo={`${brand?.name} ${model.name}`}
+        marcaVehiculo={brand?.name || ''}
         origenLead="Ficha Versión Exacta"
         concesionariaDestino={version.concesionaria || brand?.name || 'Central DATACAR'}
       />
