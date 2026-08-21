@@ -15,6 +15,12 @@ import Modal from '../../../../components/a11y/Modal';
 import { useToast } from '../../../../context/ToastContext';
 import { FAQ_FICHA_VEHICULO as faqs } from '../../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../../lib/compareStorage';
+import Navbar, { NavItem } from '../../../../components/Navbar';
+
+const NAV_ITEMS: NavItem[] = [
+  { type: 'link', label: 'Recomendador', href: '/recomendador' },
+  { type: 'link', label: 'Comparador', href: '/comparador' },
+];
 
 // ==========================================
 // INTERFACES
@@ -141,14 +147,7 @@ export default function VersionDetailClient() {
   return (
     <main className="min-h-screen bg-[#FFFFFF] text-[#3A3A3C] font-sans flex flex-col">
       
-      <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-40 shadow-none">
-        <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}><Link href="/">DATA<span className="font-light">CAR</span></Link></div>
-        <div className="hidden md:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider" style={{ fontFamily: 'Inter, sans-serif' }}>
-          <Link href="/recomendador" className="hover:text-[#00BFFF] transition-colors">Recomendador</Link>
-          <Link href="/comparador" className="hover:text-[#00BFFF] transition-colors">Comparador</Link>
-        </div>
-        <Link href={`/catalogo/${marcaSlug}/${modeloSlug}`} className="bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-8 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors rounded-none">Volver al Modelo</Link>
-      </nav>
+      <Navbar items={NAV_ITEMS} cta={{ label: 'Volver al Modelo', href: `/catalogo/${marcaSlug}/${modeloSlug}` }} />
 
       <div className="max-w-[1200px] mx-auto px-4 lg:px-8 pt-6 pb-2">
         <p className="text-[10px] font-medium text-[#C0C0C0] uppercase tracking-widest">
@@ -284,7 +283,7 @@ export default function VersionDetailClient() {
                 <div className="flex flex-col gap-2">
                   <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-2">Seguridad Estándar</p>
                   {version.features.seguridad_standard && version.features.seguridad_standard.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
                       {version.features.seguridad_standard.map((item, i) => (
                         <div key={i} className="flex items-start gap-2 text-[10px] text-[#3A3A3C] font-medium leading-tight">
                           <span className="text-[#00BFFF] text-sm leading-none mt-[-2px]">•</span> {item}
@@ -310,7 +309,7 @@ export default function VersionDetailClient() {
                 <div className="flex flex-col gap-2">
                   <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-2">Amenidades de Cabina</p>
                   {version.features.confort_conveniencia && version.features.confort_conveniencia.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
                       {version.features.confort_conveniencia.map((item, i) => (
                         <div key={i} className="flex items-start gap-2 text-[10px] text-[#3A3A3C] font-medium leading-tight">
                           <span className="text-[#00BFFF] text-sm leading-none mt-[-2px]">•</span> {item}

@@ -12,6 +12,19 @@ import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { normalizeExternalUrl } from '../../lib/externalUrl';
+import Navbar, { NavItem } from '../components/Navbar';
+
+const NAV_ITEMS: NavItem[] = [
+  { type: 'link', label: 'Recomendador', href: '/recomendador' },
+  {
+    type: 'dropdown', label: 'Herramientas', items: [
+      { label: 'Comparador de Versiones', href: '/comparador' },
+      { label: 'Calculadora de Cuotas', href: '/calculadora' },
+    ]
+  },
+  { type: 'link', label: 'Negociamos por vos', href: '/negociamos-por-vos' },
+  { type: 'link', label: 'Catálogo', href: '/catalogo', current: true },
+];
 
 // ==========================================
 // INTERFACES (Alineadas a Matriz 4 y Ads)
@@ -319,11 +332,11 @@ function CatalogoContent() {
   const renderAdBanner = () => {
     if (!adToShow) return null;
     return (
-      <a href={normalizeExternalUrl(adToShow.link)} target="_blank" rel="noopener noreferrer" key={`injected-ad-${adToShow.id}`} className="col-span-full block w-full bg-[#3A3A3C] border-2 border-transparent hover:border-[#00BFFF] flex flex-col md:flex-row justify-between items-center p-8 relative transition-colors group overflow-hidden mb-2 mt-2 rounded-none">
+      <a href={normalizeExternalUrl(adToShow.link)} target="_blank" rel="noopener noreferrer" key={`injected-ad-${adToShow.id}`} className="col-span-full block w-full bg-[#3A3A3C] border-2 border-transparent hover:border-[#00BFFF] flex flex-col md:flex-row justify-between items-center p-6 md:p-8 relative transition-colors group overflow-hidden mb-2 mt-2 rounded-none">
         <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Patrocinado: {adToShow.sponsor}</span>
-        <div className="flex flex-col text-left z-10">
-          <p className="font-black text-4xl text-[#FFFFFF] uppercase leading-none mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.headline} <span className="text-[#00BFFF]">{adToShow.highlight}</span></p>
-          <p className="font-black text-2xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.price}</p>
+        <div className="flex flex-col text-left z-10 mt-6 md:mt-0">
+          <p className="font-black text-2xl sm:text-3xl md:text-4xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.headline} <span className="text-[#00BFFF]">{adToShow.highlight}</span></p>
+          <p className="font-black text-xl sm:text-2xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.price}</p>
         </div>
         <div className="mt-6 md:mt-0 flex justify-end z-10 relative h-32 w-full md:w-1/2">
           {isValidImageSrc(adToShow.img) && (
@@ -669,25 +682,7 @@ export default function CatalogoClient() {
   return (
     <LeadProvider>
       <main className="min-h-screen bg-[#FFFFFF] text-[#3A3A3C] font-sans flex flex-col">
-        <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-none">
-          <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}><Link href="/">DATA<span className="font-light">CAR</span></Link></div>
-          
-          <div className="hidden lg:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider h-full" style={{ fontFamily: 'Inter, sans-serif' }}>
-            
-            <Link href="/recomendador" className="hover:text-[#00BFFF] transition-colors">Recomendador</Link>
-            
-            <div className="group relative py-4 cursor-pointer">
-              <span className="hover:text-[#00BFFF] transition-colors flex items-center gap-1">Herramientas ▼</span>
-              <div className="absolute top-full left-1/2 -translate-x-1/2 bg-[#FFFFFF] border border-[#C0C0C0] shadow-none p-4 w-[250px] flex flex-col gap-2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-50 rounded-none">
-                <Link href="/comparador" className="p-3 text-[#3A3A3C] hover:bg-[#F8F9FA] hover:text-[#0A1F33] transition-colors rounded-none border border-transparent">Comparador de Versiones</Link>
-                <Link href="/calculadora" className="p-3 text-[#3A3A3C] hover:bg-[#F8F9FA] hover:text-[#0A1F33] transition-colors rounded-none border border-transparent">Calculadora de Cuotas</Link>
-              </div>
-            </div>
-
-            <Link href="/negociamos-por-vos" className="hover:text-[#00BFFF] transition-colors">Negociamos por vos</Link>
-            <a href="#" className="text-[#0A1F33] border-b-2 border-[#0A1F33] pb-1">Catálogo</a>
-          </div>
-        </nav>
+        <Navbar items={NAV_ITEMS} />
         
         <div className="flex-grow">
           <Suspense fallback={<div className="p-20 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px] animate-pulse">Iniciando motor de filtrado...</div>}>

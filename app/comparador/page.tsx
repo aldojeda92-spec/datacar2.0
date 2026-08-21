@@ -13,6 +13,7 @@ import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/c
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 import Modal from '../components/a11y/Modal';
 import { sendComparisonLinkEmail, sendLeadNotificationEmail } from '../../lib/mailer';
+import Navbar, { NavItem } from '../components/Navbar';
 
 // ==========================================
 // INTERFACES (Estructura de Datos)
@@ -64,6 +65,12 @@ const renderBulletList = (text: string | string[] | undefined) => {
     </ul>
   );
 };
+
+const NAV_ITEMS: NavItem[] = [
+  { type: 'link', label: 'Recomendador', href: '/recomendador' },
+  { type: 'link', label: 'Asesoría', href: '/negociamos-por-vos' },
+  { type: 'link', label: 'Catálogo', href: '/catalogo' },
+];
 
 // ==========================================
 // COMPONENTE PRINCIPAL (Lógica Aislada)
@@ -304,19 +311,7 @@ function ComparadorContent() {
     <main className="min-h-screen bg-[#F8F9FA] text-[#3A3A3C] font-sans flex flex-col">
       
       {/* NAVBAR */}
-      <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-          <Link href="/">DATA<span className="font-light">CAR</span></Link>
-        </div>
-        <div className="hidden md:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider" style={{ fontFamily: 'Inter, sans-serif' }}>
-          <Link href="/recomendador" className="hover:text-[#00BFFF] transition-colors">Recomendador</Link>
-          <Link href="/negociamos-por-vos" className="hover:text-[#00BFFF] transition-colors">Asesoría</Link>
-          <Link href="/catalogo" className="hover:text-[#00BFFF] transition-colors">Catálogo</Link>
-        </div>
-        <Link href="/catalogo" className="bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-8 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors rounded-none">
-          Buscar Más Autos
-        </Link>
-      </nav>
+      <Navbar items={NAV_ITEMS} cta={{ label: 'Buscar Más Autos', href: '/catalogo' }} />
 
       {/* HEADER */}
       <header className="w-full border-b border-[#C0C0C0] bg-[#FFFFFF] py-8">
@@ -338,7 +333,7 @@ function ComparadorContent() {
       </header>
 
       {/* MATRIZ DE DATOS */}
-      <div className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-8 flex-grow mb-12">
+      <div className="w-full max-w-[1400px] mx-auto px-4 lg:px-8 pt-8 flex-grow mb-12 min-w-0">
         {vehiclesData.length === 0 ? (
           <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-16 text-center flex flex-col items-center justify-center my-8 shadow-none">
             <span className="text-4xl mb-4">⚖️</span>
@@ -358,13 +353,14 @@ function ComparadorContent() {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto custom-scrollbar border border-[#C0C0C0] bg-[#FFFFFF] shadow-none">
-            <table className="w-full text-left border-collapse min-w-[900px] bg-[#FFFFFF]">
-              
+          <div className="relative border border-[#C0C0C0] bg-[#FFFFFF] shadow-none">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-separate border-spacing-0 min-w-[900px] bg-[#FFFFFF]">
+
               {/* CABECERAS DE VEHÍCULOS */}
               <thead className="sticky top-0 z-30 shadow-none border-b-4 border-[#0A1F33]">
                 <tr className="bg-[#FFFFFF]">
-                  <th className="p-6 bg-[#F8F9FA] w-1/4 align-bottom border-r border-[#C0C0C0]">
+                  <th className="p-6 bg-[#F8F9FA] w-1/4 align-bottom border-r border-[#C0C0C0] sticky left-0 z-20">
                     <span className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest block mb-1">Características</span>
                     <span className="font-black text-xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Detalles</span>
                   </th>
@@ -426,19 +422,19 @@ function ComparadorContent() {
                   <td colSpan={4} className="p-3 font-bold text-[10px] uppercase tracking-widest pl-6">1. Motor y Transmisión</td>
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Combustible</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Combustible</td>
                   {[0, 1, 2].map(i => <td key={`combustible_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.specs?.combustible || '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Motor</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Motor</td>
                   {[0, 1, 2].map(i => <td key={`motor_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.specs?.motor || '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Transmisión</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Transmisión</td>
                   {[0, 1, 2].map(i => <td key={`transmision_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.specs?.transmision || '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Tracción</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Tracción</td>
                   {[0, 1, 2].map(i => <td key={`traccion_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.specs?.traccion || '-'}</td>)}
                 </tr>
 
@@ -447,19 +443,19 @@ function ComparadorContent() {
                   <td colSpan={4} className="p-3 font-bold text-[10px] uppercase tracking-widest pl-6">2. Chasis y Dimensiones</td>
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top">Suspensión</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top sticky left-0 z-10">Suspensión</td>
                   {[0, 1, 2].map(i => <td key={`suspension_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 align-top">{vehiclesData[i] ? renderBulletList(vehiclesData[i].chasis?.detalle_suspension) : '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top">Frenos</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top sticky left-0 z-10">Frenos</td>
                   {[0, 1, 2].map(i => <td key={`frenos_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 align-top">{vehiclesData[i] ? renderBulletList(vehiclesData[i].chasis?.detalles_freno) : '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Baulera</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Baulera</td>
                   {[0, 1, 2].map(i => <td key={`baulera_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.dimensiones?.baulera_litros ? `${vehiclesData[i].dimensiones.baulera_litros} L` : '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Largo total</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Largo total</td>
                   {[0, 1, 2].map(i => <td key={`largo_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.dimensiones?.largo ? `${vehiclesData[i].dimensiones.largo} mm` : '-'}</td>)}
                 </tr>
 
@@ -468,19 +464,19 @@ function ComparadorContent() {
                   <td colSpan={4} className="p-3 font-bold text-[10px] uppercase tracking-widest pl-6">3. Confort y Tecnología</td>
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Pantalla</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Pantalla</td>
                   {[0, 1, 2].map(i => <td key={`pantalla_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.specs?.tamanho_pantalla ? `${vehiclesData[i].specs.tamanho_pantalla}"` : '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top">Conectividad</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top sticky left-0 z-10">Conectividad</td>
                   {[0, 1, 2].map(i => <td key={`conectividad_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 align-top">{vehiclesData[i] ? renderBulletList(vehiclesData[i].specs?.conectividad) : '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Tapizado</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Tapizado</td>
                   {[0, 1, 2].map(i => <td key={`cuero_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.features?.asiento_cuero || '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top">Detalles de Confort</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top sticky left-0 z-10">Detalles de Confort</td>
                   {[0, 1, 2].map(i => <td key={`confort_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 align-top">{vehiclesData[i] ? renderBulletList(vehiclesData[i].features?.confort_conveniencia) : '-'}</td>)}
                 </tr>
 
@@ -489,11 +485,11 @@ function ComparadorContent() {
                   <td colSpan={4} className="p-3 font-bold text-[10px] uppercase tracking-widest pl-6">4. Seguridad</td>
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0]">Airbags Totales</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Airbags Totales</td>
                   {[0, 1, 2].map(i => <td key={`airbags_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-black text-[#0A1F33] text-center text-sm">{vehiclesData[i]?.specs?.airbags || '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top">Asistencias ADAS</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top sticky left-0 z-10">Asistencias ADAS</td>
                   {[0, 1, 2].map(i => (
                     <td key={`adas_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium align-top">
                       {vehiclesData[i]?.features?.adas && vehiclesData[i].features.adas.length > 0 && vehiclesData[i].features.adas[0] !== '' ? (
@@ -509,12 +505,15 @@ function ComparadorContent() {
                   ))}
                 </tr>
                 <tr className="hover:bg-[#F8F9FA] transition-colors">
-                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top">Seguridad Estándar</td>
+                  <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] align-top sticky left-0 z-10">Seguridad Estándar</td>
                   {[0, 1, 2].map(i => <td key={`seguridad_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 align-top">{vehiclesData[i] ? renderBulletList(vehiclesData[i].features?.seguridad_standard) : '-'}</td>)}
                 </tr>
                 
               </tbody>
             </table>
+          </div>
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#FFFFFF] to-transparent lg:hidden" aria-hidden="true" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#FFFFFF] to-transparent lg:hidden" aria-hidden="true" />
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 // app/page.tsx
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getCachedBrands, getCachedModels, getCachedCampaigns } from '../lib/catalogCache';
@@ -10,6 +10,7 @@ import NewsletterForm from './components/NewsletterForm';
 import { isOptimizableImageSrc, isValidImageSrc } from '../lib/imageSrc';
 import { normalizeCarroceria } from '../lib/carroceria';
 import { normalizeExternalUrl } from '../lib/externalUrl';
+import Navbar, { NavItem } from './components/Navbar';
 
 // ==========================================
 // INTERFACES B2B 
@@ -110,37 +111,6 @@ export default function HomeClient() {
   
   // 2. Banner Publicitario
   const [activeAd, setActiveAd] = useState<AdCampaign | null>(null);
-
-  // Estados de Mega-Menús (Navbar)
-  const [activeMegaMenu, setActiveMegaMenu] = useState<'marcas' | 'tipos' | 'herramientas' | null>(null);
-  const megaMenuTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  const handleMouseEnter = (menu: 'marcas' | 'tipos' | 'herramientas') => {
-    if (megaMenuTimeout.current) clearTimeout(megaMenuTimeout.current);
-    setActiveMegaMenu(menu);
-  };
-
-  const handleMouseLeave = () => {
-    megaMenuTimeout.current = setTimeout(() => {
-      setActiveMegaMenu(null);
-    }, 150);
-  };
-
-  // Soporte de teclado para los mega-menús: se abren al enfocar el trigger y se
-  // cierran cuando el foco sale por completo del contenedor (Tab hacia afuera) o
-  // con Escape, sin tocar el comportamiento existente de mouse.
-  const handleMegaMenuBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setActiveMegaMenu(null);
-    }
-  };
-
-  const handleMegaMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      setActiveMegaMenu(null);
-      (e.currentTarget.querySelector('button') as HTMLButtonElement | null)?.focus();
-    }
-  };
 
   // 7. Filtros de Presupuesto (Dinámicos y Armónicos)
   const priceTabs = useMemo(() => [
@@ -256,67 +226,33 @@ export default function HomeClient() {
     return autos.filter(auto => currentTab.filter(auto.price)).slice(0, 10);
   }, [autos, activePriceTab, priceTabs]);
 
+  const navItems: NavItem[] = useMemo(() => [
+    {
+      type: 'megamenu', label: 'Por Tipo', columns: 2, width: 400,
+      items: tiposDisponibles.map(tipo => ({ label: tipo, href: `/catalogo?tipo=${encodeURIComponent(tipo)}` })),
+    },
+    {
+      type: 'megamenu', label: 'Por Marca', columns: 3, width: 600,
+      items: marcas.map(marca => ({ label: marca.name, href: `/catalogo?marca=${encodeURIComponent(marca.name)}` })),
+    },
+    {
+      type: 'megamenu', label: 'Herramientas', columns: 1, width: 250,
+      items: [
+        { label: 'Comparador de Versiones', href: '/comparador' },
+        { label: 'Calculadora de Cuotas', href: '/calculadora' },
+        { label: 'Recomendador Interactivo', href: '/recomendador', highlight: true },
+      ],
+    },
+    { type: 'link', label: 'Negociamos por vos', href: '/negociamos-por-vos' },
+  ], [tiposDisponibles, marcas]);
+
   return (
     <main className="min-h-screen bg-[#F8F9FA] text-[#3A3A3C] font-sans flex flex-col relative">
-      
+
       {/* ==========================================
           NAVBAR CORPORATIVO CON MEGA-MENÚS (FLAT)
           ========================================== */}
-      <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}><Link href="/">DATA<span className="font-light">CAR</span></Link></div>
-        
-        <div className="hidden lg:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider h-full" style={{ fontFamily: 'Inter, sans-serif' }}>
-          
-          {/* Menú: Por Tipo */}
-          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('tipos')} onMouseLeave={handleMouseLeave} onBlur={handleMegaMenuBlur} onKeyDown={handleMegaMenuKeyDown}>
-            <button onFocus={() => handleMouseEnter('tipos')} aria-expanded={activeMegaMenu === 'tipos'} aria-haspopup="true" className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'tipos' ? 'text-[#00BFFF]' : ''}`}>
-              Por Tipo <svg className={`w-3 h-3 transition-transform ${activeMegaMenu === 'tipos' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </button>
-            {activeMegaMenu === 'tipos' && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 bg-[#FFFFFF] border-2 border-[#0A1F33] border-t-4 border-t-[#00BFFF] p-6 w-[400px] grid grid-cols-2 gap-y-4 gap-x-8">
-                {tiposDisponibles.map(tipo => (
-                  <Link key={tipo} href={`/catalogo?tipo=${encodeURIComponent(tipo)}`} className="text-[#3A3A3C] hover:text-[#0A1F33] hover:font-black hover:pl-2 transition-all block truncate border-b border-transparent hover:border-[#00BFFF]">
-                    {tipo}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Menú: Por Marca */}
-          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('marcas')} onMouseLeave={handleMouseLeave} onBlur={handleMegaMenuBlur} onKeyDown={handleMegaMenuKeyDown}>
-            <button onFocus={() => handleMouseEnter('marcas')} aria-expanded={activeMegaMenu === 'marcas'} aria-haspopup="true" className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'marcas' ? 'text-[#00BFFF]' : ''}`}>
-              Por Marca <svg className={`w-3 h-3 transition-transform ${activeMegaMenu === 'marcas' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </button>
-            {activeMegaMenu === 'marcas' && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 bg-[#FFFFFF] border-2 border-[#0A1F33] border-t-4 border-t-[#00BFFF] p-8 w-[600px] grid grid-cols-3 gap-y-4 gap-x-6">
-                {marcas.map(marca => (
-                  <Link key={marca.id} href={`/catalogo?marca=${encodeURIComponent(marca.name)}`} className="text-[#3A3A3C] hover:text-[#0A1F33] hover:font-black hover:pl-2 transition-all block truncate text-[10px] border-b border-transparent hover:border-[#00BFFF]">
-                    {marca.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Menú: Herramientas */}
-          <div className="relative py-4" onMouseEnter={() => handleMouseEnter('herramientas')} onMouseLeave={handleMouseLeave} onBlur={handleMegaMenuBlur} onKeyDown={handleMegaMenuKeyDown}>
-            <button onFocus={() => handleMouseEnter('herramientas')} aria-expanded={activeMegaMenu === 'herramientas'} aria-haspopup="true" className={`hover:text-[#00BFFF] transition-colors flex items-center gap-1 ${activeMegaMenu === 'herramientas' ? 'text-[#00BFFF]' : ''}`}>
-              Herramientas <svg className={`w-3 h-3 transition-transform ${activeMegaMenu === 'herramientas' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </button>
-            {activeMegaMenu === 'herramientas' && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 bg-[#FFFFFF] border-2 border-[#0A1F33] border-t-4 border-t-[#00BFFF] p-4 w-[250px] flex flex-col gap-2">
-                <Link href="/comparador" className="p-3 text-[#3A3A3C] hover:bg-[#F8F9FA] hover:text-[#0A1F33] transition-colors border border-transparent hover:border-[#C0C0C0]">Comparador de Versiones</Link>
-                <Link href="/calculadora" className="p-3 text-[#3A3A3C] hover:bg-[#F8F9FA] hover:text-[#0A1F33] transition-colors border border-transparent hover:border-[#C0C0C0]">Calculadora de Cuotas</Link>
-                <Link href="/recomendador" className="p-3 text-[#00BFFF] font-black hover:bg-[#F5FBFF] transition-colors border border-transparent hover:border-[#00BFFF]/30">Recomendador Interactivo</Link>
-              </div>
-            )}
-          </div>
-
-          <Link href="/negociamos-por-vos" className="text-[#0A1F33] hover:text-[#00BFFF] transition-colors">Negociamos por vos</Link>
-        </div>
-        <Link href="/catalogo" className="bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-8 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors">Catálogo</Link>
-      </nav>
+      <Navbar items={navItems} cta={{ label: 'Catálogo', href: '/catalogo' }} />
 
       {/* ==========================================
           2.1 BUSCADOR Y FILTROS RÁPIDOS
@@ -324,7 +260,7 @@ export default function HomeClient() {
       <section className="w-full bg-[#0A1F33] pt-20 pb-16 px-4 flex flex-col items-center relative z-40 border-b-4 border-[#00BFFF]">
         <div className="text-center mb-10">
           <span className="bg-[#FFFFFF]/10 text-[#00BFFF] border border-[#00BFFF]/30 font-bold tracking-widest uppercase px-4 py-1 text-[10px] mb-6 inline-block">Antes de comprar, compará</span>
-          <h1 className="font-black text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h1 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>
             Visitá todas las concesionarias<br/><span className="text-[#00BFFF]">en un solo lugar.</span>
           </h1>
         </div>
@@ -396,11 +332,11 @@ export default function HomeClient() {
           ========================================== */}
       {activeAd && (
         <section className="max-w-[1400px] mx-auto px-4 md:px-8 mt-12 mb-4 w-full">
-            <a href={normalizeExternalUrl(activeAd.link)} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#3A3A3C] border-2 border-[#3A3A3C] flex flex-col md:flex-row justify-between items-center p-10 relative hover:border-[#00BFFF] transition-colors group overflow-hidden">
+            <a href={normalizeExternalUrl(activeAd.link)} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#3A3A3C] border-2 border-[#3A3A3C] flex flex-col md:flex-row justify-between items-center p-6 md:p-10 relative hover:border-[#00BFFF] transition-colors group overflow-hidden">
               <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Auspicio Oficial: {activeAd.sponsor}</span>
-              <div className="flex flex-col text-left md:w-1/2 z-10">
-                <p className="font-black text-5xl md:text-6xl text-[#FFFFFF] uppercase leading-none mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.headline} <span className="text-[#00BFFF]">{activeAd.highlight}</span></p>
-                <p className="font-black text-3xl md:text-4xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.price}</p>
+              <div className="flex flex-col text-left md:w-1/2 z-10 mt-6 md:mt-0">
+                <p className="font-black text-3xl sm:text-4xl md:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.headline} <span className="text-[#00BFFF]">{activeAd.highlight}</span></p>
+                <p className="font-black text-2xl md:text-4xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.price}</p>
               </div>
               <div className="md:w-1/2 mt-6 md:mt-0 flex justify-end z-10 w-full relative h-48 md:h-64">
                 {isValidImageSrc(activeAd.img) && (
@@ -460,11 +396,11 @@ export default function HomeClient() {
           2.4 NEGOCIAMOS POR VOS
           ========================================== */}
       <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
-        <div className="bg-[#0A1F33] border border-[#0A1F33] w-full p-10 md:p-14 flex flex-col md:flex-row items-center justify-between relative">
+        <div className="bg-[#0A1F33] border border-[#0A1F33] w-full p-6 md:p-14 flex flex-col md:flex-row items-center justify-between relative">
           <div className="absolute top-0 left-0 w-2 h-full bg-[#00BFFF]"></div>
-          <div className="md:w-1/2 z-10 mb-8 md:mb-0 pr-8">
+          <div className="md:w-1/2 z-10 mb-8 md:mb-0 md:pr-8">
             <span className="border border-[#00BFFF] text-[#00BFFF] text-[9px] font-bold uppercase px-3 py-1 tracking-widest mb-4 inline-block bg-[#FFFFFF]/5">Nuevo Servicio</span>
-            <h2 className="font-black text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-none mb-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
+            <h2 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
             <p className="text-[#C0C0C0] text-sm max-w-md mb-8 leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>El mercado vende autos todos los días. Vos comprás uno cada 5 años. Ponemos nuestra experiencia técnica y financiera a tu favor.</p>
             <Link href="/negociamos-por-vos" className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-10 transition-colors inline-block">Consultar Asesoría →</Link>
           </div>
@@ -548,7 +484,7 @@ export default function HomeClient() {
       {/* ==========================================
           2.7 AUTOS POR MENOS DE
           ========================================== */}
-      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16 mb-24">
+      <section className="w-full max-w-[1400px] mx-auto px-4 lg:px-8 my-16 mb-24 min-w-0">
         <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6 border-b border-[#C0C0C0] pb-4">
           <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Autos por <span className="text-[#3A3A3C]">menos de</span></h2>
           <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest mb-1 sm:mb-0" style={{ fontFamily: 'Inter, sans-serif' }}>Ver todos →</Link>

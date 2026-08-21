@@ -18,6 +18,12 @@ import { useToast } from '../../../context/ToastContext';
 import { useDisclosure } from '../../../../lib/useDisclosure';
 import { FAQ_FICHA_VEHICULO as faqs } from '../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../lib/compareStorage';
+import Navbar, { NavItem } from '../../../components/Navbar';
+
+const NAV_ITEMS: NavItem[] = [
+  { type: 'link', label: 'Recomendador', href: '/recomendador' },
+  { type: 'link', label: 'Comparador', href: '/comparador' },
+];
 
 // ==========================================
 // INTERFACES
@@ -158,14 +164,7 @@ export default function ModeloDetailClient() {
     <main className="min-h-screen bg-[#FFFFFF] text-[#3A3A3C] font-sans pb-32">
       
       {/* NAVBAR CORPORATIVO (Flat) */}
-      <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-40">
-        <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}><Link href="/">DATA<span className="font-light">CAR</span></Link></div>
-        <div className="hidden md:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider" style={{ fontFamily: 'Inter, sans-serif' }}>
-          <Link href="/recomendador" className="hover:text-[#00BFFF] transition-colors">Recomendador</Link>
-          <Link href="/comparador" className="hover:text-[#00BFFF] transition-colors">Comparador</Link>
-        </div>
-        <Link href="/catalogo" className="bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-8 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors">Volver al Catálogo</Link>
-      </nav>
+      <Navbar items={NAV_ITEMS} cta={{ label: 'Volver al Catálogo', href: '/catalogo' }} />
 
       {/* BREADCRUMBS */}
       <div className="max-w-[1200px] mx-auto px-4 lg:px-8 pt-6 pb-2">

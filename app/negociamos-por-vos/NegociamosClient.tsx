@@ -5,6 +5,13 @@ import Link from 'next/link';
 import { getCachedBrands, getCachedModels } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN DEL MODAL B2B
 import SimpleFooter from '../components/SimpleFooter';
+import Navbar, { NavItem } from '../components/Navbar';
+
+const NAV_ITEMS: NavItem[] = [
+  { type: 'link', label: 'Recomendador', href: '/recomendador' },
+  { type: 'link', label: 'Comparador', href: '/comparador' },
+  { type: 'link', label: 'Catálogo', href: '/catalogo' },
+];
 
 // ==========================================
 // INTERFACES
@@ -69,19 +76,7 @@ export default function NegociamosClient() {
       {/* ==========================================
           NAVBAR CORPORATIVO (Flat Design)
           ========================================== */}
-      <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-none">
-        <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-          <Link href="/">DATA<span className="font-light">CAR</span></Link>
-        </div>
-        <div className="hidden md:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider" style={{ fontFamily: 'Inter, sans-serif' }}>
-          <Link href="/recomendador" className="hover:text-[#00BFFF] transition-colors">Recomendador</Link>
-          <Link href="/comparador" className="hover:text-[#00BFFF] transition-colors">Comparador</Link>
-          <Link href="/catalogo" className="hover:text-[#00BFFF] transition-colors">Catálogo</Link>
-        </div>
-        <Link href="/catalogo" className="bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-8 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors rounded-none">
-          Explorar Autos
-        </Link>
-      </nav>
+      <Navbar items={NAV_ITEMS} cta={{ label: 'Explorar Autos', href: '/catalogo' }} />
 
       {/* ==========================================
           1. HERO SECTION (Propuesta de Valor y Formulario)
@@ -103,7 +98,7 @@ export default function NegociamosClient() {
             </p>
 
             {/* Price Anchoring (Promoción) */}
-            <div className="flex items-stretch border border-[#C0C0C0] bg-[#FFFFFF] w-max">
+            <div className="flex flex-wrap items-stretch border border-[#C0C0C0] bg-[#FFFFFF] w-full sm:w-max">
               <div className="bg-[#0A1F33] text-[#FFFFFF] p-4 flex flex-col justify-center border-r border-[#0A1F33]">
                 <span className="text-[9px] font-bold uppercase tracking-widest text-[#00BFFF] mb-1">Promo Limitada</span>
                 <span className="font-black text-3xl" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ 200</span>

@@ -9,6 +9,13 @@ import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firesto
 import { db } from '../../../lib/firebase'; // CORRECCIÓN CRÍTICA DE RUTA
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../lib/imageSrc';
 import { normalizeCarroceria } from '../../../lib/carroceria';
+import Navbar, { NavItem } from '../../components/Navbar';
+
+const NAV_ITEMS: NavItem[] = [
+  { type: 'link', label: 'Recomendador', href: '/recomendador' },
+  { type: 'link', label: 'Negociamos por vos', href: '/negociamos-por-vos' },
+  { type: 'link', label: 'Catálogo', href: '/catalogo', current: true },
+];
 
 // ==========================================
 // INTERFACES DE DATOS
@@ -87,16 +94,7 @@ export default function CatalogoMarcaPage() {
     <main className="min-h-screen bg-[#F8F9FA] text-[#3A3A3C] font-sans flex flex-col">
       
       {/* NAVEGACIÓN GLOBAL B2C */}
-      <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-none">
-        <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-          <Link href="/">DATA<span className="font-light">CAR</span></Link>
-        </div>
-        <div className="hidden lg:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider h-full" style={{ fontFamily: 'Inter, sans-serif' }}>
-          <Link href="/recomendador" className="hover:text-[#00BFFF] transition-colors">Recomendador</Link>
-          <Link href="/negociamos-por-vos" className="hover:text-[#00BFFF] transition-colors">Negociamos por vos</Link>
-          <Link href="/catalogo" className="text-[#00BFFF] border-b-2 border-[#00BFFF] pb-1">Catálogo</Link>
-        </div>
-      </nav>
+      <Navbar items={NAV_ITEMS} />
 
       {/* CABECERA DE MARCA */}
       <header className="bg-[#FFFFFF] border-b border-[#C0C0C0] py-8 px-4 md:px-8">

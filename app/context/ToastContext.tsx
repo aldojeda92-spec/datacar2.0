@@ -36,7 +36,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         role="status"
         aria-live="assertive"
-        className="fixed bottom-4 right-4 z-[200] flex flex-col gap-3 w-full max-w-sm px-4 sm:px-0"
+        className="fixed bottom-4 left-4 right-4 sm:left-auto z-[200] flex flex-col gap-3 max-w-sm sm:w-full"
       >
         {toasts.map(t => (
           <Toast key={t.id} message={t.message} variant={t.variant} onDismiss={() => dismissToast(t.id)} />

@@ -11,6 +11,7 @@ import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../../lib/mailer';
+import Navbar from '../components/Navbar';
 import Modal from '../components/a11y/Modal';
 import { useToast } from '../context/ToastContext';
 
@@ -603,14 +604,7 @@ export default function RecomendadorPage() {
     <main className="min-h-screen bg-[#F8F9FA] text-[#3A3A3C] font-sans flex flex-col">
       
       {/* NAVBAR FLAT */}
-      <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 md:px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-none">
-        <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-          <Link href="/">DATA<span className="font-light">CAR</span></Link>
-        </div>
-        <Link href="/catalogo" className="bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-2 px-6 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors rounded-none">
-          Salir
-        </Link>
-      </nav>
+      <Navbar items={[]} cta={{ label: 'Salir', href: '/catalogo', compact: true }} />
 
       {/* ==========================================
           PASO 0: INTRODUCCIÓN
@@ -1037,7 +1031,7 @@ export default function RecomendadorPage() {
 
             {/* INYECCIÓN SMART AD */}
             {smartAd && (
-              <a href={smartAd.link} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col md:flex-row items-center p-8 mb-12 relative group hover:border-[#0A1F33] transition-colors shadow-none rounded-none">
+              <a href={smartAd.link} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col md:flex-row items-center p-6 md:p-8 mb-12 relative group hover:border-[#0A1F33] transition-colors shadow-none rounded-none">
                 <span className="absolute top-4 left-4 bg-[#F5F5F5] border border-[#C0C0C0] text-[#3A3A3C] text-[8px] uppercase font-bold px-2 py-0.5 tracking-widest z-20 rounded-none">Patrocinado: {smartAd.sponsor}</span>
                 <div className="relative w-full h-48 md:w-1/2 z-10 pt-6 md:pt-0">
                   {isValidImageSrc(smartAd.img) && (
@@ -1052,8 +1046,8 @@ export default function RecomendadorPage() {
                   )}
                 </div>
                 <div className="md:w-1/2 text-center md:text-left mt-6 md:mt-0 z-10 border-t md:border-t-0 md:border-l border-[#C0C0C0] pt-6 md:pt-0 md:pl-10">
-                  <h3 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase leading-tight mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{smartAd.headline} <br/><span className="text-[#00BFFF]">{smartAd.highlight}</span></h3>
-                  <p className="font-black text-2xl text-[#0A1F33] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{smartAd.price}</p>
+                  <h3 className="font-black text-2xl sm:text-3xl md:text-4xl text-[#0A1F33] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{smartAd.headline} <br/><span className="text-[#00BFFF]">{smartAd.highlight}</span></h3>
+                  <p className="font-black text-xl sm:text-2xl text-[#0A1F33] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1 break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>{smartAd.price}</p>
                 </div>
               </a>
             )}
