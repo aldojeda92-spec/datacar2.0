@@ -9,10 +9,12 @@ import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/fires
 import { db } from '../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../lib/compareStorage';
-import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/catalogCache';
+import { getCachedBrands, getCachedModels, getCachedVersions, getCachedConcesionarias } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 import Modal from '../components/a11y/Modal';
 import { sendComparisonLinkEmail, sendLeadNotificationEmail } from '../../lib/mailer';
+import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarCheck';
+import DatacarCheckBadge from '../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../components/Navbar';
 
 // ==========================================
@@ -98,6 +100,9 @@ function ComparadorContent() {
   // Ref para Telemetría Silenciosa
   const trackedRef = useRef<string>('');
 
+  // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
+  const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
+
   // ==========================================
   // 1. CARGA DE DATOS Y LECTURA DE URL
   // ==========================================
@@ -149,11 +154,14 @@ function ComparadorContent() {
         }
 
         // Descargar Índice Ligero para el Buscador Predictivo
-        const [allVersions, allModels, allBrands] = await Promise.all([
+        const [allVersions, allModels, allBrands, allConcesionarias] = await Promise.all([
           getCachedVersions(),
           getCachedModels(),
           getCachedBrands(),
+          getCachedConcesionarias(),
         ]);
+
+        setCheckedDealershipSet(buildCheckedDealershipSet(allConcesionarias));
 
         const brandsMap: Record<string, string> = {};
         allBrands.forEach(b => brandsMap[b.id] = b.name);
@@ -391,6 +399,9 @@ function ComparadorContent() {
                               <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{veh.brandName}</p>
                               <h3 className="font-black text-base md:text-lg text-[#0A1F33] uppercase leading-tight line-clamp-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{veh.modelName}</h3>
                               <p className="text-[10px] text-[#00BFFF] font-bold uppercase tracking-wider mb-2 truncate" title={veh.name}>{veh.name}</p>
+                              {isDatacarCheck(veh.concesionaria, checkedDealershipSet) && (
+                                <DatacarCheckBadge size="sm" concesionariaNombre={veh.concesionaria} />
+                              )}
                             </div>
                             
                             <div className="pt-4 border-t border-[#C0C0C0]/40 mt-auto">

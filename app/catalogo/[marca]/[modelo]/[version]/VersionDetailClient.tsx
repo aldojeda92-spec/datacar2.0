@@ -15,6 +15,9 @@ import Modal from '../../../../components/a11y/Modal';
 import { useToast } from '../../../../context/ToastContext';
 import { FAQ_FICHA_VEHICULO as faqs } from '../../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../../lib/compareStorage';
+import { getCachedConcesionarias } from '../../../../../lib/catalogCache';
+import { buildCheckedDealershipSet, isDatacarCheck } from '../../../../../lib/datacarCheck';
+import DatacarCheckBadge from '../../../../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../../../../components/Navbar';
 
 const NAV_ITEMS: NavItem[] = [
@@ -65,6 +68,9 @@ export default function VersionDetailClient() {
   const [showCalcular, setShowCalcular] = useState(false);
   const [compareList, setCompareList] = useState<{id: string, name: string, price: number}[]>([]);
 
+  // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
+  const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
+
   // Formulario de Calculadora
   const [calcForm, setCalcForm] = useState({ entrega: '', plazo: '36' });
   const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -102,7 +108,10 @@ export default function VersionDetailClient() {
 
         setCompareList(getStoredCompareList());
 
-      } catch (error) { console.error("Error crítico leyendo datos:", error); } 
+        const concesionariasData = await getCachedConcesionarias();
+        setCheckedDealershipSet(buildCheckedDealershipSet(concesionariasData));
+
+      } catch (error) { console.error("Error crítico leyendo datos:", error); }
       finally { setLoading(false); }
     };
     fetchData();
@@ -198,6 +207,9 @@ export default function VersionDetailClient() {
                 <span className="text-[10px] uppercase font-bold text-[#C0C0C0] tracking-widest block mb-1">Precio de Lista Sugerido</span>
                 <span className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {version.price.toLocaleString()}</span>
                 {version.promocion && <span className="mt-2 inline-block bg-[#00BFFF]/10 border border-[#00BFFF]/30 text-[#00BFFF] text-[9px] font-bold uppercase px-2 py-1 tracking-widest">{version.promocion}</span>}
+                {isDatacarCheck(version.concesionaria, checkedDealershipSet) && (
+                  <div className="mt-3"><DatacarCheckBadge size="md" concesionariaNombre={version.concesionaria} /></div>
+                )}
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">

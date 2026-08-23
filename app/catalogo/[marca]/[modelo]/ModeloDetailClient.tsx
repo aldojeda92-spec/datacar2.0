@@ -18,6 +18,9 @@ import { useToast } from '../../../context/ToastContext';
 import { useDisclosure } from '../../../../lib/useDisclosure';
 import { FAQ_FICHA_VEHICULO as faqs } from '../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../lib/compareStorage';
+import { getCachedConcesionarias } from '../../../../lib/catalogCache';
+import { buildCheckedDealershipSet, isDatacarCheck } from '../../../../lib/datacarCheck';
+import DatacarCheckBadge from '../../../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../../../components/Navbar';
 
 const NAV_ITEMS: NavItem[] = [
@@ -74,6 +77,9 @@ export default function ModeloDetailClient() {
 
   const [compareList, setCompareList] = useState<{id: string, name: string, price: number}[]>([]);
 
+  // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
+  const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
+
   // Formularios
   const [calcForm, setCalcForm] = useState({ entrega: '', plazo: '36' });
   const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -121,7 +127,10 @@ export default function ModeloDetailClient() {
 
         setCompareList(getStoredCompareList());
 
-      } catch (error) { console.error("Error obteniendo datos:", error); } 
+        const concesionariasData = await getCachedConcesionarias();
+        setCheckedDealershipSet(buildCheckedDealershipSet(concesionariasData));
+
+      } catch (error) { console.error("Error obteniendo datos:", error); }
       finally { setLoading(false); }
     };
     fetchData();
@@ -212,6 +221,9 @@ export default function ModeloDetailClient() {
               <span className="text-[10px] uppercase font-bold text-[#3A3A3C] tracking-widest block mb-1">Precio Desde</span>
               <span className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {precioDesde.toLocaleString()}</span>
               <span className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest block mt-1">+ Gastos de patentamiento</span>
+              {isDatacarCheck(baseVersion?.concesionaria, checkedDealershipSet) && (
+                <div className="mt-3"><DatacarCheckBadge size="md" concesionariaNombre={baseVersion?.concesionaria} /></div>
+              )}
             </div>
 
             <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 flex items-start gap-3">
@@ -250,10 +262,11 @@ export default function ModeloDetailClient() {
             return (
               <div key={ver.id} className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col lg:flex-row items-center gap-6 hover:border-[#0A1F33] transition-colors">
                 <div className="lg:w-1/2 flex flex-col gap-4 w-full">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h3 className="font-black text-xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>{ver.name}</h3>
                     {idx === 0 && <span className="bg-[#00BFFF]/10 text-[#00BFFF] border border-[#00BFFF]/30 text-[8px] font-bold uppercase px-2 py-1 tracking-widest">Entrada</span>}
                     {idx === versions.length -1 && versions.length > 1 && <span className="bg-[#0A1F33]/10 text-[#0A1F33] border border-[#0A1F33]/30 text-[8px] font-bold uppercase px-2 py-1 tracking-widest">Tope de Gama</span>}
+                    {isDatacarCheck(ver.concesionaria, checkedDealershipSet) && <DatacarCheckBadge size="sm" concesionariaNombre={ver.concesionaria} />}
                   </div>
                   
                   <div className="flex flex-wrap gap-x-6 gap-y-2 text-[11px] text-[#3A3A3C] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>

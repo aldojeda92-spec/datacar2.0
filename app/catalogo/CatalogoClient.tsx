@@ -5,13 +5,15 @@ import React, { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
+import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns, getCachedConcesionarias } from '../../lib/catalogCache';
 import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
 import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { normalizeExternalUrl } from '../../lib/externalUrl';
+import { buildCheckedDealershipSet, isDatacarCheck, DATACAR_CHECK_BODY } from '../../lib/datacarCheck';
+import DatacarCheckBadge from '../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../components/Navbar';
 
 const NAV_ITEMS: NavItem[] = [
@@ -68,9 +70,12 @@ function CatalogoContent() {
   const searchParams = useSearchParams();
   const [autos, setAutos] = useState<AutoModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // INYECCIÓN: Bóveda de Campañas Activas
   const [activeCampaigns, setActiveCampaigns] = useState<AdCampaign[]>([]);
+
+  // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
+  const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
 
   // Referencia para el ancla de paginación
   const topRef = useRef<HTMLDivElement>(null);
@@ -126,12 +131,15 @@ function CatalogoContent() {
     const fetchCatalogo = async () => {
       setIsLoading(true);
       try {
-        const [brandsData, modelsData, versionsData, campaignsData] = await Promise.all([
+        const [brandsData, modelsData, versionsData, campaignsData, concesionariasData] = await Promise.all([
           getCachedBrands(),
           getCachedModels(),
           getCachedVersions(),
           getCachedCampaigns(),
+          getCachedConcesionarias(),
         ]);
+
+        setCheckedDealershipSet(buildCheckedDealershipSet(concesionariasData));
 
         const brandsMap: Record<string, { name: string, origen: string }> = {};
         const tempMarcas = new Set<string>();
@@ -488,6 +496,9 @@ function CatalogoContent() {
                     <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
                         <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
+                          {isDatacarCheck(auto.concesionaria, checkedDealershipSet) && (
+                            <div className="absolute top-2 left-2 z-10"><DatacarCheckBadge size="sm" concesionariaNombre={auto.concesionaria} /></div>
+                          )}
                           {isValidImageSrc(auto.img) ? (
                             <Image
                               src={auto.img}
@@ -619,6 +630,10 @@ function CatalogoFooter() {
     {
       q: '¿Cómo avanzo con la compra de un auto del catálogo?',
       a: 'Al ingresar a la ficha de cualquier modelo, encontrarás el botón "Consultar Asesor". Esto derivará tu solicitud a un especialista comercial que bloqueará las condiciones y gestionará la transacción de forma transparente.'
+    },
+    {
+      q: '¿Qué significa el sello DATACAR CHECK?',
+      a: DATACAR_CHECK_BODY
     }
   ];
 

@@ -53,6 +53,7 @@ export const getCachedBrands = () => getCachedCollection('brands');
 export const getCachedModels = () => getCachedCollection('models');
 export const getCachedVersions = () => getCachedCollection('versions');
 export const getCachedCampaigns = () => getCachedCollection('campaigns');
+export const getCachedConcesionarias = () => getCachedCollection('concesionarias');
 
 /** Invalida todo el caché. Útil tras una acción que se sabe cambia el catálogo. */
 export function invalidateCatalogCache(): void {

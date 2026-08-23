@@ -13,6 +13,7 @@ import { normalizeCarroceria } from '../../lib/carroceria';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
+import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarCheck';
 import { useToast } from '../context/ToastContext';
 
 // ==========================================
@@ -134,7 +135,7 @@ export default function AdminDashboardPage() {
     alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '',
     confort_conveniencia: '', seguridad_standard: ''
   });
-  const [concesionariaForm, setConcesionariaForm] = useState({ id: '', name: '', email_gerencia: '', status: 'active' });
+  const [concesionariaForm, setConcesionariaForm] = useState({ id: '', name: '', email_gerencia: '', status: 'active', datacarCheck: false });
 
   // FORMULARIO DE ACCESOS B2B
   const [userB2BForm, setUserB2BForm] = useState<{ uid: string, email: string, dealershipName: string, marcasPermitidas: string[] }>({
@@ -585,9 +586,9 @@ export default function AdminDashboardPage() {
     e.preventDefault(); if (!concesionariaForm.name) return; setLoading(true);
     try {
       const id = concesionariaForm.id || generarSlug(concesionariaForm.name);
-      await setDoc(doc(db, 'concesionarias', id), { name: concesionariaForm.name.toUpperCase(), email_gerencia: concesionariaForm.email_gerencia, status: concesionariaForm.status, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'concesionarias', id), { name: concesionariaForm.name.toUpperCase(), email_gerencia: concesionariaForm.email_gerencia, status: concesionariaForm.status, datacarCheck: concesionariaForm.datacarCheck, updatedAt: serverTimestamp() }, { merge: true });
       setFeedback({ type: 'success', message: 'Concesionaria guardada y actualizada correctamente.' });
-      setConcesionariaForm({ id: '', name: '', status: 'active', email_gerencia: '' }); fetchAllData();
+      setConcesionariaForm({ id: '', name: '', status: 'active', email_gerencia: '', datacarCheck: false }); fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
@@ -635,6 +636,7 @@ export default function AdminDashboardPage() {
   const filteredModelos = useMemo(() => modelosList.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.id.includes(searchTerm)), [modelosList, searchTerm]);
   const filteredVersiones = useMemo(() => versionesList.filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.id.includes(searchTerm)), [versionesList, searchTerm]);
   const filteredConcesionarias = useMemo(() => concesionariasList.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.id.includes(searchTerm)), [concesionariasList, searchTerm]);
+  const checkedDealershipSet = useMemo(() => buildCheckedDealershipSet(concesionariasList), [concesionariasList]);
   const filteredSolicitudes = useMemo(() => solicitudesList.filter(r => r.concesionaria.toLowerCase().includes(searchTerm.toLowerCase())), [solicitudesList, searchTerm]);
 
   // Pantalla de Carga de Autenticación
@@ -1019,8 +1021,18 @@ export default function AdminDashboardPage() {
                         <option value="inactive">Inactiva</option>
                       </select>
                     </div>
+
+                    {/* DATACAR CHECK: se asigna a la concesionaria y se propaga automáticamente a todos los productos que gestione (match por nombre en versions.concesionaria) */}
+                    <div className="flex items-start gap-2 mt-2 bg-[#E6F4EA] p-3 border border-[#1E8E3E]/30">
+                      <input type="checkbox" id="concesionariaForm-datacarCheck" checked={concesionariaForm.datacarCheck} onChange={e => setConcesionariaForm({...concesionariaForm, datacarCheck: e.target.checked})} className="w-4 h-4 mt-0.5 accent-[#1E8E3E]" />
+                      <label htmlFor="concesionariaForm-datacarCheck" className="cursor-pointer">
+                        <span className="text-[10px] font-black text-[#1E8E3E] uppercase tracking-widest block">Sello DATACAR CHECK</span>
+                        <span className="text-[9px] text-[#3A3A3C] block mt-1 leading-relaxed">Marca a esta concesionaria como socia oficial responsable de sus propios precios y datos. El sello se muestra automáticamente en la concesionaria y en todos los productos que tengan esta concesionaria asignada.</span>
+                      </label>
+                    </div>
+
                     <div className="flex gap-2 mt-4">
-                      {concesionariaForm.id && <button type="button" onClick={() => setConcesionariaForm({id:'', name:'', status:'active', email_gerencia:''})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
+                      {concesionariaForm.id && <button type="button" onClick={() => setConcesionariaForm({id:'', name:'', status:'active', email_gerencia:'', datacarCheck: false})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
                       <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Guardar</button>
                     </div>
                   </form>
@@ -1175,9 +1187,13 @@ export default function AdminDashboardPage() {
                       {activeTab === 'concesionarias' && filteredConcesionarias.map(c => (
                         <tr key={c.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
                           <td className="p-4"><div className="h-8 w-8 bg-[#00BFFF] flex items-center justify-center text-[10px] font-bold text-[#0A1F33] uppercase rounded-full">{c.name.substring(0,2)}</div></td>
-                          <td className="p-4 font-bold">{c.name} <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Email: {c.email_gerencia || 'No asignado'} • Estado: {c.status}</span></td>
+                          <td className="p-4 font-bold">
+                            {c.name}{' '}
+                            {c.datacarCheck && <span className="inline-block bg-[#E6F4EA] border border-[#1E8E3E] text-[#1E8E3E] text-[8px] font-black uppercase px-1.5 py-0.5 tracking-widest align-middle">✓ DATACAR CHECK</span>}
+                            <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Email: {c.email_gerencia || 'No asignado'} • Estado: {c.status}</span>
+                          </td>
                           <td className="p-4 text-right flex gap-3 justify-end items-center mt-2">
-                              <button onClick={() => { setConcesionariaForm({ id: c.id, name: c.name || '', email_gerencia: c.email_gerencia || '', status: c.status || 'active' }); window.scrollTo(0,0); }} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button>
+                              <button onClick={() => { setConcesionariaForm({ id: c.id, name: c.name || '', email_gerencia: c.email_gerencia || '', status: c.status || 'active', datacarCheck: c.datacarCheck || false }); window.scrollTo(0,0); }} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button>
                               <button onClick={() => handleDelete('concesionarias', c.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button>
                           </td>
                         </tr>
@@ -1202,7 +1218,11 @@ export default function AdminDashboardPage() {
                       {activeTab === 'versiones' && filteredVersiones.map(v => (
                         <tr key={v.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
                           <td className="p-4 font-mono text-[10px] text-[#C0C0C0]">{v.id}</td>
-                          <td className="p-4 font-bold">{v.name} <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Modelo ID: {v.modelId} • US$ {v.price}</span></td>
+                          <td className="p-4 font-bold">
+                            {v.name}{' '}
+                            {isDatacarCheck(v.concesionaria, checkedDealershipSet) && <span className="inline-block bg-[#E6F4EA] border border-[#1E8E3E] text-[#1E8E3E] text-[8px] font-black uppercase px-1.5 py-0.5 tracking-widest align-middle">✓ DATACAR CHECK</span>}
+                            <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Modelo ID: {v.modelId} • US$ {v.price} • Concesionaria: {v.concesionaria || 'Sin asignar'}</span>
+                          </td>
                           <td className="p-4 text-right flex gap-3 justify-end items-center mt-1"><button onClick={() => triggerEditVersion(v)} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button><button onClick={() => handleDelete('versions', v.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button></td>
                         </tr>
                       ))}
