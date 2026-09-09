@@ -19,7 +19,7 @@ interface ToastProps {
 export default function Toast({ message, variant, onDismiss }: ToastProps) {
   return (
     <div className={`bg-[#0A1F33] text-[#FFFFFF] border-l-4 ${VARIANT_STYLES[variant]} shadow-lg px-5 py-4 flex items-start justify-between gap-4`}>
-      <p className="text-xs font-bold uppercase tracking-widest leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+      <p className="text-xs font-bold uppercase tracking-widest leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
         {message}
       </p>
       <button

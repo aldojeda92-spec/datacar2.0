@@ -427,7 +427,7 @@ export default function PortalConcesionariasPage() {
       <main className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center font-sans py-12 px-4">
         <div className="w-full max-w-md bg-[#FFFFFF] border-t-4 border-[#0A1F33] border-l border-r border-b border-[#C0C0C0] p-8 shadow-none rounded-none">
           <div className="text-center mb-8">
-            <h1 className="font-black text-3xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>DATA<span className="font-light">CAR</span></h1>
+            <h1 className="font-black text-3xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>DATA<span className="font-light">CAR</span></h1>
             <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mt-1">Portal Oficial de Concesionarias</p>
           </div>
 
@@ -449,7 +449,7 @@ export default function PortalConcesionariasPage() {
             </form>
           ) : (
             <form onSubmit={handleRequestAccess} className="flex flex-col gap-4">
-              <p className="text-[11px] text-[#3A3A3C] font-medium leading-relaxed mb-2 text-center" style={{ fontFamily: 'Inter, sans-serif' }}>Completa tus datos. Nuestro equipo validará tu solicitud para darte acceso a la gestión de inventario B2B.</p>
+              <p className="text-[11px] text-[#3A3A3C] font-medium leading-relaxed mb-2 text-center" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Completa tus datos. Nuestro equipo validará tu solicitud para darte acceso a la gestión de inventario B2B.</p>
               <div><label htmlFor="req-nombre" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Completo</label><input id="req-nombre" type="text" required className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.nombre} onChange={e=>setReqForm({...reqForm, nombre: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label htmlFor="req-cargo" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Cargo</label><input id="req-cargo" type="text" required placeholder="Ej: Gerente" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.cargo} onChange={e=>setReqForm({...reqForm, cargo: e.target.value})} /></div>
@@ -479,7 +479,7 @@ export default function PortalConcesionariasPage() {
       
       <header className="bg-[#0A1F33] text-[#FFFFFF] border-b-4 border-[#00BFFF] px-6 py-4 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-6">
-          <div className="font-black text-2xl tracking-widest uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>DATA<span className="font-light">CAR</span></div>
+          <div className="font-black text-2xl tracking-widest uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>DATA<span className="font-light">CAR</span></div>
           <div className="hidden md:flex flex-col border-l border-[#FFFFFF]/20 pl-6">
             <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest">Sucursal Activa</span>
             <span className="text-[13px] font-bold uppercase tracking-wide">{userData.dealershipName}</span>
@@ -629,7 +629,7 @@ export default function PortalConcesionariasPage() {
                           ) : (
                             <>
                               <td className="p-4 border-r border-[#C0C0C0]/50">
-                                <span className="font-black text-[#0A1F33] block" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {Number(v.price).toLocaleString()}</span>
+                                <span className="font-black text-[#0A1F33] block" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {Number(v.price).toLocaleString()}</span>
                                 <span className="font-bold text-[#00BFFF] uppercase tracking-widest text-[9px]">{v.promocion || 'Sin Promo'}</span>
                               </td>
                               <td className="p-4 text-right">

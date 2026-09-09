@@ -68,7 +68,7 @@ export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: st
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="flex-grow p-4 text-xs text-[#3A3A3C] bg-[#FFFFFF] border border-[#C0C0C0] focus:outline-none focus:border-[#0A1F33] rounded-none disabled:opacity-50"
-          style={{ fontFamily: 'Inter, sans-serif' }}
+          style={{ fontFamily: 'var(--font-inter), sans-serif' }}
           required
         />
         <button 

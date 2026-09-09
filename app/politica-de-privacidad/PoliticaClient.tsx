@@ -22,10 +22,10 @@ export default function PoliticaClient() {
       <header className="bg-[#0A1F33] border-b-4 border-[#00BFFF] py-16 px-4">
         <div className="max-w-[800px] mx-auto text-center">
           <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-4">Tratamiento de Datos Personales</p>
-          <h1 className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase tracking-wide mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h1 className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Política de <span className="text-[#00BFFF]">Privacidad</span>
           </h1>
-          <p className="text-sm text-[#C0C0C0] font-medium leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <p className="text-sm text-[#C0C0C0] font-medium leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             Tus datos son tuyos. Aquí te explicamos exactamente cómo los protegemos y con quién los compartimos para conseguirte el mejor trato.
           </p>
         </div>
@@ -33,10 +33,10 @@ export default function PoliticaClient() {
 
       {/* CONTENIDO LEGAL (ESTRUCTURA DE LECTURA ERGONÓMICA) */}
       <section className="flex-grow py-16 px-4">
-        <div className="max-w-[800px] mx-auto bg-[#FFFFFF] border border-[#C0C0C0] p-8 md:p-12 shadow-none rounded-none" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div className="max-w-[800px] mx-auto bg-[#FFFFFF] border border-[#C0C0C0] p-8 md:p-12 shadow-none rounded-none" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>1. Recopilación y Uso de la Información</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>1. Recopilación y Uso de la Información</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               Para brindarte un servicio personalizado de cotización, comparación y asesoramiento automotriz, recopilamos datos de contacto básicos (como tu nombre, número de teléfono y correo electrónico) cuando interactúas con nuestros formularios, el recomendador inteligente o solicitas una asesoría.
             </p>
@@ -46,7 +46,7 @@ export default function PoliticaClient() {
           </div>
 
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#00BFFF] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>2. Privacidad Estricta: ¿Quién ve tus datos?</h2>
+            <h2 className="text-xl font-bold text-[#00BFFF] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>2. Privacidad Estricta: ¿Quién ve tus datos?</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               En DATACAR operamos bajo una política de confidencialidad de <strong>Confianza Cero (Zero-Trust) con terceros</strong>. Tu información personal se maneja bajo el siguiente esquema estricto:
             </p>
@@ -63,7 +63,7 @@ export default function PoliticaClient() {
           </div>
 
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>3. Comunicaciones y tu Consentimiento</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>3. Comunicaciones y tu Consentimiento</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               Al enviarnos tus datos a través de cualquier formulario en DATACAR, <strong>brindas tu consentimiento expreso</strong> para recibir comunicaciones transaccionales (cotizaciones, respuestas a tus dudas) y comunicaciones comerciales (oportunidades de 0km, variaciones de precio o lanzamientos) a través de correo electrónico, WhatsApp o llamadas telefónicas.
             </p>
@@ -79,14 +79,14 @@ export default function PoliticaClient() {
           </div>
 
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>4. Seguridad de la Información</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>4. Seguridad de la Información</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               Utilizamos infraestructura de grado empresarial (Google Firebase) para alojar nuestra base de datos. Aplicamos protocolos de cifrado y controles de acceso estrictos basados en roles (RBAC) para garantizar que solo el personal autorizado y la concesionaria correspondiente puedan visualizar tu solicitud.
             </p>
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>5. Contacto sobre Privacidad</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>5. Contacto sobre Privacidad</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               Si tienes preguntas sobre cómo manejamos tu información, deseas ejercer tu derecho de modificación de datos o solicitar la eliminación total de tu registro de nuestros servidores, contáctanos:
             </p>

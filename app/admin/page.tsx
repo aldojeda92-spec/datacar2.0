@@ -648,11 +648,11 @@ export default function AdminDashboardPage() {
       {/* SIDEBAR CORPORATIVO */}
       <aside className="w-64 bg-[#0A1F33] text-[#FFFFFF] min-h-screen flex flex-col border-r border-[#0A1F33] shrink-0 sticky top-0">
         <div className="p-6 border-b border-[#FFFFFF]/10">
-          <div className="font-black text-2xl tracking-widest uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>DATA<span className="font-light">CAR</span></div>
+          <div className="font-black text-2xl tracking-widest uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>DATA<span className="font-light">CAR</span></div>
           <span className="text-[8px] text-[#00BFFF] border border-[#00BFFF] px-2 py-0.5 uppercase tracking-widest font-bold">Terminal Admin</span>
         </div>
         
-        <nav className="flex flex-col flex-grow py-6 text-[10px] font-bold uppercase tracking-widest overflow-y-auto custom-scrollbar" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <nav className="flex flex-col flex-grow py-6 text-[10px] font-bold uppercase tracking-widest overflow-y-auto custom-scrollbar" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <span className="text-[#C0C0C0] px-6 mb-3">CRM & Operaciones</span>
           <button onClick={() => { setActiveTab('dashboard'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'dashboard' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Dashboard Leads</button>
           
@@ -678,13 +678,13 @@ export default function AdminDashboardPage() {
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="bg-[#FFFFFF] border-b border-[#C0C0C0] p-6 flex justify-between items-center shrink-0">
-          <h1 className="font-black text-2xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Módulo Activo: <span className="text-[#00BFFF]">{activeTab}</span></h1>
+          <h1 className="font-black text-2xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Módulo Activo: <span className="text-[#00BFFF]">{activeTab}</span></h1>
           <button onClick={fetchAllData} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest border border-[#C0C0C0] px-4 py-2 hover:border-[#0A1F33] transition-colors rounded-none outline-none">{loading ? 'Sincronizando...' : 'Sincronizar DB'}</button>
         </header>
 
         {feedback.message && <div className={`m-6 mb-0 p-4 text-xs font-bold uppercase tracking-widest border shrink-0 ${feedback.type === 'error' ? 'bg-[#FFE6E6] text-[#D93025] border-[#D93025]' : 'bg-[#E6F4EA] text-[#1E8E3E] border-[#1E8E3E]'}`}>{feedback.message}</div>}
 
-        <div className="p-6 flex-grow overflow-y-auto custom-scrollbar" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div className="p-6 flex-grow overflow-y-auto custom-scrollbar" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           
           {/* ======================================= */}
           {/* VISTA: GESTIÓN DE ACCESOS Y ROLES */}
@@ -1310,7 +1310,7 @@ export default function AdminDashboardPage() {
                     <div key={camp.id} className={`border p-4 flex justify-between items-center transition-colors ${camp.isActive ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] bg-[#F8F9FA]'}`}>
                        <div>
                          <p className="text-[9px] font-bold text-[#3A3A3C] uppercase">{camp.sponsor} • Categoría: {camp.targetCategory || 'Todas'}</p>
-                         <p className="font-black text-sm text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>{camp.headline}</p>
+                         <p className="font-black text-sm text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{camp.headline}</p>
                          <p className="text-[8px] text-[#C0C0C0] uppercase mt-1">Ubicación: {camp.location} | Vence: {camp.endDate}</p>
                        </div>
                        <div className="flex gap-2">

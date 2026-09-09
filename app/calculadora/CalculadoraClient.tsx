@@ -172,10 +172,10 @@ export default function CalculadoraClient() {
       <header className="w-full bg-[#0A1F33] py-16 px-4 border-b-4 border-[#00BFFF]">
         <div className="max-w-[800px] mx-auto text-center">
           <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-4 border border-[#00BFFF] bg-[#00BFFF]/10 w-max mx-auto px-4 py-1">Herramienta Financiera</span>
-          <h1 className="font-black text-4xl md:text-5xl text-[#FFFFFF] uppercase leading-tight mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h1 className="font-black text-4xl md:text-5xl text-[#FFFFFF] uppercase leading-tight mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Proyectá tu Inversión
           </h1>
-          <p className="text-sm text-[#C0C0C0] leading-relaxed max-w-xl mx-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <p className="text-sm text-[#C0C0C0] leading-relaxed max-w-xl mx-auto" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             Nuestra terminal utiliza el sistema de amortización bancario real, absorbiendo seguros y gastos administrativos, garantizando transparencia técnica antes de la firma.
           </p>
         </div>
@@ -234,7 +234,7 @@ export default function CalculadoraClient() {
               {precioVehiculo > 0 && (
                 <div className="bg-[#F5FBFF] border border-[#00BFFF]/30 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
                   <span className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest">Monto del vehículo:</span>
-                  <span className="font-black text-3xl text-[#00BFFF]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {precioVehiculo.toLocaleString()}</span>
+                  <span className="font-black text-3xl text-[#00BFFF]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {precioVehiculo.toLocaleString()}</span>
                 </div>
               )}
 
@@ -262,7 +262,7 @@ export default function CalculadoraClient() {
               {cuotaCalculada !== null && (
                 <div className="mt-4 border border-[#0A1F33] bg-[#FFFFFF] p-10 text-center">
                   <p className="text-[11px] font-bold text-[#3A3A3C] uppercase tracking-widest mb-4 border-b border-[#C0C0C0]/50 pb-4 inline-block">Cuota Mensual Estimada</p>
-                  <p className="font-black text-6xl text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
+                  <p className="font-black text-6xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
                   <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest mt-6 max-w-md mx-auto leading-relaxed border border-[#C0C0C0]/30 p-3 bg-[#F8F9FA]">
                     * Tasa referencial {(config.tasa_anual * 100).toFixed(1)}% nominal anual. Monto calculado sobre sistema Francés. Incluye prorrateo de seguros y gastos de otorgamiento.
                   </p>
@@ -314,7 +314,7 @@ export default function CalculadoraClient() {
               {presupuestoBase !== null && (
                 <div className="mt-4 border border-[#00BFFF] bg-[#FFFFFF] p-10 text-center">
                   <p className="text-[11px] font-bold text-[#3A3A3C] uppercase tracking-widest mb-4 border-b border-[#C0C0C0]/50 pb-4 inline-block">Presupuesto Real para tu 0KM</p>
-                  <p className="font-black text-6xl text-[#0A1F33] mb-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {presupuestoBase.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
+                  <p className="font-black text-6xl text-[#0A1F33] mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {presupuestoBase.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
                   
                   <div className="flex flex-col sm:flex-row justify-center items-center gap-4 text-[#3A3A3C] text-[10px] font-bold uppercase tracking-widest mb-8 bg-[#F8F9FA] p-4 border border-[#C0C0C0]/50">
                     <span>Rango de Precios Sugerido:</span>

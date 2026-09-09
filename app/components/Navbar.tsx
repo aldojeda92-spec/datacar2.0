@@ -63,12 +63,12 @@ export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
 
   return (
     <nav className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] px-4 lg:px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-none">
-      <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+      <div className="font-black text-2xl tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
         <Link href={logoHref}>DATA<span className="font-light">CAR</span></Link>
       </div>
 
       {hasItems && (
-        <div className="hidden lg:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider h-full" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div className="hidden lg:flex gap-6 font-bold text-[11px] uppercase items-center text-[#3A3A3C] tracking-wider h-full" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           {items.map((item) => {
             if (item.type === 'link') {
               return (
@@ -162,7 +162,7 @@ export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
             >
               <div id="mobile-nav-drawer" className="flex flex-col min-h-full">
                 <div className="flex justify-between items-center p-4 border-b border-[#C0C0C0] shrink-0">
-                  <span className="font-black text-lg tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Menú</span>
+                  <span className="font-black text-lg tracking-widest text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Menú</span>
                   <button type="button" aria-label="Cerrar menú" className="p-2 text-[#0A1F33]" onClick={() => setMobileOpen(false)}>
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="square" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -170,7 +170,7 @@ export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
                   </button>
                 </div>
 
-                <div className="flex flex-col p-4 gap-1 font-bold text-xs uppercase tracking-wider text-[#3A3A3C]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                <div className="flex flex-col p-4 gap-1 font-bold text-xs uppercase tracking-wider text-[#3A3A3C]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
                   {items.map((item) => {
                     if (item.type === 'link') {
                       return (

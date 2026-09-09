@@ -40,7 +40,7 @@ export default function BotonCotizar({
     <button 
       onClick={handleClick}
       className={`${estilosBase} ${variante === 'primario' ? estilosPrimario : estilosSecundario}`}
-      style={{ fontFamily: 'Inter, sans-serif' }}
+      style={{ fontFamily: 'var(--font-inter), sans-serif' }}
     >
       {textoMenu}
     </button>

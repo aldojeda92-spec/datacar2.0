@@ -612,10 +612,10 @@ export default function RecomendadorPage() {
       {step === 0 && (
         <section className="flex-grow flex flex-col items-center justify-center p-4 py-16">
           <div className="max-w-xl w-full bg-[#FFFFFF] border border-[#C0C0C0] p-12 text-center rounded-none shadow-none">
-            <h1 className="font-black text-4xl md:text-5xl text-[#0A1F33] uppercase mb-4 leading-tight" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+            <h1 className="font-black text-4xl md:text-5xl text-[#0A1F33] uppercase mb-4 leading-tight" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               ENCONTRÁ TU <br/><span className="text-[#00BFFF]">AUTO IDEAL</span>
             </h1>
-            <p className="text-sm text-[#3A3A3C] mb-10 leading-relaxed font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+            <p className="text-sm text-[#3A3A3C] mb-10 leading-relaxed font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
               Respondé algunas preguntas y te ayudamos a encontrar el 0km perfecto para vos, basado en tu estilo de vida y preferencias.
             </p>
             <button onClick={() => setStep(1)} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-sm uppercase tracking-widest py-5 transition-colors flex justify-center items-center gap-2 rounded-none">
@@ -648,7 +648,7 @@ export default function RecomendadorPage() {
           <div className="flex-grow flex flex-col items-center justify-start pt-12 p-4">
             <div className="max-w-3xl w-full">
               <div className="mb-10 text-center">
-                <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+                <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                   {WIZARD_STEPS[step - 1].title}
                 </h2>
                 <p className="text-sm text-[#C0C0C0] font-medium">{WIZARD_STEPS[step - 1].subtitle}</p>
@@ -721,7 +721,7 @@ export default function RecomendadorPage() {
           <div className="flex-grow flex flex-col items-center justify-start pt-12 p-4">
             <div className="max-w-3xl w-full">
               <div className="mb-10 text-center">
-                <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>¿Ya tenés un modelo en mente?</h2>
+                <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Ya tenés un modelo en mente?</h2>
                 <p className="text-sm text-[#C0C0C0] font-medium">Lo comparamos directo contra las recomendaciones que arme DATACAR para vos.</p>
               </div>
 
@@ -811,7 +811,7 @@ export default function RecomendadorPage() {
             <button onClick={() => setStep(WIZARD_STEPS.length + 1)} className="flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors mb-6">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver a modificar respuestas
             </button>
-            <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'Montserrat, sans-serif' }}>Ya casi tenés las mejores opciones</h2>
+            <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Ya casi tenés las mejores opciones</h2>
             <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos tus datos para que podamos compartírtelo.</p>
             
             <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 text-center rounded-none">
@@ -851,7 +851,7 @@ export default function RecomendadorPage() {
         <section className="flex-grow w-full pb-20">
           <div className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] py-12 px-4 text-center">
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Tu Resultado</span>
-            <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+            <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               Elegidos por <span className="text-[#00BFFF]">DATACAR</span>
             </h2>
           </div>
@@ -879,7 +879,7 @@ export default function RecomendadorPage() {
                     </div>
                     <div className="p-6 flex flex-col flex-grow">
                       <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{referenceMatch.brandName}</p>
-                      <h3 className="font-black text-xl text-[#0A1F33] uppercase leading-tight mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>{referenceMatch.modelName}</h3>
+                      <h3 className="font-black text-xl text-[#0A1F33] uppercase leading-tight mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{referenceMatch.modelName}</h3>
                       {referenceMatch.matchReasons.length > 0 && (
                         <ul className="flex flex-col gap-1 mb-6 text-[10px] font-bold uppercase tracking-wide">
                           {referenceMatch.matchReasons.map((reason, idx) => (
@@ -891,7 +891,7 @@ export default function RecomendadorPage() {
                       )}
                       <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50">
                         <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio Desde</span>
-                        <span className="font-black text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {referenceMatch.startingPrice.toLocaleString()}</span>
+                        <span className="font-black text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {referenceMatch.startingPrice.toLocaleString()}</span>
                         <Link href={`/catalogo/${referenceMatch.brandId}/${referenceMatch.id}`} className="w-full text-center block bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-3 transition-colors rounded-none">
                           Ver Detalles Técnicos
                         </Link>
@@ -959,7 +959,7 @@ export default function RecomendadorPage() {
                   
                   <div className="p-6 flex flex-col flex-grow">
                     <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{model.brandName}</p>
-                    <h3 className="font-black text-xl text-[#0A1F33] uppercase leading-tight mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>{model.modelName}</h3>
+                    <h3 className="font-black text-xl text-[#0A1F33] uppercase leading-tight mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{model.modelName}</h3>
                     
                     {/* MATRIZ DE PÍLDORAS (PILL TAGS) */}
                     <div className="flex flex-wrap gap-1.5 mb-6">
@@ -984,7 +984,7 @@ export default function RecomendadorPage() {
 
                     <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50">
                       <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio Desde</span>
-                      <span className="font-black text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {model.startingPrice.toLocaleString()}</span>
+                      <span className="font-black text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {model.startingPrice.toLocaleString()}</span>
                       
                       {/* TACTICA B2B: Competencia de Agencias */}
                       <div className="border border-[#C0C0C0] p-2 text-center text-[10px] uppercase font-bold text-[#3A3A3C] mb-4 bg-[#F8F9FA]">
@@ -1009,8 +1009,8 @@ export default function RecomendadorPage() {
             <div className="bg-[#0A1F33] border border-[#0A1F33] p-8 md:p-12 mb-12 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden rounded-none shadow-none">
               <span className="absolute top-4 left-4 bg-[#FFFFFF]/10 border border-[#FFFFFF]/20 text-[#FFFFFF] text-[8px] font-bold uppercase tracking-widest px-3 py-1 inline-block z-20">Servicio DATACAR</span>
               <div className="md:w-1/3 z-10 text-center md:text-left mt-6 md:mt-0">
-                <h3 className="font-black text-3xl text-[#FFFFFF] uppercase leading-tight mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>¿Indeciso? <br/>Negociamos por vos</h3>
-                <p className="text-[11px] text-[#C0C0C0] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Analizamos las opciones y peleamos el mejor precio directo en concesionaria oficial.</p>
+                <h3 className="font-black text-3xl text-[#FFFFFF] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Indeciso? <br/>Negociamos por vos</h3>
+                <p className="text-[11px] text-[#C0C0C0] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Analizamos las opciones y peleamos el mejor precio directo en concesionaria oficial.</p>
               </div>
 
               <div className="md:w-2/3 flex flex-col sm:flex-row gap-4 w-full z-10">
@@ -1046,8 +1046,8 @@ export default function RecomendadorPage() {
                   )}
                 </div>
                 <div className="md:w-1/2 text-center md:text-left mt-6 md:mt-0 z-10 border-t md:border-t-0 md:border-l border-[#C0C0C0] pt-6 md:pt-0 md:pl-10">
-                  <h3 className="font-black text-2xl sm:text-3xl md:text-4xl text-[#0A1F33] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{smartAd.headline} <br/><span className="text-[#00BFFF]">{smartAd.highlight}</span></h3>
-                  <p className="font-black text-xl sm:text-2xl text-[#0A1F33] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1 break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>{smartAd.price}</p>
+                  <h3 className="font-black text-2xl sm:text-3xl md:text-4xl text-[#0A1F33] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{smartAd.headline} <br/><span className="text-[#00BFFF]">{smartAd.highlight}</span></h3>
+                  <p className="font-black text-xl sm:text-2xl text-[#0A1F33] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1 break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{smartAd.price}</p>
                 </div>
               </a>
             )}
@@ -1075,7 +1075,7 @@ export default function RecomendadorPage() {
                       </div>
                       <div className="w-2/3 p-4 flex flex-col justify-center">
                          <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{auto.brandName}</p>
-                         <h4 className="font-black text-sm text-[#0A1F33] uppercase leading-tight mb-1 truncate" style={{ fontFamily: 'Montserrat, sans-serif' }}>{auto.modelName}</h4>
+                         <h4 className="font-black text-sm text-[#0A1F33] uppercase leading-tight mb-1 truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.modelName}</h4>
                          <span className="font-black text-xs text-[#0A1F33] mt-2">Desde US$ {auto.startingPrice.toLocaleString()}</span>
                          <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="text-[9px] font-bold text-[#00BFFF] hover:text-[#0A1F33] uppercase tracking-widest mt-1 underline transition-colors">
                            Ver Detalles Técnicos →
@@ -1109,7 +1109,7 @@ export default function RecomendadorPage() {
         {calcVehicle && (
           <>
             <button onClick={() => { setCalcVehicle(null); setCuotaCalculada(null); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black text-lg border-none outline-none">✕</button>
-            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Plan Financiero</h3>
+            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Plan Financiero</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6 border-b border-[#C0C0C0]/50 pb-4">
               Vehículo: {calcVehicle.brandName} {calcVehicle.modelName} (Desde US$ {calcVehicle.startingPrice.toLocaleString()})
             </p>
@@ -1133,7 +1133,7 @@ export default function RecomendadorPage() {
               {cuotaCalculada !== null && (
                 <div className="mt-4 border-t-4 border-[#0A1F33] bg-[#F8F9FA] p-6 text-center">
                   <p className="text-[11px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-2">Cuota Mensual Estimada</p>
-                  <p className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
+                  <p className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
                   <p className="text-[9px] text-[#3A3A3C] uppercase tracking-widest mt-4 max-w-sm mx-auto leading-relaxed opacity-70">
                     * Sistema francés. Incluye seguro de vida y gastos. Sujeto a evaluación crediticia.
                   </p>

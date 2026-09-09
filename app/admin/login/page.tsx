@@ -40,22 +40,22 @@ export default function AdminLoginPage() {
         
         {/* Cabecera del Login */}
         <div className="text-center mb-10">
-          <div className="font-black text-4xl tracking-widest text-[#0A1F33] uppercase mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <div className="font-black text-4xl tracking-widest text-[#0A1F33] uppercase mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             DATA<span className="font-light">CAR</span>
           </div>
-          <span className="border border-[#00BFFF] text-[#00BFFF] text-[9px] font-bold uppercase px-3 py-1 tracking-widest inline-block" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <span className="border border-[#00BFFF] text-[#00BFFF] text-[9px] font-bold uppercase px-3 py-1 tracking-widest inline-block" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             Portal de Operaciones
           </span>
         </div>
 
         {error && (
-          <div className="bg-[#FFE6E6] border border-[#D93025] text-[#D93025] p-4 mb-6 text-[10px] font-bold uppercase tracking-widest text-center" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <div className="bg-[#FFE6E6] border border-[#D93025] text-[#D93025] p-4 mb-6 text-[10px] font-bold uppercase tracking-widest text-center" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             {error}
           </div>
         )}
 
         {/* Formulario Estricto B2B */}
-        <form onSubmit={handleLogin} className="flex flex-col gap-6" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <form onSubmit={handleLogin} className="flex flex-col gap-6" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <div>
             <label htmlFor="admin-login-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Correo Corporativo</label>
             <input
@@ -92,7 +92,7 @@ export default function AdminLoginPage() {
         </form>
 
         <div className="mt-8 pt-6 border-t border-[#C0C0C0]/50 text-center">
-          <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             Acceso restringido a personal autorizado. Toda actividad es auditada.
           </p>
         </div>

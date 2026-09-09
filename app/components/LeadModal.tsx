@@ -115,10 +115,10 @@ export default function LeadModal({
             <div className="w-16 h-16 bg-[#F8F9FA] border-2 border-[#00BFFF] text-[#00BFFF] rounded-none flex items-center justify-center mx-auto mb-6 text-3xl font-black">
               ✓
             </div>
-            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               ¡Solicitud Enviada!
             </h3>
-            <p className="text-xs text-[#3A3A3C] font-medium leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+            <p className="text-xs text-[#3A3A3C] font-medium leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
               Un asesor de <strong className="text-[#0A1F33]">{concesionariaDestino || 'DATACAR'}</strong> se contactará contigo a la brevedad para avanzar con tu {marcaVehiculo}.
             </p>
           </div>
@@ -128,7 +128,7 @@ export default function LeadModal({
               <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">
                 Paso Final
               </span>
-              <h3 className="font-black text-2xl text-[#0A1F33] uppercase leading-tight mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              <h3 className="font-black text-2xl text-[#0A1F33] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                 Solicitar Cotización
               </h3>
               <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest font-bold border-b border-[#C0C0C0]/50 pb-4">
@@ -136,7 +136,7 @@ export default function LeadModal({
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
               <div>
                 <label htmlFor={nombreId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Nombre y Apellido <span className="text-[#D93025]">*</span></label>
                 <input

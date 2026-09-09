@@ -27,12 +27,12 @@ interface AdCampaign { id: string; sponsor: string; headline: string; highlight:
 // ==========================================
 const Footer = () => {
   return (
-    <footer className="w-full bg-[#0A1F33] border-t-4 border-[#00BFFF] text-[#FFFFFF]" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <footer className="w-full bg-[#0A1F33] border-t-4 border-[#00BFFF] text-[#FFFFFF]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
       <div className="border-b border-[#FFFFFF]/10">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-16 flex flex-col md:flex-row items-center justify-between gap-10">
           <div className="md:w-1/2">
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-2 block">Inteligencia de Mercado</span>
-            <h3 className="font-black text-3xl text-[#FFFFFF] uppercase leading-tight mb-3" style={{ fontFamily: 'Montserrat, sans-serif' }}>Auditorías y precios 0KM <br className="hidden md:block" /> directo a tu correo.</h3>
+            <h3 className="font-black text-3xl text-[#FFFFFF] uppercase leading-tight mb-3" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Auditorías y precios 0KM <br className="hidden md:block" /> directo a tu correo.</h3>
             <p className="text-sm text-[#C0C0C0] max-w-md leading-relaxed">Sé el primero en acceder a fluctuaciones de precios, análisis de nuevas versiones y reportes de rentabilidad automotriz.</p>
           </div>
           <div className="md:w-1/2 w-full max-w-lg">
@@ -44,7 +44,7 @@ const Footer = () => {
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-16">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
           <div className="md:col-span-1">
-            <div className="font-black text-3xl tracking-widest text-[#FFFFFF] uppercase mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>DATA<span className="font-light text-[#C0C0C0]">CAR</span></div>
+            <div className="font-black text-3xl tracking-widest text-[#FFFFFF] uppercase mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>DATA<span className="font-light text-[#C0C0C0]">CAR</span></div>
             <p className="text-[11px] text-[#C0C0C0] leading-relaxed mb-6">Plataforma analítica y transaccional para la adquisición inteligente de vehículos 0KM en Paraguay.</p>
             <div className="flex flex-col gap-3 text-[10px] font-bold uppercase tracking-widest text-[#00BFFF]">
               <a href="https://instagram.com/datacarpy" target="_blank" rel="noopener noreferrer" className="hover:text-[#FFFFFF] transition-colors flex items-center gap-2 border border-[#00BFFF]/30 hover:border-[#FFFFFF] p-2 w-max">
@@ -260,7 +260,7 @@ export default function HomeClient() {
       <section className="w-full bg-[#0A1F33] pt-20 pb-16 px-4 flex flex-col items-center relative z-40 border-b-4 border-[#00BFFF]">
         <div className="text-center mb-10">
           <span className="bg-[#FFFFFF]/10 text-[#00BFFF] border border-[#00BFFF]/30 font-bold tracking-widest uppercase px-4 py-1 text-[10px] mb-6 inline-block">Antes de comprar, compará</span>
-          <h1 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h1 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Visitá todas las concesionarias<br/><span className="text-[#00BFFF]">en un solo lugar.</span>
           </h1>
         </div>
@@ -305,7 +305,7 @@ export default function HomeClient() {
         </div>
 
         {/* Filtros Rápidos */}
-        <div className="flex flex-wrap justify-center gap-3 px-2 mt-4 max-w-5xl" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div className="flex flex-wrap justify-center gap-3 px-2 mt-4 max-w-5xl" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <Link href="/catalogo?tipo=SUV" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] transition-colors flex items-center gap-2 border border-[#C0C0C0] hover:border-[#0A1F33]">
             <svg className="w-4 h-4 text-[#C0C0C0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M8 7h8l2 4v7a1 1 0 01-1 1H7a1 1 0 01-1-1v-7l2-4z"></path></svg> SUVs
           </Link>
@@ -335,8 +335,8 @@ export default function HomeClient() {
             <a href={normalizeExternalUrl(activeAd.link)} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#3A3A3C] border-2 border-[#3A3A3C] flex flex-col md:flex-row justify-between items-center p-6 md:p-10 relative hover:border-[#00BFFF] transition-colors group overflow-hidden">
               <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Auspicio Oficial: {activeAd.sponsor}</span>
               <div className="flex flex-col text-left md:w-1/2 z-10 mt-6 md:mt-0">
-                <p className="font-black text-3xl sm:text-4xl md:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.headline} <span className="text-[#00BFFF]">{activeAd.highlight}</span></p>
-                <p className="font-black text-2xl md:text-4xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>{activeAd.price}</p>
+                <p className="font-black text-3xl sm:text-4xl md:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{activeAd.headline} <span className="text-[#00BFFF]">{activeAd.highlight}</span></p>
+                <p className="font-black text-2xl md:text-4xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{activeAd.price}</p>
               </div>
               <div className="md:w-1/2 mt-6 md:mt-0 flex justify-end z-10 w-full relative h-48 md:h-64">
                 {isValidImageSrc(activeAd.img) && (
@@ -360,8 +360,8 @@ export default function HomeClient() {
           ========================================== */}
       <section className="max-w-[1400px] mx-auto px-4 lg:px-8 mt-10 mb-12">
         <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
-          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Lo más <span className="text-[#3A3A3C]">buscado</span></h2>
-          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0" style={{ fontFamily: 'Inter, sans-serif' }}>Ver catálogo completo →</Link>
+          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Lo más <span className="text-[#3A3A3C]">buscado</span></h2>
+          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Ver catálogo completo →</Link>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {isLoading ? <div className="col-span-full py-10 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">Cargando inventario...</div> : autosMasBuscados.length > 0 ? autosMasBuscados.map((auto) => (
@@ -383,8 +383,8 @@ export default function HomeClient() {
                 </div>
                 <div className="p-4 flex flex-col">
                   <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
-                  <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight mb-1 h-8 line-clamp-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{auto.name}</h3>
-                  <div className="mt-2 pt-2 border-t border-[#C0C0C0]/50"><p className="font-black text-[11px] text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {auto.price.toLocaleString()}</p></div>
+                  <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight mb-1 h-8 line-clamp-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.name}</h3>
+                  <div className="mt-2 pt-2 border-t border-[#C0C0C0]/50"><p className="font-black text-[11px] text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {auto.price.toLocaleString()}</p></div>
                 </div>
               </div>
             </Link>
@@ -400,15 +400,15 @@ export default function HomeClient() {
           <div className="absolute top-0 left-0 w-2 h-full bg-[#00BFFF]"></div>
           <div className="md:w-1/2 z-10 mb-8 md:mb-0 md:pr-8">
             <span className="border border-[#00BFFF] text-[#00BFFF] text-[9px] font-bold uppercase px-3 py-1 tracking-widest mb-4 inline-block bg-[#FFFFFF]/5">Nuevo Servicio</span>
-            <h2 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
-            <p className="text-[#C0C0C0] text-sm max-w-md mb-8 leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>El mercado vende autos todos los días. Vos comprás uno cada 5 años. Ponemos nuestra experiencia técnica y financiera a tu favor.</p>
+            <h2 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
+            <p className="text-[#C0C0C0] text-sm max-w-md mb-8 leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>El mercado vende autos todos los días. Vos comprás uno cada 5 años. Ponemos nuestra experiencia técnica y financiera a tu favor.</p>
             <Link href="/negociamos-por-vos" className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-10 transition-colors inline-block">Consultar Asesoría →</Link>
           </div>
           <div className="md:w-1/2 flex justify-end w-full z-10">
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-lg text-center">
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
+              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
+              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
+              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
             </div>
           </div>
         </div>
@@ -419,7 +419,7 @@ export default function HomeClient() {
           ========================================== */}
       <section id="marcas-section" className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
         <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
-          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Buscá por <span className="text-[#3A3A3C]">marca</span></h2>
+          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Buscá por <span className="text-[#3A3A3C]">marca</span></h2>
           <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0">Ver todas las marcas →</Link>
         </div>
         <div className="flex flex-wrap gap-4 justify-center">
@@ -458,24 +458,24 @@ export default function HomeClient() {
       <section className="bg-[#0A1F33] border-y border-[#0A1F33] py-20 my-16">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 flex flex-col lg:flex-row gap-12 items-center">
           <div className="lg:w-1/3 border-b lg:border-b-0 lg:border-r border-[#FFFFFF]/20 pb-8 lg:pb-0 lg:pr-8 text-center lg:text-left">
-            <h2 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase leading-tight mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>¿Cómo funciona <br/><span className="text-[#00BFFF]">DataCar?</span></h2>
+            <h2 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase leading-tight mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Cómo funciona <br/><span className="text-[#00BFFF]">DataCar?</span></h2>
             <Link href="/catalogo" className="bg-[#FFFFFF]/10 text-[#00BFFF] text-[10px] font-bold uppercase px-6 py-3 tracking-widest border border-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#0A1F33] transition-colors inline-block mt-2">Explorar Catálogo →</Link>
           </div>
           <div className="lg:w-2/3 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
             <div className="bg-[#FFFFFF]/5 p-8 border border-[#FFFFFF]/10 hover:border-[#00BFFF] transition-colors">
-              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>1.</span>
-              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'Inter, sans-serif' }}>Buscá tu auto</h3>
-              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>Entre cientos de modelos disponibles con datos duros, especificaciones exactas y sin ruido comercial.</p>
+              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>1.</span>
+              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Buscá tu auto</h3>
+              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Entre cientos de modelos disponibles con datos duros, especificaciones exactas y sin ruido comercial.</p>
             </div>
             <div className="bg-[#FFFFFF]/5 p-8 border border-[#FFFFFF]/10 hover:border-[#00BFFF] transition-colors">
-              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>2.</span>
-              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'Inter, sans-serif' }}>Compará Ofertas</h3>
-              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>De concesionarias oficiales de Paraguay, al instante y con total transparencia en precios y garantías.</p>
+              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>2.</span>
+              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Compará Ofertas</h3>
+              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>De concesionarias oficiales de Paraguay, al instante y con total transparencia en precios y garantías.</p>
             </div>
             <div className="bg-[#FFFFFF]/5 p-8 border border-[#FFFFFF]/10 hover:border-[#00BFFF] transition-colors">
-              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>3.</span>
-              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'Inter, sans-serif' }}>Elegí y Avanzá</h3>
-              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>Contactá directamente o delegá la transacción en nuestros expertos para proteger el valor de tu inversión.</p>
+              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>3.</span>
+              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Elegí y Avanzá</h3>
+              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Contactá directamente o delegá la transacción en nuestros expertos para proteger el valor de tu inversión.</p>
             </div>
           </div>
         </div>
@@ -486,8 +486,8 @@ export default function HomeClient() {
           ========================================== */}
       <section className="w-full max-w-[1400px] mx-auto px-4 lg:px-8 my-16 mb-24 min-w-0">
         <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6 border-b border-[#C0C0C0] pb-4">
-          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Autos por <span className="text-[#3A3A3C]">menos de</span></h2>
-          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest mb-1 sm:mb-0" style={{ fontFamily: 'Inter, sans-serif' }}>Ver todos →</Link>
+          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Autos por <span className="text-[#3A3A3C]">menos de</span></h2>
+          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest mb-1 sm:mb-0" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Ver todos →</Link>
         </div>
         
         {/* Pestañas Lógicas Dinámicas */}
@@ -534,12 +534,12 @@ export default function HomeClient() {
                   </div>
                   <div className="p-4 flex flex-col flex-grow border-t border-[#C0C0C0] bg-[#F8F9FA]">
                     <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
-                    <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight h-8 line-clamp-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+                    <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight h-8 line-clamp-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                       {auto.name}
                     </h3>
                     <div className="mt-auto pt-3 border-t border-[#C0C0C0]/50">
                       <p className="text-[8px] uppercase tracking-widest text-[#3A3A3C] font-bold mb-0.5">Desde</p>
-                      <p className="font-black text-[14px] text-[#0A1F33] leading-none" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+                      <p className="font-black text-[14px] text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                         US$ {auto.price.toLocaleString()}
                       </p>
                     </div>

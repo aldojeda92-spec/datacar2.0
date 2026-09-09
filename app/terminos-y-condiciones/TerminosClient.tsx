@@ -22,10 +22,10 @@ export default function TerminosClient() {
       <header className="bg-[#0A1F33] border-b-4 border-[#00BFFF] py-16 px-4">
         <div className="max-w-[800px] mx-auto text-center">
           <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-4">Documento Legal e Informativo</p>
-          <h1 className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase tracking-wide mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h1 className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Términos y <span className="text-[#00BFFF]">Condiciones</span>
           </h1>
-          <p className="text-sm text-[#C0C0C0] font-medium leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <p className="text-sm text-[#C0C0C0] font-medium leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             Transparencia total en el manejo de datos, precios y procesos operativos de nuestra plataforma.
           </p>
         </div>
@@ -33,10 +33,10 @@ export default function TerminosClient() {
 
       {/* CONTENIDO LEGAL (ESTRUCTURA DE LECTURA ERGONÓMICA) */}
       <section className="flex-grow py-16 px-4">
-        <div className="max-w-[800px] mx-auto bg-[#FFFFFF] border border-[#C0C0C0] p-8 md:p-12 shadow-none rounded-none" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div className="max-w-[800px] mx-auto bg-[#FFFFFF] border border-[#C0C0C0] p-8 md:p-12 shadow-none rounded-none" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>1. Naturaleza de la Plataforma e Inventario</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>1. Naturaleza de la Plataforma e Inventario</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               DATACAR actúa como un integrador tecnológico y facilitador de información B2B/B2C en el rubro automotriz paraguayo. <strong>Nuestra empresa no es propietaria del stock de vehículos exhibidos en la plataforma.</strong> 
             </p>
@@ -46,7 +46,7 @@ export default function TerminosClient() {
           </div>
 
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>2. Dinámica y Variación de Precios</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>2. Dinámica y Variación de Precios</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               La industria automotriz y de importación está sujeta a fluctuaciones del mercado, costos de flete internacional e impuestos aduaneros. Por lo tanto, <strong>los precios publicados en el catálogo pueden sufrir variaciones sin previo aviso.</strong>
             </p>
@@ -56,7 +56,7 @@ export default function TerminosClient() {
           </div>
 
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>3. Exactitud de Especificaciones Técnicas</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>3. Exactitud de Especificaciones Técnicas</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               Nuestro equipo audita y estructura la información para ofrecer el mejor comparador del mercado. Sin embargo, las fichas técnicas, equipamiento estándar, dimensiones y características de motorización <strong>son suministradas directamente por las concesionarias y marcas importadoras.</strong>
             </p>
@@ -69,7 +69,7 @@ export default function TerminosClient() {
           </div>
 
           <div className="mb-8 border-b border-[#C0C0C0] pb-8">
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>4. Simulaciones y Calculadora Financiera</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>4. Simulaciones y Calculadora Financiera</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               Las proyecciones de financiamiento, tasas de interés (TAE/TNA) y montos de cuotas arrojados por nuestras calculadoras o estimadores son <strong>estrictamente estimaciones de carácter informativo.</strong>
             </p>
@@ -84,7 +84,7 @@ export default function TerminosClient() {
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>5. Modificaciones y Contacto</h2>
+            <h2 className="text-xl font-bold text-[#0A1F33] uppercase tracking-widest mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>5. Modificaciones y Contacto</h2>
             <p className="text-sm text-[#3A3A3C] leading-relaxed mb-4">
               DATACAR se reserva el derecho de actualizar, modificar o reemplazar estos Términos y Condiciones en cualquier momento, con el fin de alinearlos a nuevas normativas comerciales o mejoras operativas.
             </p>

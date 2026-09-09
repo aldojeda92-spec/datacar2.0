@@ -69,10 +69,10 @@ export default function FaqClient() {
       {/* HEADER DE SECCIÓN */}
       <header className="bg-[#0A1F33] border-b-4 border-[#00BFFF] py-16 px-4">
         <div className="max-w-[800px] mx-auto text-center">
-          <h1 className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase tracking-wide mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h1 className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase tracking-wide mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Respuestas Claras.<br/><span className="text-[#00BFFF]">Sin Rodeos.</span>
           </h1>
-          <p className="text-sm text-[#C0C0C0] font-medium leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <p className="text-sm text-[#C0C0C0] font-medium leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             Todo lo que necesitas saber sobre nuestra plataforma de inteligencia automotriz y cómo operamos en el mercado de 0km.
           </p>
         </div>
@@ -94,7 +94,7 @@ export default function FaqClient() {
                 >
                   <span 
                     className={`font-bold text-sm md:text-base pr-8 transition-colors ${isOpen ? 'text-[#00BFFF]' : 'text-[#0A1F33] group-hover:text-[#00BFFF]'}`} 
-                    style={{ fontFamily: 'Inter, sans-serif' }}
+                    style={{ fontFamily: 'var(--font-inter), sans-serif' }}
                   >
                     {faq.pregunta}
                   </span>
@@ -108,7 +108,7 @@ export default function FaqClient() {
                   className={`overflow-hidden transition-all duration-300 ease-in-out bg-[#F8F9FA] ${isOpen ? 'max-h-[500px] opacity-100 border-t border-[#C0C0C0]/50' : 'max-h-0 opacity-0'}`}
                 >
                   <div className="p-6">
-                    <p className="text-[#3A3A3C] text-sm leading-relaxed mb-4 font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    <p className="text-[#3A3A3C] text-sm leading-relaxed mb-4 font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
                       {faq.respuesta}
                     </p>
                     
@@ -129,7 +129,7 @@ export default function FaqClient() {
       {/* FOOTER CALL TO ACTION */}
       <footer className="w-full bg-[#FFFFFF] border-t border-[#C0C0C0] py-16 px-4 text-center">
         <div className="max-w-[600px] mx-auto">
-          <h2 className="font-black text-2xl text-[#0A1F33] uppercase mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+          <h2 className="font-black text-2xl text-[#0A1F33] uppercase mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             ¿Aún no encuentras tu respuesta?
           </h2>
           <p className="text-xs text-[#3A3A3C] uppercase tracking-widest mb-8 font-bold">

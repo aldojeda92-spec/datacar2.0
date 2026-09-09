@@ -343,8 +343,8 @@ function CatalogoContent() {
       <a href={normalizeExternalUrl(adToShow.link)} target="_blank" rel="noopener noreferrer" key={`injected-ad-${adToShow.id}`} className="col-span-full block w-full bg-[#3A3A3C] border-2 border-transparent hover:border-[#00BFFF] flex flex-col md:flex-row justify-between items-center p-6 md:p-8 relative transition-colors group overflow-hidden mb-2 mt-2 rounded-none">
         <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Patrocinado: {adToShow.sponsor}</span>
         <div className="flex flex-col text-left z-10 mt-6 md:mt-0">
-          <p className="font-black text-2xl sm:text-3xl md:text-4xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.headline} <span className="text-[#00BFFF]">{adToShow.highlight}</span></p>
-          <p className="font-black text-xl sm:text-2xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'Montserrat, sans-serif' }}>{adToShow.price}</p>
+          <p className="font-black text-2xl sm:text-3xl md:text-4xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{adToShow.headline} <span className="text-[#00BFFF]">{adToShow.highlight}</span></p>
+          <p className="font-black text-xl sm:text-2xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{adToShow.price}</p>
         </div>
         <div className="mt-6 md:mt-0 flex justify-end z-10 relative h-32 w-full md:w-1/2">
           {isValidImageSrc(adToShow.img) && (
@@ -368,13 +368,13 @@ function CatalogoContent() {
       <header className="w-full border-b border-[#C0C0C0] bg-[#FFFFFF] pt-6 pb-6">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8">
           <p className="text-[10px] font-medium text-[#C0C0C0] mb-2 uppercase tracking-widest"><Link href="/" className="hover:text-[#3A3A3C] transition-colors">Inicio</Link> / <span className="font-bold text-[#3A3A3C]">Catálogo</span></p>
-          <h1 className="font-black text-3xl md:text-4xl text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>Catálogo de autos 0km</h1>
+          <h1 className="font-black text-3xl md:text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Catálogo de autos 0km</h1>
         </div>
       </header>
 
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-8 flex flex-col md:flex-row gap-8 items-start mb-24" ref={topRef}>
         
-        <aside className="w-full md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-none border border-[#C0C0C0]" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <aside className="w-full md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-none border border-[#C0C0C0]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <div className="bg-[#FFFFFF]">
             <div className="p-4 border-b border-[#C0C0C0] flex justify-between items-center bg-[#F5F5F5] sticky top-0 z-10">
               <h2 className="font-bold text-[#0A1F33] text-sm uppercase tracking-wider">Parámetros</h2>
@@ -451,7 +451,7 @@ function CatalogoContent() {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-1">Presupuesto Asignado</p>
-                  <p className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  <p className="text-sm font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
                     Mostrando autos entre <span className="font-bold">US$ {Number(priceRange.from || 0).toLocaleString()}</span> y <span className="font-bold">{priceRange.to ? `US$ ${Number(priceRange.to).toLocaleString()}` : 'Sin límite'}</span>
                   </p>
                 </div>
@@ -514,20 +514,20 @@ function CatalogoContent() {
                         </div>
                         
                         <div className="p-5 flex flex-col">
-                          <h3 className="text-[14px] text-[#3A3A3C] uppercase tracking-wide mb-1" style={{ fontFamily: 'Inter, sans-serif' }}>
-                            {auto.brand} <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>{auto.name}</span>
+                          <h3 className="text-[14px] text-[#3A3A3C] uppercase tracking-wide mb-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                            {auto.brand} <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.name}</span>
                           </h3>
                           <p className="text-[11px] font-bold text-[#C0C0C0] uppercase mb-2 truncate" title={auto.versionName || 'Versión Base'}>
                             {auto.versionName || 'Versión Base'}
                           </p>
-                          <p className="text-[10px] text-[#3A3A3C] font-medium uppercase mb-4" style={{ fontFamily: 'Inter, sans-serif' }}>
+                          <p className="text-[10px] text-[#3A3A3C] font-medium uppercase mb-4" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
                             {auto.tipo_carroceria} • {auto.transmision || 'Consultar'}
                           </p>
                           
                           <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50 flex justify-between items-end">
                             <div className="flex flex-col">
                               <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-0.5">Desde</span>
-                              <span className="font-black text-[18px] text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+                              <span className="font-black text-[18px] text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                                 US$ {auto.price.toLocaleString()}
                               </span>
                             </div>
@@ -644,8 +644,8 @@ function CatalogoFooter() {
       <div className="bg-[#0A1F33] border-b-4 border-[#00BFFF]">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-16 flex flex-col md:flex-row justify-between items-center gap-12">
           <div className="md:w-1/2 text-center md:text-left">
-            <h3 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>Suscribite a las oportunidades.</h3>
-            <p className="text-sm text-[#C0C0C0] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Sé el primero en enterarte de todas las oportunidades de 0km en tu e-mail.</p>
+            <h3 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Suscribite a las oportunidades.</h3>
+            <p className="text-sm text-[#C0C0C0] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Sé el primero en enterarte de todas las oportunidades de 0km en tu e-mail.</p>
           </div>
           <div className="md:w-1/2 w-full max-w-lg">
             <NewsletterForm />
@@ -661,8 +661,8 @@ function CatalogoFooter() {
 
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-16 flex flex-col md:flex-row gap-12 items-start">
         <div className="md:w-1/3 shrink-0">
-          <h2 className="text-3xl text-[#3A3A3C] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-            Preguntas <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>frecuentes</span>
+          <h2 className="text-3xl text-[#3A3A3C] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+            Preguntas <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>frecuentes</span>
           </h2>
         </div>
         
@@ -675,12 +675,12 @@ function CatalogoFooter() {
                 aria-controls={`faq-catalogo-panel-${index}`}
                 className="w-full flex justify-between items-center text-left focus:outline-none group border-none bg-transparent"
               >
-                <span className="font-bold text-sm text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors pr-4" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.q}</span>
+                <span className="font-bold text-sm text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors pr-4" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>{faq.q}</span>
                 <span className="text-[#0A1F33] text-2xl font-light">{openFaq === index ? '−' : '+'}</span>
               </button>
 
               <div id={`faq-catalogo-panel-${index}`} className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-                <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium pr-8" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.a}</p>
+                <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium pr-8" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>{faq.a}</p>
               </div>
             </div>
           ))}

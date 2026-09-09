@@ -56,10 +56,10 @@ export default function DatacarCheckBadge({ size = 'sm', concesionariaNombre, cl
           <div className="w-10 h-10 bg-[#1E8E3E] flex items-center justify-center text-[#FFFFFF] shrink-0">
             <ShieldCheckIcon className="w-5 h-5" />
           </div>
-          <h3 className="font-black text-xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>{DATACAR_CHECK_TITLE}</h3>
+          <h3 className="font-black text-xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{DATACAR_CHECK_TITLE}</h3>
         </div>
 
-        <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           {DATACAR_CHECK_BODY}
         </p>
 
