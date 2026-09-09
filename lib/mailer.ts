@@ -32,9 +32,13 @@ export const sendLeadNotificationEmail = async (params: LeadNotificationParams) 
       }
     }
 
-    const waNumber = params.leadPhone.startsWith('0') ? `595${params.leadPhone.substring(1)}` : params.leadPhone;
+    // El lead puede no haber dejado celular (ahora es opcional). Solo armamos el
+    // link de WhatsApp si el número es un móvil PY válido.
+    const isValidMobile = /^09\d{8}$/.test(params.leadPhone || '');
     const waPreMessage = encodeURIComponent(`Hola ${params.leadName}, recibimos tu consulta desde DATACAR por el ${params.vehicleOfInterest}. ¿Cómo te podemos ayudar?`);
-    const waLink = `https://wa.me/${waNumber}?text=${waPreMessage}`;
+    const waLink = isValidMobile
+      ? `https://wa.me/595${params.leadPhone.substring(1)}?text=${waPreMessage}`
+      : '';
 
     // El servidor (/api/mail) arma y escapa el HTML; acá solo se envían datos crudos.
     const response = await fetch('/api/mail', {

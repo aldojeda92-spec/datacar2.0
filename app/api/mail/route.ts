@@ -54,14 +54,16 @@ function buildLeadHtml(d: any): string {
         <table style="width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; color: #3A3A3C;">
           <tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 35%; text-transform: uppercase; color: #C0C0C0;">Vehículo:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #00BFFF; text-transform: uppercase; font-size: 14px;">${escapeHtml(d?.vehicleOfInterest)}</td></tr>
           <tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #C0C0C0;">Nombre:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; color: #0A1F33;">${escapeHtml(d?.leadName)}</td></tr>
-          <tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #C0C0C0;">WhatsApp:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33; font-size: 14px;">${escapeHtml(d?.leadPhone)}</td></tr>
+          <tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #C0C0C0;">Celular:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33; font-size: 14px;">${escapeHtml(d?.leadPhone)}</td></tr>
           <tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #C0C0C0;">Email:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; color: #3A3A3C;">${escapeHtml(d?.leadEmail || 'No proporcionado')}</td></tr>
           <tr><td style="padding: 12px; font-weight: 700; text-transform: uppercase; color: #C0C0C0;">Asignación:</td><td style="padding: 12px; font-weight: 900; color: #0A1F33; text-transform: uppercase;">${escapeHtml(d?.nombreConcesionariaOficial)}</td></tr>
         </table>
         <div style="margin-top: 32px; text-align: center;">
-          <a href="${escapeHtml(d?.waLink)}" style="background-color: #1E8E3E; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">
-            Contactar por WhatsApp
-          </a>
+          ${d?.waLink
+            ? `<a href="${escapeHtml(d.waLink)}" style="background-color: #1E8E3E; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">Contactar por WhatsApp</a>`
+            : (d?.leadEmail
+                ? `<a href="mailto:${escapeHtml(d.leadEmail)}" style="background-color: #0A1F33; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">Responder por Email</a>`
+                : `<p style="font-size: 11px; color: #C0C0C0; text-transform: uppercase; letter-spacing: 2px;">El lead no dejó celular. Contactalo por email.</p>`)}
         </div>
       </div>
     </div>

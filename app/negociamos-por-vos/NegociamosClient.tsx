@@ -30,6 +30,8 @@ export default function NegociamosClient() {
   
   // Estado para gatillar el LeadModal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // Escalón blando: consulta gratis de 15 min antes de comprometerse al servicio pago.
+  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
 
   // Estado del Acordeón FAQ
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -154,6 +156,23 @@ export default function NegociamosClient() {
                 <button type="submit" className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors mt-4 rounded-none border border-transparent">
                   Quiero delegar mi compra
                 </button>
+
+                <div className="flex items-center gap-3 my-1">
+                  <span className="flex-1 h-px bg-[#C0C0C0]/60" />
+                  <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">o</span>
+                  <span className="flex-1 h-px bg-[#C0C0C0]/60" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCallModalOpen(true)}
+                  className="w-full bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors rounded-none"
+                >
+                  Agendá una llamada gratis de 15 min
+                </button>
+                <p className="text-[10px] text-[#3A3A3C] font-medium text-center leading-relaxed">
+                  ¿Todavía comparando? Un asesor te orienta sin costo ni compromiso antes de que decidas.
+                </p>
               </form>
             </div>
           </div>
@@ -309,6 +328,15 @@ export default function NegociamosClient() {
         vehiculoInteres={modelName}
         marcaVehiculo={brandName}
         origenLead="Servicio Premium - Negociamos por vos"
+        concesionariaDestino="A designar (Central DATACAR)"
+      />
+
+      <LeadModal
+        isOpen={isCallModalOpen}
+        onClose={() => setIsCallModalOpen(false)}
+        vehiculoInteres="Consulta gratuita de 15 min"
+        marcaVehiculo={selectedBrand ? brandName : ''}
+        origenLead="Negociamos - Consulta gratuita 15min"
         concesionariaDestino="A designar (Central DATACAR)"
       />
 

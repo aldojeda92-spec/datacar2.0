@@ -20,6 +20,7 @@ import { FAQ_FICHA_VEHICULO as faqs } from '../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../lib/compareStorage';
 import { getCachedConcesionarias } from '../../../../lib/catalogCache';
 import { buildCheckedDealershipSet, isDatacarCheck } from '../../../../lib/datacarCheck';
+import { track } from '../../../../lib/analytics';
 import DatacarCheckBadge from '../../../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../../../components/Navbar';
 
@@ -78,6 +79,8 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
   // Estados UI (Modales y Expansores Flat)
   const [showConsultar, setShowConsultar] = useState(false);
   const [versionToConsult, setVersionToConsult] = useState<VersionData | null>(null); // Nuevo estado dinámico para LeadModal
+  // 'ficha' = CTA normal | 'calc' = vino de la calculadora (lead más caliente).
+  const [leadOrigen, setLeadOrigen] = useState<'ficha' | 'calc'>('ficha');
   const [showCalcular, setShowCalcular] = useState(false);
   const confortDisclosure = useDisclosure(false);
   const securityDisclosure = useDisclosure(false);
@@ -153,10 +156,23 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
     e.preventDefault();
     const entregaNum = Number(calcForm.entrega) || 0;
     const plazoNum = Number(calcForm.plazo) || 36;
+    track('calc_run', { origen: 'Ficha Modelo', marca: brand?.name, modelo: model?.name });
     if (entregaNum >= precioDesde) { setFeedback({ type: 'error', message: 'La entrega debe ser menor al precio del auto.' }); return; }
 
-    setCuotaCalculada(calcularCuotaFrancesa(precioDesde, entregaNum, plazoNum, config));
+    const cuota = calcularCuotaFrancesa(precioDesde, entregaNum, plazoNum, config);
+    setCuotaCalculada(cuota);
     setFeedback({ type: '', message: '' });
+    track('calc_result_view', { origen: 'Ficha Modelo', marca: brand?.name, cuota: Math.round(cuota) });
+  };
+
+  // La calculadora es el lead más caliente de la ficha: cierra el modal de
+  // cálculo y abre el de contacto con el resumen financiero como contexto.
+  const handleLeadDesdeCalc = () => {
+    track('calc_lead_click', { origen: 'Ficha Modelo', marca: brand?.name });
+    setShowCalcular(false);
+    setVersionToConsult(null);
+    setLeadOrigen('calc');
+    setShowConsultar(true);
   };
 
   const handleComparar = (version: VersionData) => {
@@ -246,7 +262,7 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
 
             <div className="flex flex-col gap-3">
               {/* TRIGGER MODAL GLOBAL: Envía el modelo general */}
-              <button onClick={() => { setVersionToConsult(null); setShowConsultar(true); }} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 border border-transparent rounded-none">
+              <button onClick={() => { setVersionToConsult(null); setLeadOrigen('ficha'); setShowConsultar(true); }} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 border border-transparent rounded-none">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> Consultar Asesor
               </button>
               <button onClick={() => setShowCalcular(true)} className="w-full bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 rounded-none">
@@ -295,7 +311,7 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
                   </div>
                   <div className="flex flex-col gap-2 w-full sm:w-auto">
                     {/* TRIGGER MODAL GLOBAL: Envía la versión específica */}
-                    <button onClick={() => { setVersionToConsult(ver); setShowConsultar(true); }} className="w-full sm:w-40 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent rounded-none">Consultar</button>
+                    <button onClick={() => { setVersionToConsult(ver); setLeadOrigen('ficha'); setShowConsultar(true); }} className="w-full sm:w-40 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent rounded-none">Consultar</button>
                     <div className="flex gap-2">
                       <Link href={`/catalogo/${marcaSlug}/${modeloSlug}/${ver.id}`} className="flex-1 sm:w-20 text-center bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none">Detalles</Link>
                       <button onClick={() => handleComparar(ver)} className={`flex-1 sm:w-24 border font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors flex justify-center items-center gap-1 rounded-none ${isInCompare ? 'bg-[#E6F4EA] border-[#1E8E3E] text-[#1E8E3E]' : 'bg-[#F8F9FA] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#00BFFF] hover:text-[#00BFFF]'}`}>
@@ -443,10 +459,14 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
       {/* INYECCIÓN DEL MODAL GLOBAL B2B */}
       <LeadModal
         isOpen={showConsultar}
-        onClose={() => setShowConsultar(false)}
-        vehiculoInteres={versionToConsult ? versionToConsult.name : model.name}
+        onClose={() => { setShowConsultar(false); setLeadOrigen('ficha'); }}
+        vehiculoInteres={
+          leadOrigen === 'calc' && cuotaCalculada !== null
+            ? `${model.name} — cuota estimada US$ ${cuotaCalculada.toLocaleString('en-US', { maximumFractionDigits: 0 })}/mes (entrega US$ ${Number(calcForm.entrega).toLocaleString()}, ${calcForm.plazo} meses)`
+            : versionToConsult ? versionToConsult.name : model.name
+        }
         marcaVehiculo={brand?.name || ''}
-        origenLead="Ficha Modelo y Versiones"
+        origenLead={leadOrigen === 'calc' ? 'Calculadora en Ficha' : 'Ficha Modelo y Versiones'}
         concesionariaDestino={versionToConsult?.concesionaria || baseVersion?.concesionaria || brand?.name || 'Central DATACAR'}
       />
 
@@ -474,10 +494,38 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
                   <p className="text-[11px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-2">Cuota Mensual Estimada</p>
                   <p className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
                   <p className="text-[9px] text-[#3A3A3C] uppercase tracking-widest mt-4 max-w-md mx-auto">* Tasa referencial {(config.tasa_anual * 100).toFixed(1)}% anual. Sujeto a aprobación crediticia.</p>
+                  <button
+                    type="button"
+                    onClick={handleLeadDesdeCalc}
+                    className="mt-5 w-full bg-[#1E8E3E] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[11px] uppercase tracking-widest py-3.5 transition-colors border border-transparent rounded-none"
+                  >
+                    Quiero esta cuota — que me contacten
+                  </button>
+                  <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest mt-2">Un asesor te confirma la cuota real y las bonificaciones.</p>
                 </div>
               )}
             </form>
       </Modal>
+
+      {/* CTA STICKY MOBILE: la ficha es larga y los botones del héroe quedan
+          fuera de vista al hacer scroll. Se oculta si el dock de comparación
+          está activo (mismo borde inferior). */}
+      {compareList.length === 0 && (
+        <div className="lg:hidden fixed bottom-0 left-0 w-full z-40 bg-[#FFFFFF] border-t border-[#C0C0C0] flex gap-2 p-3">
+          <button
+            onClick={() => { setShowCalcular(true); }}
+            className="flex-1 border border-[#0A1F33] text-[#0A1F33] font-bold text-[10px] uppercase tracking-widest py-3 rounded-none"
+          >
+            Calcular cuota
+          </button>
+          <button
+            onClick={() => { setVersionToConsult(null); setLeadOrigen('ficha'); setShowConsultar(true); }}
+            className="flex-[1.4] bg-[#00BFFF] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 rounded-none"
+          >
+            Consultar asesor
+          </button>
+        </div>
+      )}
 
       {/* DOCK DE COMPARACIÓN FLOTANTE */}
       {compareList.length > 0 && (

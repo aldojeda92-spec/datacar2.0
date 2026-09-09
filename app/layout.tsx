@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { LeadProvider } from "./context/LeadContext"; // Inyección del contexto global
 import { ToastProvider } from "./context/ToastContext";
+import WhatsAppButton from "./components/WhatsAppButton";
 
 // Configuración estricta según Manual de Marca.
 // `display: 'swap'` + `adjustFontFallback` (default) generan un fallback con
@@ -76,6 +77,7 @@ export default function RootLayout({
             {children}
           </LeadProvider>
         </ToastProvider>
+        <WhatsAppButton />
       </body>
     </html>
   );

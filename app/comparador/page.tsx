@@ -14,6 +14,7 @@ import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 import Modal from '../components/a11y/Modal';
 import { sendComparisonLinkEmail, sendLeadNotificationEmail } from '../../lib/mailer';
 import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarCheck';
+import { track } from '../../lib/analytics';
 import DatacarCheckBadge from '../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../components/Navbar';
 
@@ -92,6 +93,7 @@ function ComparadorContent() {
 
   // Estados de Lead (Asesoría Directa a través de LeadModal)
   const [consultingVehicle, setConsultingVehicle] = useState<VersionDetail | null>(null);
+  const [comparativaLeadOpen, setComparativaLeadOpen] = useState(false);
 
   // Estados para Lead Magnet (Compartir PDF/Enlace)
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -242,6 +244,7 @@ function ComparadorContent() {
     const newItem = { id: v.id, name: `${v.brandName} ${v.modelName} ${v.versionName}`, price: v.price };
     const newList = [...compareItems, newItem];
     saveCompareList(newList);
+    track('compare_add', { total: newList.length });
     setSearchModalOpen(false);
     setSearchTerm('');
     // Navegación client-side: el efecto keyeado en `searchParams` recarga el
@@ -264,6 +267,7 @@ function ComparadorContent() {
     e.preventDefault();
     if (!shareEmail) return;
 
+    track('comparison_share_submit', { autos: compareItems.length });
     setShareFeedback({ type: '', message: 'Enviando comparativa a tu correo...' });
     
     // Construimos la URL unívoca
@@ -541,9 +545,9 @@ function ComparadorContent() {
             <div className="md:w-1/2 text-center md:text-left">
               <h4 className="font-black text-2xl uppercase mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Dudas sobre esta comparativa?</h4>
               <p className="text-[11px] text-[#C0C0C0] uppercase tracking-widest mb-6">Un especialista te asesora en 5 minutos para acompañarte en tu decisión.</p>
-              <Link href="/negociamos-por-vos" className="bg-[#1E8E3E] hover:bg-[#FFFFFF] hover:text-[#1E8E3E] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest px-8 py-4 border border-transparent transition-colors flex items-center justify-center gap-3 w-full md:w-max">
+              <button onClick={() => setComparativaLeadOpen(true)} className="bg-[#1E8E3E] hover:bg-[#FFFFFF] hover:text-[#1E8E3E] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest px-8 py-4 border border-transparent transition-colors flex items-center justify-center gap-3 w-full md:w-max">
                 Solicitar Asesoría Personalizada
-              </Link>
+              </button>
             </div>
             <div className="md:w-1/3 flex flex-col gap-3">
               <button onClick={() => setShareModalOpen(true)} className="w-full border border-[#C0C0C0] text-[#C0C0C0] hover:bg-[#FFFFFF] hover:text-[#0A1F33] hover:border-[#0A1F33] font-bold text-[10px] uppercase tracking-widest py-4 px-6 transition-colors flex items-center justify-center gap-2">
@@ -615,13 +619,23 @@ function ComparadorContent() {
       {/* ==========================================
           INYECCIÓN DEL MODAL INTELIGENTE (LEAD B2B)
           ========================================== */}
-      <LeadModal 
-        isOpen={!!consultingVehicle} 
-        onClose={() => setConsultingVehicle(null)} 
-        vehiculoInteres={consultingVehicle?.name || ''} 
+      <LeadModal
+        isOpen={!!consultingVehicle}
+        onClose={() => setConsultingVehicle(null)}
+        vehiculoInteres={consultingVehicle?.name || ''}
         marcaVehiculo={consultingVehicle?.brandName || ''}
-        origenLead="Comparador B2C" 
-        concesionariaDestino={consultingVehicle?.concesionaria || ''} 
+        origenLead="Comparador B2C"
+        concesionariaDestino={consultingVehicle?.concesionaria || ''}
+      />
+
+      {/* Asesoría sobre la comparativa completa (antes: <Link> a otra página). */}
+      <LeadModal
+        isOpen={comparativaLeadOpen}
+        onClose={() => setComparativaLeadOpen(false)}
+        vehiculoInteres={`Comparativa: ${vehiclesData.map(v => `${v.brandName} ${v.modelName}`).join(' vs ')}`}
+        marcaVehiculo={vehiclesData.map(v => v.brandName).join(' / ')}
+        origenLead="Comparador — Asesoría comparativa"
+        concesionariaDestino="A designar (Central DATACAR)"
       />
     </main>
   );

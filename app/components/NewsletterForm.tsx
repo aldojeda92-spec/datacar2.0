@@ -6,6 +6,7 @@ import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } fro
 // CORRECCIÓN BUGS DE RUTA: Subimos dos niveles (../../) para llegar a la raíz del proyecto
 import { db } from '../../lib/firebase';
 import { sendWelcomeEmail } from '../../lib/mailer';
+import { track } from '../../lib/analytics';
 
 export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: string }) {
   const [email, setEmail] = useState('');
@@ -31,6 +32,7 @@ export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: st
       
       if (!snap.empty) {
         setStatus('exists');
+        track('newsletter_submit', { origen, resultado: 'existente' });
         setTimeout(() => setStatus('idle'), 3000);
         return;
       }
@@ -46,6 +48,7 @@ export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: st
       // 3. Disparar el Correo B2C (Welcome)
       await sendWelcomeEmail(email.toLowerCase().trim());
 
+      track('newsletter_submit', { origen, resultado: 'nuevo' });
       setStatus('success');
       setEmail('');
       setTimeout(() => setStatus('idle'), 4000);
