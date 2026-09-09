@@ -4,7 +4,7 @@
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
@@ -79,6 +79,7 @@ const NAV_ITEMS: NavItem[] = [
 // ==========================================
 function ComparadorContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [compareItems, setCompareList] = useState<CompareItem[]>([]);
   const [vehiclesData, setVehiclesData] = useState<VersionDetail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -241,8 +242,12 @@ function ComparadorContent() {
     const newItem = { id: v.id, name: `${v.brandName} ${v.modelName} ${v.versionName}`, price: v.price };
     const newList = [...compareItems, newItem];
     saveCompareList(newList);
-    // Modificamos la URL y recargamos para que el SSR limpie el caché
-    window.location.href = `/comparador?autos=${newList.map(i=>i.id).join(',')}`;
+    setSearchModalOpen(false);
+    setSearchTerm('');
+    // Navegación client-side: el efecto keyeado en `searchParams` recarga el
+    // comparador con el auto nuevo sin un full reload (antes: window.location.href
+    // = cascada CSR completa de nuevo => rage-click).
+    router.push(`/comparador?autos=${newList.map(i => i.id).join(',')}`);
   };
 
   const clearCompare = () => {
@@ -328,7 +333,7 @@ function ComparadorContent() {
             <p className="text-[10px] font-medium text-[#C0C0C0] mb-2 uppercase tracking-widest">
               <Link href="/" className="hover:text-[#3A3A3C] transition-colors">Inicio</Link> / <span className="font-bold text-[#3A3A3C]">Comparador</span>
             </p>
-            <h1 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+            <h1 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               Comparador de <span className="text-[#00BFFF]">Autos</span>
             </h1>
           </div>
@@ -345,7 +350,7 @@ function ComparadorContent() {
         {vehiclesData.length === 0 ? (
           <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-16 text-center flex flex-col items-center justify-center my-8 shadow-none">
             <span className="text-4xl mb-4">⚖️</span>
-            <h2 className="font-black text-2xl text-[#0A1F33] uppercase mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+            <h2 className="font-black text-2xl text-[#0A1F33] uppercase mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               No hay autos seleccionados
             </h2>
             <p className="text-[11px] text-[#3A3A3C] uppercase tracking-widest mb-8">
@@ -370,7 +375,7 @@ function ComparadorContent() {
                 <tr className="bg-[#FFFFFF]">
                   <th className="p-6 bg-[#F8F9FA] w-1/4 align-bottom border-r border-[#C0C0C0] sticky left-0 z-20">
                     <span className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest block mb-1">Características</span>
-                    <span className="font-black text-xl text-[#0A1F33] uppercase" style={{ fontFamily: 'Montserrat, sans-serif' }}>Detalles</span>
+                    <span className="font-black text-xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Detalles</span>
                   </th>
                   
                   {[0, 1, 2].map(idx => {
@@ -397,7 +402,7 @@ function ComparadorContent() {
                                 )}
                               </div>
                               <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{veh.brandName}</p>
-                              <h3 className="font-black text-base md:text-lg text-[#0A1F33] uppercase leading-tight line-clamp-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{veh.modelName}</h3>
+                              <h3 className="font-black text-base md:text-lg text-[#0A1F33] uppercase leading-tight line-clamp-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{veh.modelName}</h3>
                               <p className="text-[10px] text-[#00BFFF] font-bold uppercase tracking-wider mb-2 truncate" title={veh.name}>{veh.name}</p>
                               {isDatacarCheck(veh.concesionaria, checkedDealershipSet) && (
                                 <DatacarCheckBadge size="sm" concesionariaNombre={veh.concesionaria} />
@@ -406,7 +411,7 @@ function ComparadorContent() {
                             
                             <div className="pt-4 border-t border-[#C0C0C0]/40 mt-auto">
                               <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-1">Precio Contado</span>
-                              <span className="font-black text-xl md:text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {veh.price.toLocaleString()}</span>
+                              <span className="font-black text-xl md:text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {veh.price.toLocaleString()}</span>
                               
                               <button onClick={() => setConsultingVehicle(veh)} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 border border-transparent transition-colors">
                                 Consultar
@@ -426,7 +431,7 @@ function ComparadorContent() {
                 </tr>
               </thead>
 
-              <tbody className="text-xs text-[#3A3A3C]" style={{ fontFamily: 'Inter, sans-serif' }}>
+              <tbody className="text-xs text-[#3A3A3C]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
                 
                 {/* 1. MOTOR Y TRANSMISIÓN */}
                 <tr className="bg-[#0A1F33] text-[#FFFFFF] border-b border-[#C0C0C0]">
@@ -534,7 +539,7 @@ function ComparadorContent() {
         <footer className="w-full bg-[#0A1F33] text-[#FFFFFF] py-12 mt-auto border-t-4 border-[#00BFFF]">
           <div className="max-w-[1400px] mx-auto px-4 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="md:w-1/2 text-center md:text-left">
-              <h4 className="font-black text-2xl uppercase mb-2" style={{ fontFamily: 'Montserrat, sans-serif' }}>¿Dudas sobre esta comparativa?</h4>
+              <h4 className="font-black text-2xl uppercase mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Dudas sobre esta comparativa?</h4>
               <p className="text-[11px] text-[#C0C0C0] uppercase tracking-widest mb-6">Un especialista te asesora en 5 minutos para acompañarte en tu decisión.</p>
               <Link href="/negociamos-por-vos" className="bg-[#1E8E3E] hover:bg-[#FFFFFF] hover:text-[#1E8E3E] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest px-8 py-4 border border-transparent transition-colors flex items-center justify-center gap-3 w-full md:w-max">
                 Solicitar Asesoría Personalizada
@@ -557,7 +562,7 @@ function ComparadorContent() {
         panelClassName="bg-[#FFFFFF] p-8 max-w-2xl w-full border-t-4 border-[#00BFFF] relative shadow-none"
       >
             <button onClick={() => { setSearchModalOpen(false); setSearchTerm(''); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black text-lg border-none outline-none">✕</button>
-            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Agregar Auto</h3>
+            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Agregar Auto</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">Busca modelo o versión específica para comparar</p>
 
             <div className="flex border border-[#0A1F33] mb-4 bg-[#FFFFFF]">
@@ -574,7 +579,7 @@ function ComparadorContent() {
                   return (
                     <button type="button" key={v.id} disabled={isAlreadyAdded} onClick={() => !isAlreadyAdded && handleAddVersion(v)} className={`appearance-none text-left w-full p-4 border-b border-[#C0C0C0]/40 flex justify-between items-center transition-colors ${isAlreadyAdded ? 'opacity-50 cursor-not-allowed bg-[#E6E6E6]' : 'cursor-pointer hover:bg-[#FFFFFF] hover:border-l-4 hover:border-l-[#00BFFF]'}`}>
                       <div className="flex flex-col"><span className="font-bold text-xs text-[#0A1F33] uppercase">{v.brandName} {v.modelName}</span><span className="text-[10px] text-[#3A3A3C] uppercase tracking-widest">{v.versionName}</span></div>
-                      <div className="flex items-center gap-4"><span className="text-[11px] font-black text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {v.price.toLocaleString()}</span>{isAlreadyAdded ? <span className="text-[9px] text-[#D93025] font-bold uppercase">Agregado</span> : <span className="text-[10px] text-[#00BFFF] font-black">+ Agregar</span>}</div>
+                      <div className="flex items-center gap-4"><span className="text-[11px] font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {v.price.toLocaleString()}</span>{isAlreadyAdded ? <span className="text-[9px] text-[#D93025] font-bold uppercase">Agregado</span> : <span className="text-[10px] text-[#00BFFF] font-black">+ Agregar</span>}</div>
                     </button>
                   )
                 })
@@ -592,7 +597,7 @@ function ComparadorContent() {
         panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#00BFFF] relative shadow-none"
       >
             <button onClick={() => { setShareModalOpen(false); setShareFeedback({type:'', message:''}); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black border-none outline-none">✕</button>
-            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Guardar Comparativa</h3>
+            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Guardar Comparativa</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">Ingresá tu correo para recibir un enlace único y no perder tu búsqueda.</p>
             
             <form onSubmit={handleShareSubmit} className="flex flex-col gap-4">

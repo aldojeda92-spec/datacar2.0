@@ -28,10 +28,10 @@ const NAV_ITEMS: NavItem[] = [
 // ==========================================
 // INTERFACES
 // ==========================================
-interface ModelData {
+export interface ModelData {
   id: string; brandId: string; name: string; tipo_carroceria: string; startingPrice: number; imgUrl: string; origen: string;
 }
-interface VersionData {
+export interface VersionData {
   id: string; modelId: string; name: string; price: number; concesionaria?: string; promocion?: string; url_auto?: string;
   specs: { 
     motor: string; transmision: string; combustible: string; traccion: string; plazas: number; 
@@ -47,18 +47,29 @@ interface VersionData {
     confort_conveniencia?: string[]; seguridad_standard?: string[]; 
   };
 }
-interface BrandData { name: string; origen_marca: string; }
+export interface BrandData { name: string; origen_marca: string; }
 
-export default function VersionDetailClient() {
+interface VersionDetailClientProps {
+  initialVersion?: VersionData | null;
+  initialModel?: ModelData | null;
+  initialBrand?: BrandData | null;
+}
+
+export default function VersionDetailClient({
+  initialVersion = null,
+  initialModel = null,
+  initialBrand = null,
+}: VersionDetailClientProps = {}) {
   const params = useParams();
   const versionId = params.version as string;
   const marcaSlug = params.marca as string;
   const modeloSlug = params.modelo as string;
 
-  const [loading, setLoading] = useState(true);
-  const [model, setModel] = useState<ModelData | null>(null);
-  const [brand, setBrand] = useState<BrandData | null>(null);
-  const [version, setVersion] = useState<VersionData | null>(null);
+  // Con datos del servidor el héroe se pinta desde el HTML, sin gate de carga.
+  const [loading, setLoading] = useState(!(initialVersion && initialModel));
+  const [model, setModel] = useState<ModelData | null>(initialModel);
+  const [brand, setBrand] = useState<BrandData | null>(initialBrand);
+  const [version, setVersion] = useState<VersionData | null>(initialVersion);
   
   const [config, setConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
   const [cuotaCalculada, setCuotaCalculada] = useState<number | null>(null);
@@ -83,39 +94,39 @@ export default function VersionDetailClient() {
   useEffect(() => {
     const fetchData = async () => {
       if (!versionId) return;
-      setLoading(true);
       try {
-        const confSnap = await getDoc(doc(db, 'config', 'financial'));
-        if (confSnap.exists()) setConfig(confSnap.data() as FinancialConfig);
+        // versión/modelo/marca pueden venir del servidor (props). Solo se leen de
+        // Firestore si faltan (navegación SPA hacia esta ruta).
+        if (!(initialVersion && initialModel)) {
+          const versionSnap = await getDoc(doc(db, 'versions', versionId));
+          if (!versionSnap.exists()) { setLoading(false); return; }
+          const vData = { id: versionSnap.id, ...versionSnap.data() } as VersionData;
+          setVersion(vData);
 
-        const versionRef = doc(db, 'versions', versionId);
-        const versionSnap = await getDoc(versionRef);
-        
-        if (!versionSnap.exists()) { setLoading(false); return; }
-        const vData = { id: versionSnap.id, ...versionSnap.data() } as VersionData;
-        setVersion(vData);
-
-        const modelRef = doc(db, 'models', vData.modelId);
-        const modelSnap = await getDoc(modelRef);
-        if (modelSnap.exists()) {
-          const mData = { id: modelSnap.id, ...modelSnap.data() } as ModelData;
-          setModel(mData);
-          
-          const brandRef = doc(db, 'brands', mData.brandId);
-          const brandSnap = await getDoc(brandRef);
-          if (brandSnap.exists()) setBrand(brandSnap.data() as BrandData);
+          const modelSnap = await getDoc(doc(db, 'models', vData.modelId));
+          if (modelSnap.exists()) {
+            const mData = { id: modelSnap.id, ...modelSnap.data() } as ModelData;
+            setModel(mData);
+            const brandSnap = await getDoc(doc(db, 'brands', mData.brandId));
+            if (brandSnap.exists()) setBrand(brandSnap.data() as BrandData);
+          }
         }
 
-        setCompareList(getStoredCompareList());
+        // Lecturas secundarias en paralelo (antes en serie tras el modelo).
+        const [confSnap, concesionariasData] = await Promise.all([
+          getDoc(doc(db, 'config', 'financial')),
+          getCachedConcesionarias(),
+        ]);
+        if (confSnap.exists()) setConfig(confSnap.data() as FinancialConfig);
 
-        const concesionariasData = await getCachedConcesionarias();
+        setCompareList(getStoredCompareList());
         setCheckedDealershipSet(buildCheckedDealershipSet(concesionariasData));
 
       } catch (error) { console.error("Error crítico leyendo datos:", error); }
       finally { setLoading(false); }
     };
     fetchData();
-  }, [versionId]);
+  }, [versionId, initialVersion, initialModel]);
 
   // ==========================================
   // LÓGICAS OPERATIVAS FRONTEND
@@ -196,8 +207,8 @@ export default function VersionDetailClient() {
             </div>
 
             <div className="md:w-1/2 p-10 flex flex-col justify-center bg-[#F8F9FA]">
-              <h1 className="text-xl text-[#3A3A3C] uppercase tracking-wide mb-1" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {brand?.name} {model.name} <span className="font-black text-[#0A1F33] text-2xl md:text-3xl block mt-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>{version.name}</span>
+              <h1 className="text-xl text-[#3A3A3C] uppercase tracking-wide mb-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                {brand?.name} {model.name} <span className="font-black text-[#0A1F33] text-2xl md:text-3xl block mt-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{version.name}</span>
               </h1>
               <p className="text-[11px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-6">
                 {normalizeCarroceria(model.tipo_carroceria)} | Origen: {model.origen || brand?.origen_marca || 'Consultar'} | ID: {version.id}
@@ -205,7 +216,7 @@ export default function VersionDetailClient() {
 
               <div className="mb-8 border-l-4 border-[#0A1F33] pl-4 bg-[#FFFFFF] p-4 border-t border-r border-b border-[#C0C0C0]">
                 <span className="text-[10px] uppercase font-bold text-[#C0C0C0] tracking-widest block mb-1">Precio de Lista Sugerido</span>
-                <span className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {version.price.toLocaleString()}</span>
+                <span className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {version.price.toLocaleString()}</span>
                 {version.promocion && <span className="mt-2 inline-block bg-[#00BFFF]/10 border border-[#00BFFF]/30 text-[#00BFFF] text-[9px] font-bold uppercase px-2 py-1 tracking-widest">{version.promocion}</span>}
                 {isDatacarCheck(version.concesionaria, checkedDealershipSet) && (
                   <div className="mt-3"><DatacarCheckBadge size="md" concesionariaNombre={version.concesionaria} /></div>
@@ -231,7 +242,7 @@ export default function VersionDetailClient() {
         </section>
 
         <section className="max-w-[1200px] mx-auto px-4 lg:px-8 mb-16">
-          <h2 className="font-black text-2xl text-[#0A1F33] uppercase mb-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>Ficha Técnica Detallada</h2>
+          <h2 className="font-black text-2xl text-[#0A1F33] uppercase mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Ficha Técnica Detallada</h2>
           
           <div className="bg-[#FFFFFF] border border-[#C0C0C0] overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-2">
@@ -358,7 +369,7 @@ export default function VersionDetailClient() {
         panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] rounded-none"
       >
             <button onClick={() => { setShowCalcular(false); setCuotaCalculada(null); setFeedback({type:'', message:''}); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black border-none outline-none">✕</button>
-            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'Montserrat, sans-serif' }}>Plan Financiero</h3>
+            <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Plan Financiero</h3>
             <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">Proyección base: US$ {version.price.toLocaleString()}</p>
             <form onSubmit={handleCalcular} className="flex flex-col gap-4">
               <div><label htmlFor="version-calc-entrega" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Capital de Entrega (USD)</label><input id="version-calc-entrega" type="number" placeholder="Ej: 15000" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={calcForm.entrega} onChange={e=>setCalcForm({...calcForm, entrega: e.target.value})} /></div>
@@ -373,7 +384,7 @@ export default function VersionDetailClient() {
               {cuotaCalculada !== null && feedback.type !== 'error' && (
                 <div className="mt-4 border-t-4 border-[#0A1F33] bg-[#F8F9FA] p-6 text-center">
                   <p className="text-[11px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-2">Cuota Mensual Estimada</p>
-                  <p className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
+                  <p className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
                   <p className="text-[9px] text-[#3A3A3C] uppercase tracking-widest mt-4 max-w-md mx-auto">* Tasa referencial {(config.tasa_anual * 100).toFixed(1)}% anual. Sujeto a evaluación crediticia.</p>
                 </div>
               )}
@@ -404,8 +415,8 @@ export default function VersionDetailClient() {
       <div className="w-full bg-[#FFFFFF] border-t border-[#C0C0C0] mt-auto">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-16 flex flex-col md:flex-row gap-12 items-start">
           <div className="md:w-1/3 shrink-0">
-            <h2 className="text-3xl text-[#3A3A3C] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-              Preguntas <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'Montserrat, sans-serif' }}>frecuentes</span>
+            <h2 className="text-3xl text-[#3A3A3C] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+              Preguntas <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>frecuentes</span>
             </h2>
           </div>
           <div className="md:w-2/3 w-full flex flex-col border-t border-[#C0C0C0]">
@@ -417,11 +428,11 @@ export default function VersionDetailClient() {
                   aria-controls={`faq-version-panel-${index}`}
                   className="w-full flex justify-between items-center text-left focus:outline-none group bg-transparent border-none"
                 >
-                  <span className="font-bold text-sm text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors pr-4" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.q}</span>
+                  <span className="font-bold text-sm text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors pr-4" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>{faq.q}</span>
                   <span className="text-[#0A1F33] text-2xl font-light">{openFaq === index ? '−' : '+'}</span>
                 </button>
                 <div id={`faq-version-panel-${index}`} className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-40 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-                  <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium pr-8" style={{ fontFamily: 'Inter, sans-serif' }}>{faq.a}</p>
+                  <p className="text-sm text-[#3A3A3C] leading-relaxed font-medium pr-8" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>{faq.a}</p>
                 </div>
               </div>
             ))}
@@ -431,8 +442,8 @@ export default function VersionDetailClient() {
         <div className="bg-[#0A1F33] border-t-4 border-[#00BFFF]">
           <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-16 flex flex-col md:flex-row justify-between items-center gap-12">
             <div className="md:w-1/2 text-center md:text-left">
-              <h3 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase mb-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>Suscribite a las oportunidades.</h3>
-              <p className="text-sm text-[#C0C0C0] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Sé el primero en enterarte de las mejores opciones de 0km en tu e-mail.</p>
+              <h3 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Suscribite a las oportunidades.</h3>
+              <p className="text-sm text-[#C0C0C0] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Sé el primero en enterarte de las mejores opciones de 0km en tu e-mail.</p>
             </div>
             <div className="md:w-1/2 w-full max-w-lg">
               {/* INYECCIÓN DEL COMPONENTE NEWSLETTER B2C */}
