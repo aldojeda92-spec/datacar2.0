@@ -542,17 +542,22 @@ export default function RecomendadorPage() {
       setIsSubmittingLead(false); return;
     }
 
+    // Nombre y email son opcionales (menos fricción para ver resultados). El email
+    // solo se valida si el usuario decidió cargarlo -- sirve para enviarle el PDF.
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(leadForm.email)) {
-      setFeedback({ type: 'error', message: 'Ingresá un correo electrónico válido.' });
+    const emailIngresado = leadForm.email.trim();
+    if (emailIngresado && !emailRegex.test(emailIngresado)) {
+      setFeedback({ type: 'error', message: 'El correo no parece válido. Podés dejarlo vacío si preferís.' });
       setIsSubmittingLead(false); return;
     }
 
+    const nombreLead = leadForm.nombre.trim() || 'Sin nombre (Recomendador)';
+
     try {
       await addDoc(collection(db, 'leads'), {
-        nombre: leadForm.nombre,
+        nombre: nombreLead,
         telefono: leadForm.telefono,
-        email: leadForm.email,
+        email: emailIngresado,
         vehiculo: 'Perfilado por Recomendador Interactivo',
         origen: 'Recomendador Interactivo',
         estado: 'Nuevo',
@@ -565,19 +570,21 @@ export default function RecomendadorPage() {
       // Disparo de correo B2B a la gerencia (fail-safe: el lead ya está guardado
       // en DB, sendLeadNotificationEmail nunca throwea, solo loguea si falla).
       await sendLeadNotificationEmail({
-        leadName: leadForm.nombre,
+        leadName: nombreLead,
         leadPhone: leadForm.telefono,
-        leadEmail: leadForm.email,
+        leadEmail: emailIngresado || 'No proporcionado',
         vehicleOfInterest: 'Perfilado por Recomendador Interactivo',
         origen: 'Recomendador Interactivo',
         concesionariaDestino: 'A designar (Central DATACAR)'
       });
 
       const finalTop3 = runAlgorithm();
-      await sendRecommendationResultsEmail(leadForm.email, finalTop3.map(m => ({
-        brandName: m.brandName, modelName: m.modelName, startingPrice: m.startingPrice,
-        matchPercentage: m.matchPercentage, badge: m.badge, brandId: m.brandId, modelId: m.id
-      })));
+      if (emailIngresado) {
+        await sendRecommendationResultsEmail(emailIngresado, finalTop3.map(m => ({
+          brandName: m.brandName, modelName: m.modelName, startingPrice: m.startingPrice,
+          matchPercentage: m.matchPercentage, badge: m.badge, brandId: m.brandId, modelId: m.id
+        })));
+      }
       setStep(WIZARD_STEPS.length + 3); // Salta a Resultados
     } catch (error) {
       console.error('Error guardando el lead del recomendador:', error);
@@ -812,28 +819,28 @@ export default function RecomendadorPage() {
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver a modificar respuestas
             </button>
             <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Ya casi tenés las mejores opciones</h2>
-            <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos tus datos para que podamos compartírtelo.</p>
-            
+            <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos un celular y te mostramos los 3 modelos.</p>
+
             <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 text-center rounded-none">
-              <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">Validación de Identidad</p>
-              <p className="text-xs text-[#1E8E3E]/80 mt-1">Ingresa tus datos para desbloquear los modelos sugeridos y enviarte el PDF comparativo.</p>
+              <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">Solo el celular es obligatorio</p>
+              <p className="text-xs text-[#1E8E3E]/80 mt-1">Lo usamos para que un asesor te acompañe si lo necesitás. El nombre y el correo son opcionales; si cargás el correo, te enviamos el PDF comparativo.</p>
             </div>
 
             <form onSubmit={submitLeadAndShowResults} className="flex flex-col gap-4">
               <div>
-                <input type="text" aria-label="Nombre completo" placeholder="Nombre Completo" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.nombre} onChange={e=>setLeadForm({...leadForm, nombre: e.target.value})} />
-              </div>
-              <div>
                 <input type="tel" minLength={10} maxLength={10} aria-label="Celular" placeholder="Celular (Ej: 0981234567)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.telefono} onChange={e=>setLeadForm({...leadForm, telefono: e.target.value})} />
               </div>
               <div>
-                <input type="email" aria-label="Correo electrónico" placeholder="Correo Electrónico" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
+                <input type="text" aria-label="Nombre (opcional)" placeholder="Nombre (opcional)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={leadForm.nombre} onChange={e=>setLeadForm({...leadForm, nombre: e.target.value})} />
               </div>
-              
+              <div>
+                <input type="email" aria-label="Correo electrónico (opcional)" placeholder="Correo electrónico (opcional, para el PDF)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
+              </div>
+
               <button type="submit" disabled={isSubmittingLead} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-5 transition-colors mt-2 disabled:opacity-50 flex items-center justify-center gap-2 rounded-none">
-                {isSubmittingLead ? 'Procesando...' : 'Ver Resultados Exactos'} <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                {isSubmittingLead ? 'Procesando...' : 'Ver mis 3 modelos'} <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
               </button>
-              
+
               <p className="text-[10px] text-center text-[#C0C0C0] uppercase tracking-widest mt-2">
                 🔒 Tus datos están encriptados. No enviamos spam.
               </p>
