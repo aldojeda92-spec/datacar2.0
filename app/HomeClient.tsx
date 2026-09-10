@@ -236,7 +236,7 @@ export default function HomeClient() {
       items: marcas.map(marca => ({ label: marca.name, href: `/catalogo?marca=${encodeURIComponent(marca.name)}` })),
     },
     {
-      type: 'megamenu', label: 'Herramientas', columns: 1, width: 250,
+      type: 'megamenu', label: 'Herramientas', columns: 1, width: 300,
       items: [
         { label: 'Comparador de Versiones', href: '/comparador' },
         { label: 'Calculadora de Cuotas', href: '/calculadora' },
