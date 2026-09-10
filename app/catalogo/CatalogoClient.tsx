@@ -11,6 +11,7 @@ import { LeadProvider } from '../context/LeadContext';
 import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
+import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
 import { normalizeExternalUrl } from '../../lib/externalUrl';
 import { buildCheckedDealershipSet, isDatacarCheck, DATACAR_CHECK_BODY } from '../../lib/datacarCheck';
 import DatacarCheckBadge from '../components/DatacarCheckBadge';
@@ -54,17 +55,6 @@ interface AdCampaign {
   startDate: string; endDate: string; isActive: boolean; 
 }
 
-// Diccionario Explicativo de Combustibles
-const combustibleLabels: Record<string, string> = {
-  'EV': 'Eléctrico Puro',
-  'PHEV': 'Híbrido Enchufable',
-  'HEV': 'Híbrido Convencional',
-  'MHEV': 'Micro Híbrido',
-  'REEV': 'Rango Extendido',
-  'Flex': 'Nafta/Etanol',
-  'Nafta': 'Combustión Interna',
-  'Diesel': 'Combustión Interna'
-};
 
 function CatalogoContent() {
   const searchParams = useSearchParams();
@@ -101,7 +91,7 @@ function CatalogoContent() {
     tipos: searchParams?.get('tipo') ? [searchParams.get('tipo') as string] : [],
     marcas: searchParams?.get('marca') ? [searchParams.get('marca') as string] : [],
     transmisiones: [] as string[], 
-    combustibles: searchParams?.get('combustible') ? [searchParams.get('combustible') as string] : [],
+    combustibles: searchParams?.get('combustible') ? [normalizeCombustible(searchParams.get('combustible'))] : [],
     tracciones: [] as string[], 
     plazas: [] as string[],
     origenes: [] as string[]
@@ -189,7 +179,7 @@ function CatalogoContent() {
             price: price,
             img: mData.imgUrl || '',
             transmision: specs.transmision || '',
-            combustible: specs.combustible || '',
+            combustible: normalizeCombustible(specs.combustible),
             traccion: specs.traccion || '',
             plazas: specs.plazas?.toString() || '',
             origen_marca: brandInfo.origen,
@@ -207,7 +197,7 @@ function CatalogoContent() {
 
           if (mData.tipo_carroceria) tempTipos.add(normalizeCarroceria(mData.tipo_carroceria));
           if (specs.plazas) tempPlazas.add(specs.plazas.toString());
-          if (specs.combustible) tempCombustibles.add(specs.combustible);
+          if (specs.combustible) tempCombustibles.add(normalizeCombustible(specs.combustible));
         });
 
         setAutos(Array.from(modelsTemp.values()));
@@ -413,7 +403,7 @@ function CatalogoContent() {
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Motorización</h3>
               <div className="flex flex-col gap-3">
-                {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="combustibles" subLabel={combustibleLabels[item.toUpperCase()]} onToggle={() => toggleFilter('combustibles', item)} />))}
+                {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={combustibleLabel(item) || item} value={item} category="combustibles" subLabel={combustibleLabel(item) ? item : undefined} onToggle={() => toggleFilter('combustibles', item)} />))}
               </div>
             </div>
 

@@ -8,6 +8,7 @@ import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firesto
 import { db } from '../../../../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../../../lib/imageSrc';
 import { normalizeCarroceria } from '../../../../../lib/carroceria';
+import { combustibleLabel } from '../../../../../lib/combustible';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../../lib/finance';
 import LeadModal from '../../../../components/LeadModal'; // INYECCIÓN B2B
 import NewsletterForm from '../../../../components/NewsletterForm'; // INYECCIÓN B2C
@@ -212,7 +213,7 @@ export default function VersionDetailClient({
                 )}
               </div>
               <div className="w-full grid grid-cols-3 gap-2 border-t border-[#C0C0C0] pt-6">
-                <div className="text-center"><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-1">Combustible</p><p className="font-black text-xs text-[#0A1F33] uppercase">{version.specs.combustible}</p></div>
+                <div className="text-center"><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-1">Combustible</p><p className="font-black text-xs text-[#0A1F33] uppercase">{combustibleLabel(version.specs.combustible) || version.specs.combustible}</p></div>
                 <div className="text-center border-l border-r border-[#C0C0C0]"><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-1">Transmisión</p><p className="font-black text-xs text-[#0A1F33] uppercase">{version.specs.transmision}</p></div>
                 <div className="text-center"><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-1">Garantía</p><p className="font-black text-xs text-[#00BFFF] uppercase">{version.specs.garantia || 'Consultar'}</p></div>
               </div>

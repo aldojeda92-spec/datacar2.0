@@ -10,6 +10,7 @@ import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
+import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
 import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../../lib/mailer';
 import Navbar from '../components/Navbar';
 import Modal from '../components/a11y/Modal';
@@ -30,17 +31,6 @@ const ALIAS = {
   TECHO: ['techo', 'panoramico', 'sunroof', 'quemacocos'],
   CAMARA: ['camara', 'cámara', '360', '540', 'retroceso', 'reversa'],
   TRACCION_4X4: ['4x4', 'awd', '4wd', 'integral']
-};
-
-const combustibleLabels: Record<string, string> = {
-  'EV': 'Eléctrico Puro',
-  'PHEV': 'Híbrido Enchufable',
-  'HEV': 'Híbrido Convencional',
-  'MHEV': 'Micro Híbrido',
-  'REEV': 'Rango Extendido',
-  'FLEX': 'Nafta/Etanol',
-  'NAFTA': 'Combustión Interna',
-  'DIESEL': 'Combustión Interna'
 };
 
 // ==========================================
@@ -174,7 +164,7 @@ export default function RecomendadorPage() {
           const equipScore = adasStr.length + confortStr.length;
 
           const plazas = Number(v.specs?.plazas) || 5;
-          const combustible = (v.specs?.combustible || '').trim().toUpperCase();
+          const combustible = normalizeCombustible(v.specs?.combustible);
 
           tempPlazas.add(plazas);
           if (combustible) tempCombustibles.add(combustible);
@@ -260,7 +250,7 @@ export default function RecomendadorPage() {
     {
       id: 'combustible', title: '¿Qué combustible preferís?', subtitle: 'Motorizaciones exactas disponibles en Paraguay.', isMultiple: true,
       options: [
-        ...combustiblesDisponibles.map(c => ({ label: c, desc: combustibleLabels[c] || 'Motorización Específica', value: c, icon: '⛽' })),
+        ...combustiblesDisponibles.map(c => ({ label: combustibleLabel(c) || c, desc: c, value: c, icon: '⛽' })),
         { label: 'Me da igual', desc: 'Cualquier motor', value: 'any', icon: '⚖️' }
       ]
     },
