@@ -54,6 +54,7 @@ interface AutoModel {
   concesionaria?: string;
   destacado: boolean;
   precioActualizado: string | null;
+  versiones: { id: string; name: string; price: number }[];
 }
 
 type SortKey = 'relevancia' | 'precio_asc' | 'precio_desc' | 'nombre';
@@ -89,17 +90,26 @@ function CatalogoContent() {
   useEffect(() => { setCompareItems(getStoredCompareList()); }, []);
   const compareIds = useMemo(() => new Set(compareItems.map(v => v.id)), [compareItems]);
 
+  // Version elegida en cada tarjeta para comparar (por defecto, la base).
+  const [versionSel, setVersionSel] = useState<Record<string, string>>({});
+  const versionAComparar = (auto: AutoModel) =>
+    auto.versiones.find(v => v.id === versionSel[auto.id]) ||
+    auto.versiones.find(v => v.id === auto.versionId) ||
+    auto.versiones[0] ||
+    (auto.versionId ? { id: auto.versionId, name: auto.versionName, price: auto.price } : null);
+
   const toggleCompare = (auto: AutoModel) => {
-    if (!auto.versionId) { showToast('Este modelo todavía no tiene una versión para comparar.'); return; }
+    const ver = versionAComparar(auto);
+    if (!ver?.id) { showToast('Este modelo todavía no tiene una versión para comparar.'); return; }
     setCompareItems(prev => {
-      const exists = prev.some(v => v.id === auto.versionId);
+      const exists = prev.some(v => v.id === ver.id);
       if (exists) {
-        const next = prev.filter(v => v.id !== auto.versionId);
+        const next = prev.filter(v => v.id !== ver.id);
         saveCompareList(next);
         return next;
       }
       if (prev.length >= 3) { showToast('El comparador admite hasta 3 autos.'); return prev; }
-      const next = [...prev, { id: auto.versionId, name: `${auto.brand} ${auto.name} ${auto.versionName}`.trim(), price: auto.price }];
+      const next = [...prev, { id: ver.id, name: `${auto.brand} ${auto.name} ${ver.name}`.trim(), price: ver.price }];
       saveCompareList(next);
       return next;
     });
@@ -263,7 +273,10 @@ function CatalogoContent() {
             origen_marca: brandInfo.origen,
             concesionaria: baseVersion.concesionaria || mData.concesionaria || '',
             destacado: mData.isPopular === true,
-            precioActualizado: formatFechaLarga(baseVersion.updatedAt ?? mData.updatedAt)
+            precioActualizado: formatFechaLarga(baseVersion.updatedAt ?? mData.updatedAt),
+            versiones: (validVersions.length ? validVersions : modelVersions)
+              .filter(v => v.id)
+              .map(v => ({ id: v.id as string, name: (v.name as string) || 'Versión', price: Number(v.price) || 0 }))
           };
 
           if (modelsTemp.has(uniqueKey)) {
@@ -613,28 +626,27 @@ function CatalogoContent() {
                   index === 6 || (index === currentAutos.length - 1 && currentAutos.length <= 6)
                 );
 
+                const verSel = versionAComparar(auto);
+                const enCompare = !!verSel && compareIds.has(verSel.id);
+                const multiVersion = auto.versiones.length > 1;
+
                 return (
                   <React.Fragment key={auto.id}>
                     {/* Renderizamos el Ad justo ANTES de la tarjeta número 7 */}
                     {showAdHere && index === 6 && renderAdBanner()}
 
                     <div className="relative h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
-                      {(() => {
-                        const enCompare = compareIds.has(auto.versionId);
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => toggleCompare(auto)}
-                            aria-pressed={enCompare}
-                            aria-label={enCompare ? `Quitar ${auto.brand} ${auto.name} del comparador` : `Agregar ${auto.brand} ${auto.name} al comparador`}
-                            title={enCompare ? 'Quitar del comparador' : 'Agregar al comparador'}
-                            className={`absolute top-2 right-2 z-20 flex items-center gap-1 border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-                            {enCompare ? 'Comparando' : 'Comparar'}
-                          </button>
-                        );
-                      })()}
+                      <button
+                        type="button"
+                        onClick={() => toggleCompare(auto)}
+                        aria-pressed={enCompare}
+                        aria-label={enCompare ? `Quitar ${auto.brand} ${auto.name} del comparador` : `Agregar ${auto.brand} ${auto.name} al comparador`}
+                        title={enCompare ? 'Quitar del comparador' : 'Agregar al comparador'}
+                        className={`absolute top-2 right-2 z-20 flex items-center gap-1 border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                        {enCompare ? 'Comparando' : 'Comparar'}
+                      </button>
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
                         <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
                           {isDatacarCheck(auto.concesionaria, checkedDealershipSet) && (
@@ -669,10 +681,12 @@ function CatalogoContent() {
                           <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50 flex justify-between items-end">
                             <div className="flex flex-col min-w-0">
                               <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-0.5 truncate">
-                                Desde · versión {auto.versionName || 'base'}
+                                {verSel && verSel.id !== auto.versionId
+                                  ? `Versión ${verSel.name}`
+                                  : `Desde · versión ${auto.versionName || 'base'}`}
                               </span>
                               <span className="font-black text-[18px] text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-                                US$ {auto.price.toLocaleString()}
+                                US$ {(verSel?.price || auto.price).toLocaleString()}
                               </span>
                             </div>
                           </div>
@@ -683,8 +697,23 @@ function CatalogoContent() {
                       </Link>
 
                       <div className="px-5 pb-5 flex flex-col gap-2 mt-auto">
-                        <BotonCotizar 
-                          vehiculoInteres={`${auto.brand} ${auto.name} ${auto.versionName}`}
+                        {multiVersion && (
+                          <label className="flex flex-col gap-1 text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest">
+                            Versión para comparar
+                            <select
+                              aria-label={`Elegir versión de ${auto.brand} ${auto.name} para comparar`}
+                              value={verSel?.id || ''}
+                              onChange={(e) => setVersionSel(prev => ({ ...prev, [auto.id]: e.target.value }))}
+                              className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-2 focus:outline-none focus:border-[#0A1F33] rounded-none"
+                            >
+                              {auto.versiones.map(v => (
+                                <option key={v.id} value={v.id}>{v.name} — US$ {v.price.toLocaleString()}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        <BotonCotizar
+                          vehiculoInteres={`${auto.brand} ${auto.name} ${verSel?.name || auto.versionName}`}
                           marcaVehiculo={auto.brand}
                           concesionariaDestino={auto.concesionaria || ''}
                           origenLead="Catálogo General"
