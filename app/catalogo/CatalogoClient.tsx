@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { getStoredCompareList, saveCompareList } from '../../lib/compareStorage';
 import { useToast } from '../context/ToastContext';
+import { formatFechaLarga } from '../../lib/fecha';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns, getCachedConcesionarias } from '../../lib/catalogCache';
 import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
@@ -51,6 +52,7 @@ interface AutoModel {
   origen_marca: string;
   concesionaria?: string;
   destacado: boolean;
+  precioActualizado: string | null;
 }
 
 type SortKey = 'relevancia' | 'precio_asc' | 'precio_desc' | 'nombre';
@@ -255,7 +257,8 @@ function CatalogoContent() {
             plazas: specs.plazas?.toString() || '',
             origen_marca: brandInfo.origen,
             concesionaria: baseVersion.concesionaria || mData.concesionaria || '',
-            destacado: mData.isPopular === true
+            destacado: mData.isPopular === true,
+            precioActualizado: formatFechaLarga(baseVersion.updatedAt ?? mData.updatedAt)
           };
 
           if (modelsTemp.has(uniqueKey)) {
@@ -641,6 +644,9 @@ function CatalogoContent() {
                               </span>
                             </div>
                           </div>
+                          {auto.precioActualizado && (
+                            <p className="text-[9px] text-[#C0C0C0] font-medium tracking-wide mt-2">Actualizado el {auto.precioActualizado}</p>
+                          )}
                         </div>
                       </Link>
 

@@ -11,6 +11,7 @@ import { db } from '../../../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../../lib/imageSrc';
 import { normalizeCarroceria } from '../../../../lib/carroceria';
 import { combustibleLabel } from '../../../../lib/combustible';
+import { formatFechaLarga } from '../../../../lib/fecha';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../lib/finance';
 import LeadModal from '../../../components/LeadModal';
 import NewsletterForm from '../../../components/NewsletterForm';
@@ -38,7 +39,8 @@ export interface ModelData {
 }
 interface VersionData {
   id: string; modelId: string; name: string; price: number; concesionaria?: string; promocion?: string; url_auto?: string;
-  specs: { 
+  updatedAt?: unknown;
+  specs: {
     motor: string; transmision: string; combustible: string; traccion: string; plazas: number; 
     airbags: number; tamanho_pantalla: number; garantia: string; alimentacion?: string; autonomi_electrica?: string; conectividad?: string;
   };
@@ -248,6 +250,9 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
               <span className="text-[10px] uppercase font-bold text-[#3A3A3C] tracking-widest block mb-1">Precio Desde</span>
               <span className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {precioDesde.toLocaleString()}</span>
               <span className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest block mt-1">+ Gastos de patentamiento</span>
+              {formatFechaLarga(baseVersion?.updatedAt) && (
+                <span className="text-[10px] text-[#C0C0C0] font-medium tracking-wide block mt-1">Precio actualizado el {formatFechaLarga(baseVersion?.updatedAt)}</span>
+              )}
               {isDatacarCheck(baseVersion?.concesionaria, checkedDealershipSet) && (
                 <div className="mt-3"><DatacarCheckBadge size="md" concesionariaNombre={baseVersion?.concesionaria} /></div>
               )}

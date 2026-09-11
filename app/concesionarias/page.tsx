@@ -272,7 +272,7 @@ export default function PortalConcesionariasPage() {
   // ==========================================
   const handleSavePrice = async (versionId: string, versionName: string) => {
     try {
-      await updateDoc(doc(db, 'versions', versionId), { price: Number(newPrice), promocion: newPromo });
+      await updateDoc(doc(db, 'versions', versionId), { price: Number(newPrice), promocion: newPromo, updatedAt: serverTimestamp() });
       await logAudit('UPDATE_PRICE', versionId, `Versión ${versionName} actualizada a US$ ${newPrice} | Promo: ${newPromo}`);
       
       setInventario(prev => prev.map(v => v.id === versionId ? { ...v, price: Number(newPrice), promocion: newPromo } : v));

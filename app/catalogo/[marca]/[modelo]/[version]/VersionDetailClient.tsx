@@ -9,6 +9,7 @@ import { db } from '../../../../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../../../lib/imageSrc';
 import { normalizeCarroceria } from '../../../../../lib/carroceria';
 import { combustibleLabel } from '../../../../../lib/combustible';
+import { formatFechaLarga } from '../../../../../lib/fecha';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../../lib/finance';
 import LeadModal from '../../../../components/LeadModal'; // INYECCIÓN B2B
 import NewsletterForm from '../../../../components/NewsletterForm'; // INYECCIÓN B2C
@@ -35,6 +36,7 @@ export interface ModelData {
 }
 export interface VersionData {
   id: string; modelId: string; name: string; price: number; concesionaria?: string; promocion?: string; url_auto?: string;
+  updatedAt?: unknown;
   specs: { 
     motor: string; transmision: string; combustible: string; traccion: string; plazas: number; 
     airbags: number; tamanho_pantalla: number; conectividad?: string; camaras?: string; garantia: string; 
@@ -230,6 +232,9 @@ export default function VersionDetailClient({
               <div className="mb-8 border-l-4 border-[#0A1F33] pl-4 bg-[#FFFFFF] p-4 border-t border-r border-b border-[#C0C0C0]">
                 <span className="text-[10px] uppercase font-bold text-[#C0C0C0] tracking-widest block mb-1">Precio de Lista Sugerido</span>
                 <span className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {version.price.toLocaleString()}</span>
+                {formatFechaLarga(version.updatedAt) && (
+                  <span className="block text-[10px] text-[#C0C0C0] font-medium tracking-wide mt-1">Precio actualizado el {formatFechaLarga(version.updatedAt)}</span>
+                )}
                 {version.promocion && <span className="mt-2 inline-block bg-[#00BFFF]/10 border border-[#00BFFF]/30 text-[#00BFFF] text-[9px] font-bold uppercase px-2 py-1 tracking-widest">{version.promocion}</span>}
                 {isDatacarCheck(version.concesionaria, checkedDealershipSet) && (
                   <div className="mt-3"><DatacarCheckBadge size="md" concesionariaNombre={version.concesionaria} /></div>
