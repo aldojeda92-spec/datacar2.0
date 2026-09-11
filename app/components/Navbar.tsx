@@ -84,7 +84,7 @@ export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
             }
 
             const isOpen = activeMenu === item.label;
-            const width = item.type === 'megamenu' ? item.width : 250;
+            const width = item.type === 'megamenu' ? item.width : 260;
             const cols = item.type === 'megamenu' ? item.columns : 1;
 
             return (
@@ -116,8 +116,8 @@ export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
                         key={sub.href}
                         href={sub.href}
                         className={sub.highlight
-                          ? 'p-3 text-[#00BFFF] font-black hover:bg-[#F5FBFF] transition-colors border border-transparent hover:border-[#00BFFF]/30 block truncate'
-                          : 'text-[#3A3A3C] hover:text-[#0A1F33] hover:font-black hover:pl-2 transition-all block truncate border-b border-transparent hover:border-[#00BFFF]'}
+                          ? 'p-3 text-[#00BFFF] font-black hover:bg-[#F5FBFF] transition-colors border border-transparent hover:border-[#00BFFF]/30 block leading-snug'
+                          : 'text-[#3A3A3C] hover:text-[#0A1F33] hover:font-black hover:pl-2 transition-all block leading-snug border-b border-transparent hover:border-[#00BFFF]'}
                       >
                         {sub.label}
                       </Link>

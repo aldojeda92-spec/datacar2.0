@@ -10,6 +10,9 @@ import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns } from '../../lib/catalogCache';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
+import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
+import GlosarioSiglas from '../components/GlosarioSiglas';
+import CarroceriaIcon from '../components/CarroceriaIcon';
 import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../../lib/mailer';
 import Navbar from '../components/Navbar';
 import Modal from '../components/a11y/Modal';
@@ -30,17 +33,6 @@ const ALIAS = {
   TECHO: ['techo', 'panoramico', 'sunroof', 'quemacocos'],
   CAMARA: ['camara', 'cámara', '360', '540', 'retroceso', 'reversa'],
   TRACCION_4X4: ['4x4', 'awd', '4wd', 'integral']
-};
-
-const combustibleLabels: Record<string, string> = {
-  'EV': 'Eléctrico Puro',
-  'PHEV': 'Híbrido Enchufable',
-  'HEV': 'Híbrido Convencional',
-  'MHEV': 'Micro Híbrido',
-  'REEV': 'Rango Extendido',
-  'FLEX': 'Nafta/Etanol',
-  'NAFTA': 'Combustión Interna',
-  'DIESEL': 'Combustión Interna'
 };
 
 // ==========================================
@@ -174,7 +166,7 @@ export default function RecomendadorPage() {
           const equipScore = adasStr.length + confortStr.length;
 
           const plazas = Number(v.specs?.plazas) || 5;
-          const combustible = (v.specs?.combustible || '').trim().toUpperCase();
+          const combustible = normalizeCombustible(v.specs?.combustible);
 
           tempPlazas.add(plazas);
           if (combustible) tempCombustibles.add(combustible);
@@ -209,81 +201,182 @@ export default function RecomendadorPage() {
     fetchEcosystem();
   }, []);
 
+  // Quien dijo "necesito orientación" no ve el cuestionario técnico: recibe un
+  // mini-flujo de estilo de vida (uso, personas, terreno, prioridad) que el
+  // motor traduce a specs en derivarPreferenciasNovato().
+  const perfilNovato = answers['conocimiento'] === 'novato';
+
   // ==========================================
   // 2. CONSTRUCCIÓN DINÁMICA DEL WIZARD
   // ==========================================
-  const WIZARD_STEPS: WizardStep[] = useMemo(() => [
-    {
-      id: 'conocimiento', title: '¿Cuánto sabés de autos?', subtitle: 'Esto nos ayuda a hacerte las preguntas correctas.', isMultiple: false,
+  const PRESUPUESTO_STEP: WizardStep = {
+    id: 'presupuesto', title: '¿Qué presupuesto tenés en mente?', subtitle: 'Nos ayuda a acotar las opciones reales.', isMultiple: false,
+    options: [
+      { label: 'Hasta US$ 18.000', value: '18000', icon: '💵' },
+      { label: 'US$ 18.000 a US$ 25.000', value: '25000', icon: '💰' },
+      { label: 'US$ 25.000 a US$ 40.000', value: '40000', icon: '💳' },
+      { label: 'Más de US$ 40.000', value: '999999', icon: '💎' }
+    ]
+  };
+
+  const WIZARD_STEPS: WizardStep[] = useMemo(() => {
+    const conocimiento: WizardStep = {
+      id: 'conocimiento', title: '¿Cuánto sabés de autos?', subtitle: 'Según lo que elijas te hacemos preguntas técnicas o preguntas sobre tu día a día.', isMultiple: false,
       options: [
-        { label: 'Sé bastante', desc: 'Tengo claro qué busco', value: 'experto', icon: '🏎️' },
-        { label: 'No tanto', desc: 'Necesito orientación', value: 'novato', icon: '🧭' }
+        { label: 'Sé bastante', desc: 'Quiero elegir marca, motor, caja...', value: 'experto', icon: '🏎️' },
+        { label: 'No tanto', desc: 'Prefiero que me orienten con preguntas simples', value: 'novato', icon: '🧭' }
       ]
-    },
-    {
-      id: 'carroceria', title: '¿Qué tipo de auto buscás?', subtitle: 'Buscamos solo entre estos tipos, en todas las marcas. Podés elegir varios.', isMultiple: true,
-      options: [
-        ...tiposDisponibles.map(t => ({ label: t, value: t, icon: '🚗' })),
-        { label: 'Sin preferencia', value: 'any', icon: '⚖️' }
-      ]
-    },
-    {
-      id: 'marcas', title: '¿Tenés alguna marca en mente?', subtitle: 'Podés elegir varias o ninguna.', isMultiple: true,
-      options: [
-        ...marcasDisponibles.map(m => ({ label: m, value: m })),
-        { label: 'Sin preferencia', value: 'any' }
-      ]
-    },
-    {
-      id: 'presupuesto', title: '¿Qué presupuesto tenés en mente?', subtitle: 'Nos ayuda a acotar las opciones reales.', isMultiple: false,
-      options: [
-        { label: 'Hasta US$ 18.000', value: '18000', icon: '💵' },
-        { label: 'US$ 18.000 a US$ 25.000', value: '25000', icon: '💰' },
-        { label: 'US$ 25.000 a US$ 40.000', value: '40000', icon: '💳' },
-        { label: 'Más de US$ 40.000', value: '999999', icon: '💎' }
-      ]
-    },
-    {
-      id: 'origen', title: '¿Preferís algún origen de fabricación?', subtitle: 'Cargado según el portafolio actual de marcas.', isMultiple: true,
-      options: [
-        ...origenesDisponibles.map(o => ({ label: o, value: o, icon: '🌍' })),
-        { label: 'Me da igual', value: 'any', icon: '⚖️' }
-      ]
-    },
-    {
-      id: 'plazas', title: '¿Cuántas plazas necesitás?', subtitle: 'Es un mínimo: también te mostramos opciones con más capacidad si entran en tu presupuesto.', isMultiple: false,
-      options: [
-        ...plazasDisponibles.map(p => ({ label: `${p} Plazas`, desc: `Capacidad para ${p} ocupantes`, value: p.toString(), icon: '👨‍👩‍👧‍👦' })),
-        { label: 'Sin preferencia', value: 'any', icon: '⚖️' }
-      ]
-    },
-    {
-      id: 'combustible', title: '¿Qué combustible preferís?', subtitle: 'Motorizaciones exactas disponibles en Paraguay.', isMultiple: true,
-      options: [
-        ...combustiblesDisponibles.map(c => ({ label: c, desc: combustibleLabels[c] || 'Motorización Específica', value: c, icon: '⛽' })),
-        { label: 'Me da igual', desc: 'Cualquier motor', value: 'any', icon: '⚖️' }
-      ]
-    },
-    {
-      id: 'transmision', title: '¿Qué tipo de caja preferís?', subtitle: 'La transmisión que más te acomoda.', isMultiple: false,
-      options: [
-        { label: 'Manual', desc: 'Control total (MT)', value: 'Manual', icon: '⚙️' },
-        { label: 'Automática', desc: 'Comodidad (AT, CVT, DCT)', value: 'Automatica', icon: 'A' },
-        { label: 'Me da igual', desc: '', value: 'any', icon: '⚖️' }
-      ]
-    },
-    {
-      id: 'features', title: '¿Qué cosas son importantes para vos?', subtitle: 'Seleccioná las que te interesan.', isMultiple: true,
-      options: [
-        { label: 'Cámara / Sensores', value: 'camara', icon: '🅿️' },
-        { label: 'Asistencias de manejo (ADAS)', value: 'adas', icon: '🛡️' },
-        { label: 'Asientos de Cuero', value: 'cuero', icon: '🛋️' },
-        { label: 'Techo panorámico', value: 'techo', icon: '☀️' },
-        { label: 'Tracción 4x4 / integral', value: '4x4', icon: '⛰️' },
-        { label: 'No tengo preferencia', value: 'any', icon: '⚖️' }
-      ]
+    };
+
+    if (perfilNovato) {
+      return [
+        conocimiento,
+        {
+          id: 'uso', title: '¿Para qué vas a usar el auto?', subtitle: 'Elegí lo que más se parezca a tu día a día.', isMultiple: false,
+          options: [
+            { label: 'Moverme por la ciudad', desc: 'Trayectos cortos, estacionar fácil', value: 'ciudad', icon: '🏙️' },
+            { label: 'Llevar a la familia', desc: 'Espacio y comodidad para todos', value: 'familia', icon: '👨‍👩‍👧‍👦' },
+            { label: 'Trabajo y carga', desc: 'Mercadería, herramientas, changas', value: 'carga', icon: '📦' },
+            { label: 'Viajes largos por ruta', desc: 'Kilómetros, confort en carretera', value: 'ruta', icon: '🛣️' },
+            { label: 'Salir de la ciudad / aventura', desc: 'Caminos de tierra, ripio', value: 'aventura', icon: '⛰️' }
+          ]
+        },
+        {
+          id: 'personas', title: '¿Cuántas personas viajan normalmente?', subtitle: 'Contando siempre al conductor.', isMultiple: false,
+          options: [
+            { label: '1 o 2', value: '2', icon: '🧍' },
+            { label: '3 o 4', value: '4', icon: '👨‍👩‍👧' },
+            { label: '5', value: '5', icon: '👨‍👩‍👧‍👦' },
+            { label: '6 o más', desc: 'Necesito 7 plazas', value: '7', icon: '🚐' }
+          ]
+        },
+        {
+          id: 'terreno', title: '¿Por dónde manejás más?', subtitle: 'Dónde pasa la mayor parte de los kilómetros.', isMultiple: false,
+          options: [
+            { label: 'Siempre asfalto', desc: 'Ciudad y ruta', value: 'asfalto', icon: '🛣️' },
+            { label: 'A veces caminos de tierra', desc: 'Ripio, barro ocasional', value: 'mixto', icon: '🌄' },
+            { label: 'Bastante fuera de asfalto', desc: 'Necesito tracción en las 4 ruedas', value: 'offroad', icon: '🏔️' }
+          ]
+        },
+        PRESUPUESTO_STEP,
+        {
+          id: 'prioridad', title: '¿Qué es lo más importante para vos?', subtitle: 'Elegí una. Nos ayuda a desempatar entre opciones parecidas.', isMultiple: false,
+          options: [
+            { label: 'Gastar poco combustible', value: 'consumo', icon: '⛽' },
+            { label: 'Seguridad', desc: 'Asistencias de manejo, más airbags', value: 'seguridad', icon: '🛡️' },
+            { label: 'Tecnología y confort', desc: 'Pantalla, cámara, sensores', value: 'tecnologia', icon: '📱' },
+            { label: 'El precio más bajo posible', value: 'precio', icon: '💲' },
+            { label: 'Me da igual, mostrame lo mejor', value: 'nada', icon: '⚖️' }
+          ]
+        }
+      ];
     }
-  ], [tiposDisponibles, marcasDisponibles, origenesDisponibles, plazasDisponibles, combustiblesDisponibles]);
+
+    return [
+      conocimiento,
+      {
+        id: 'carroceria', title: '¿Qué tipo de auto buscás?', subtitle: 'Buscamos solo entre estos tipos, en todas las marcas. Podés elegir varios.', isMultiple: true,
+        options: [
+          ...tiposDisponibles.map(t => ({ label: t, value: t })),
+          { label: 'Sin preferencia', value: 'any', icon: '⚖️' }
+        ]
+      },
+      {
+        id: 'marcas', title: '¿Tenés alguna marca en mente?', subtitle: 'Podés elegir varias o ninguna.', isMultiple: true,
+        options: [
+          ...marcasDisponibles.map(m => ({ label: m, value: m })),
+          { label: 'Sin preferencia', value: 'any' }
+        ]
+      },
+      PRESUPUESTO_STEP,
+      {
+        id: 'origen', title: '¿Preferís algún origen de fabricación?', subtitle: 'Cargado según el portafolio actual de marcas.', isMultiple: true,
+        options: [
+          ...origenesDisponibles.map(o => ({ label: o, value: o, icon: '🌍' })),
+          { label: 'Me da igual', value: 'any', icon: '⚖️' }
+        ]
+      },
+      {
+        id: 'plazas', title: '¿Cuántas plazas necesitás?', subtitle: 'Es un mínimo: también te mostramos opciones con más capacidad si entran en tu presupuesto.', isMultiple: false,
+        options: [
+          ...plazasDisponibles.map(p => ({ label: `${p} Plazas`, desc: `Capacidad para ${p} ocupantes`, value: p.toString(), icon: '👨‍👩‍👧‍👦' })),
+          { label: 'Sin preferencia', value: 'any', icon: '⚖️' }
+        ]
+      },
+      {
+        id: 'combustible', title: '¿Qué combustible preferís?', subtitle: 'Motorizaciones exactas disponibles en Paraguay.', isMultiple: true,
+        options: [
+          ...combustiblesDisponibles.map(c => ({ label: combustibleLabel(c) || c, desc: c, value: c, icon: '⛽' })),
+          { label: 'Me da igual', desc: 'Cualquier motor', value: 'any', icon: '⚖️' }
+        ]
+      },
+      {
+        id: 'transmision', title: '¿Qué tipo de caja preferís?', subtitle: 'La transmisión que más te acomoda.', isMultiple: false,
+        options: [
+          { label: 'Manual', desc: 'Control total (MT)', value: 'Manual', icon: '⚙️' },
+          { label: 'Automática', desc: 'Comodidad (AT, CVT, DCT)', value: 'Automatica', icon: 'A' },
+          { label: 'Me da igual', desc: '', value: 'any', icon: '⚖️' }
+        ]
+      },
+      {
+        id: 'features', title: '¿Qué cosas son importantes para vos?', subtitle: 'Seleccioná las que te interesan.', isMultiple: true,
+        options: [
+          { label: 'Cámara / Sensores', value: 'camara', icon: '🅿️' },
+          { label: 'Asistencias de manejo (ADAS)', value: 'adas', icon: '🛡️' },
+          { label: 'Asientos de Cuero', value: 'cuero', icon: '🛋️' },
+          { label: 'Techo panorámico', value: 'techo', icon: '☀️' },
+          { label: 'Tracción 4x4 / integral', value: '4x4', icon: '⛰️' },
+          { label: 'No tengo preferencia', value: 'any', icon: '⚖️' }
+        ]
+      }
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfilNovato, tiposDisponibles, marcasDisponibles, origenesDisponibles, plazasDisponibles, combustiblesDisponibles]);
+
+  // Traduce las respuestas de estilo de vida del perfil novato a las mismas
+  // claves de `answers` que consume runAlgorithm (carroceria, plazas,
+  // transmision, features, combustible...).
+  const derivarPreferenciasNovato = (a: Record<string, string>): Record<string, unknown> => {
+    const tiposSet = new Set(tiposDisponibles);
+    const pick = (...cands: string[]) => cands.filter(c => tiposSet.has(c));
+
+    let carroceria: string[] = [];
+    switch (a['uso']) {
+      case 'ciudad': carroceria = pick('HATCHBACK', 'SEDÁN', 'CROSSOVER', 'SUV'); break;
+      case 'familia': carroceria = pick('SUV', 'MINIVAN', 'SEDÁN', 'CROSSOVER'); break;
+      case 'carga': carroceria = pick('PICKUP', 'PICKUP DOBLE CABINA', 'FURGÓN', 'FURGÓN CARGO'); break;
+      case 'ruta': carroceria = pick('SEDÁN', 'SUV', 'CROSSOVER'); break;
+      case 'aventura': carroceria = pick('SUV', 'PICKUP', 'PICKUP DOBLE CABINA', 'CROSSOVER'); break;
+    }
+
+    const features: string[] = [];
+    const combustible: string[] = [];
+    let transmision = 'Automatica';
+
+    if (a['terreno'] === 'offroad') features.push('4x4');
+    if (a['personas'] === '7') carroceria = pick('SUV', 'MINIVAN', 'FURGÓN') .length ? pick('SUV', 'MINIVAN', 'FURGÓN') : carroceria;
+
+    switch (a['prioridad']) {
+      case 'consumo': {
+        const eco = ['HEV', 'MHEV', 'EV', 'PHEV'].filter(f => combustiblesDisponibles.includes(f));
+        if (eco.length) combustible.push(...eco);
+        break;
+      }
+      case 'seguridad': features.push('adas'); break;
+      case 'tecnologia': features.push('camara'); break;
+      case 'precio': transmision = 'any'; break;
+    }
+
+    return {
+      carroceria: carroceria.length ? carroceria : ['any'],
+      plazas: a['personas'] || 'any',
+      transmision,
+      marcas: ['any'],
+      origen: ['any'],
+      combustible: combustible.length ? combustible : ['any'],
+      features: features.length ? features : ['any'],
+    };
+  };
 
   // ==========================================
   // 3. LÓGICA DE NAVEGACIÓN Y RESPUESTAS
@@ -319,16 +412,23 @@ export default function RecomendadorPage() {
   // 4. ALGORITMO B2B DE RANKING Y ETIQUETADO
   // ==========================================
   const runAlgorithm = (): ScoredModel[] => {
+    // Perfil novato: sus respuestas de estilo de vida se traducen a las mismas
+    // claves que usa el resto del algoritmo. `src` es el set efectivo de
+    // preferencias (para el perfil experto es directamente `answers`).
+    const src = perfilNovato
+      ? { ...answers, ...derivarPreferenciasNovato(answers) }
+      : answers;
+
     // DEAL-BREAKERS (Excluyentes) — se evalúan por VERSIÓN, no por modelo,
     // para no premiar a los modelos con más trims con un simple OR entre versiones.
     const budgetMap: Record<string, number> = { '18000': 18000, '25000': 25000, '40000': 40000, '999999': 9999999 };
-    const maxBudget = budgetMap[answers['presupuesto']] || 9999999;
-    const reqPlazas = (answers['plazas'] && answers['plazas'] !== 'any') ? Number(answers['plazas']) : null;
+    const maxBudget = budgetMap[src['presupuesto']] || 9999999;
+    const reqPlazas = (src['plazas'] && src['plazas'] !== 'any') ? Number(src['plazas']) : null;
 
     // Carrocería es LIMITANTE (excluyente): si el usuario eligió un segmento,
     // solo se buscan autos de ese segmento en todas las marcas -- no suma puntos,
     // directamente descarta lo que no coincide.
-    const ansCarroceria = answers['carroceria'] || [];
+    const ansCarroceria = src['carroceria'] || [];
     const carroceriaEsFiltroDuro = !ansCarroceria.includes('any') && ansCarroceria.length > 0;
 
     // opts.bypassHardFilters se usa para el modelo de referencia que el usuario
@@ -397,7 +497,7 @@ export default function RecomendadorPage() {
         matchReasons.push({ label: `Plazas (mínimo ${reqPlazas})`, matched });
       }
 
-      const ansMarcas = answers['marcas'] || [];
+      const ansMarcas = src['marcas'] || [];
       if (!ansMarcas.includes('any') && ansMarcas.length > 0) {
         maxScore += 20;
         const matched = ansMarcas.some((m: string) => model.brandName === m);
@@ -405,7 +505,7 @@ export default function RecomendadorPage() {
         matchReasons.push({ label: 'Marca preferida', matched });
       }
 
-      const ansOrigen = answers['origen'] || [];
+      const ansOrigen = src['origen'] || [];
       if (!ansOrigen.includes('any') && ansOrigen.length > 0) {
         maxScore += 10;
         const matched = ansOrigen.some((o: string) => model.origen === o);
@@ -413,7 +513,7 @@ export default function RecomendadorPage() {
         matchReasons.push({ label: 'Origen de fabricación', matched });
       }
 
-      const ansComb = answers['combustible'] || [];
+      const ansComb = src['combustible'] || [];
       if (!ansComb.includes('any') && ansComb.length > 0) {
         maxScore += 15;
         const matched = ansComb.includes(repVersion.combustible);
@@ -421,11 +521,11 @@ export default function RecomendadorPage() {
         matchReasons.push({ label: 'Combustible', matched });
       }
 
-      if (answers['transmision'] && answers['transmision'] !== 'any') {
+      if (src['transmision'] && src['transmision'] !== 'any') {
         maxScore += 15;
         let matched = false;
-        if (answers['transmision'] === 'Automatica' && ALIAS.AUTO.some(a => repVersion.transmision.includes(a))) matched = true;
-        if (answers['transmision'] === 'Manual' && ALIAS.MANUAL.some(a => repVersion.transmision.includes(a))) matched = true;
+        if (src['transmision'] === 'Automatica' && ALIAS.AUTO.some(a => repVersion.transmision.includes(a))) matched = true;
+        if (src['transmision'] === 'Manual' && ALIAS.MANUAL.some(a => repVersion.transmision.includes(a))) matched = true;
         if (matched) score += 15;
         matchReasons.push({ label: 'Tipo de transmisión', matched });
       }
@@ -435,7 +535,7 @@ export default function RecomendadorPage() {
         cuero: 'Asientos de cuero', techo: 'Techo panorámico', '4x4': 'Tracción 4x4 / integral'
       };
       const featureFlags: Record<string, boolean> = { camara: hasCamara, adas: hasAdas, cuero: hasCuero, techo: hasTecho, '4x4': has4x4 };
-      const ansFeat = answers['features'] || [];
+      const ansFeat = src['features'] || [];
       if (!ansFeat.includes('any') && ansFeat.length > 0) {
         ansFeat.forEach((feat: string) => {
           maxScore += 10;
@@ -542,17 +642,22 @@ export default function RecomendadorPage() {
       setIsSubmittingLead(false); return;
     }
 
+    // Nombre y email son opcionales (menos fricción para ver resultados). El email
+    // solo se valida si el usuario decidió cargarlo -- sirve para enviarle el PDF.
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(leadForm.email)) {
-      setFeedback({ type: 'error', message: 'Ingresá un correo electrónico válido.' });
+    const emailIngresado = leadForm.email.trim();
+    if (emailIngresado && !emailRegex.test(emailIngresado)) {
+      setFeedback({ type: 'error', message: 'El correo no parece válido. Podés dejarlo vacío si preferís.' });
       setIsSubmittingLead(false); return;
     }
 
+    const nombreLead = leadForm.nombre.trim() || 'Sin nombre (Recomendador)';
+
     try {
       await addDoc(collection(db, 'leads'), {
-        nombre: leadForm.nombre,
+        nombre: nombreLead,
         telefono: leadForm.telefono,
-        email: leadForm.email,
+        email: emailIngresado,
         vehiculo: 'Perfilado por Recomendador Interactivo',
         origen: 'Recomendador Interactivo',
         estado: 'Nuevo',
@@ -565,19 +670,21 @@ export default function RecomendadorPage() {
       // Disparo de correo B2B a la gerencia (fail-safe: el lead ya está guardado
       // en DB, sendLeadNotificationEmail nunca throwea, solo loguea si falla).
       await sendLeadNotificationEmail({
-        leadName: leadForm.nombre,
+        leadName: nombreLead,
         leadPhone: leadForm.telefono,
-        leadEmail: leadForm.email,
+        leadEmail: emailIngresado || 'No proporcionado',
         vehicleOfInterest: 'Perfilado por Recomendador Interactivo',
         origen: 'Recomendador Interactivo',
         concesionariaDestino: 'A designar (Central DATACAR)'
       });
 
       const finalTop3 = runAlgorithm();
-      await sendRecommendationResultsEmail(leadForm.email, finalTop3.map(m => ({
-        brandName: m.brandName, modelName: m.modelName, startingPrice: m.startingPrice,
-        matchPercentage: m.matchPercentage, badge: m.badge, brandId: m.brandId, modelId: m.id
-      })));
+      if (emailIngresado) {
+        await sendRecommendationResultsEmail(emailIngresado, finalTop3.map(m => ({
+          brandName: m.brandName, modelName: m.modelName, startingPrice: m.startingPrice,
+          matchPercentage: m.matchPercentage, badge: m.badge, brandId: m.brandId, modelId: m.id
+        })));
+      }
       setStep(WIZARD_STEPS.length + 3); // Salta a Resultados
     } catch (error) {
       console.error('Error guardando el lead del recomendador:', error);
@@ -668,11 +775,15 @@ export default function RecomendadorPage() {
                       className={`bg-[#FFFFFF] border p-6 transition-colors flex flex-row items-center gap-4 text-left group rounded-none
                         ${isSelected ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] hover:border-[#0A1F33]'}`}
                     >
-                      {opt.icon && (
+                      {qId === 'carroceria' && opt.value !== 'any' ? (
+                        <div className={`w-10 h-10 flex items-center justify-center shrink-0 ${isSelected ? 'text-[#00BFFF]' : 'text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>
+                          <CarroceriaIcon tipo={opt.value} className="w-9 h-9" />
+                        </div>
+                      ) : opt.icon ? (
                         <div className={`w-10 h-10 flex items-center justify-center text-xl shrink-0 ${isSelected ? '' : 'grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100'}`}>
                           {opt.icon}
                         </div>
-                      )}
+                      ) : null}
                       <div className="flex-grow">
                         <span className={`font-bold text-sm block ${isSelected ? 'text-[#00BFFF]' : 'text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>{opt.label}</span>
                         {opt.desc && <span className="text-[10px] text-[#C0C0C0] mt-1 block">{opt.desc}</span>}
@@ -687,10 +798,18 @@ export default function RecomendadorPage() {
                 })}
               </div>
 
+              {['combustible', 'features'].includes(WIZARD_STEPS[step - 1].id) && (
+                <GlosarioSiglas
+                  className="mt-6"
+                  titulo="¿Qué significan estas siglas?"
+                  fuentes={WIZARD_STEPS[step - 1].options.flatMap(o => [o.label, o.value, o.desc])}
+                />
+              )}
+
               {WIZARD_STEPS[step - 1].isMultiple && (
                 <div className="mt-8 text-center">
-                  <button 
-                    onClick={() => advanceMultiple(WIZARD_STEPS[step-1].id)} 
+                  <button
+                    onClick={() => advanceMultiple(WIZARD_STEPS[step-1].id)}
                     disabled={!answers[WIZARD_STEPS[step-1].id] || answers[WIZARD_STEPS[step-1].id].length === 0}
                     className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-12 transition-colors inline-block disabled:opacity-30 disabled:bg-[#C0C0C0] disabled:cursor-not-allowed rounded-none"
                   >
@@ -812,28 +931,28 @@ export default function RecomendadorPage() {
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver a modificar respuestas
             </button>
             <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Ya casi tenés las mejores opciones</h2>
-            <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos tus datos para que podamos compartírtelo.</p>
-            
+            <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos un celular y te mostramos los 3 modelos.</p>
+
             <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 text-center rounded-none">
-              <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">Validación de Identidad</p>
-              <p className="text-xs text-[#1E8E3E]/80 mt-1">Ingresa tus datos para desbloquear los modelos sugeridos y enviarte el PDF comparativo.</p>
+              <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">Solo el celular es obligatorio</p>
+              <p className="text-xs text-[#1E8E3E]/80 mt-1">Lo usamos para que un asesor te acompañe si lo necesitás. El nombre y el correo son opcionales; si cargás el correo, te enviamos el PDF comparativo.</p>
             </div>
 
             <form onSubmit={submitLeadAndShowResults} className="flex flex-col gap-4">
               <div>
-                <input type="text" aria-label="Nombre completo" placeholder="Nombre Completo" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.nombre} onChange={e=>setLeadForm({...leadForm, nombre: e.target.value})} />
-              </div>
-              <div>
                 <input type="tel" minLength={10} maxLength={10} aria-label="Celular" placeholder="Celular (Ej: 0981234567)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.telefono} onChange={e=>setLeadForm({...leadForm, telefono: e.target.value})} />
               </div>
               <div>
-                <input type="email" aria-label="Correo electrónico" placeholder="Correo Electrónico" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
+                <input type="text" aria-label="Nombre (opcional)" placeholder="Nombre (opcional)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={leadForm.nombre} onChange={e=>setLeadForm({...leadForm, nombre: e.target.value})} />
               </div>
-              
+              <div>
+                <input type="email" aria-label="Correo electrónico (opcional)" placeholder="Correo electrónico (opcional, para el PDF)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
+              </div>
+
               <button type="submit" disabled={isSubmittingLead} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-5 transition-colors mt-2 disabled:opacity-50 flex items-center justify-center gap-2 rounded-none">
-                {isSubmittingLead ? 'Procesando...' : 'Ver Resultados Exactos'} <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                {isSubmittingLead ? 'Procesando...' : 'Ver mis 3 modelos'} <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
               </button>
-              
+
               <p className="text-[10px] text-center text-[#C0C0C0] uppercase tracking-widest mt-2">
                 🔒 Tus datos están encriptados. No enviamos spam.
               </p>
@@ -908,8 +1027,8 @@ export default function RecomendadorPage() {
                 <div className="w-6 h-6 bg-[#D93025] text-[#FFFFFF] flex items-center justify-center font-black rounded-none shrink-0">!</div>
                 <div>
                   <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">No encontramos autos con esa combinación exacta</p>
-                  <p className="text-xs text-[#3A3A3C] mb-3">No hay vehículos del tipo de carrocería que elegiste dentro de tu presupuesto. Probá ampliando el presupuesto o eligiendo otro tipo de carrocería.</p>
-                  <button onClick={() => setStep(2)} className="text-[10px] font-bold text-[#D93025] uppercase tracking-widest underline">Volver a elegir tipo de carrocería</button>
+                  <p className="text-xs text-[#3A3A3C] mb-3">No hay vehículos que encajen con lo que buscás dentro de tu presupuesto. Probá ampliando el presupuesto o cambiando alguna respuesta.</p>
+                  <button onClick={() => setStep(2)} className="text-[10px] font-bold text-[#D93025] uppercase tracking-widest underline">Volver a revisar mis respuestas</button>
                 </div>
               </div>
             )}

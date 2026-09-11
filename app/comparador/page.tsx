@@ -9,6 +9,7 @@ import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/fires
 import { db } from '../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../lib/compareStorage';
+import { combustibleLabel } from '../../lib/combustible';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedConcesionarias } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal'; // INYECCIÓN B2B CENTRALIZADA
 import Modal from '../components/a11y/Modal';
@@ -443,7 +444,7 @@ function ComparadorContent() {
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
                   <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Combustible</td>
-                  {[0, 1, 2].map(i => <td key={`combustible_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{vehiclesData[i]?.specs?.combustible || '-'}</td>)}
+                  {[0, 1, 2].map(i => <td key={`combustible_${i}`} className="p-4 border-r border-[#C0C0C0] last:border-0 font-medium uppercase text-center">{combustibleLabel(vehiclesData[i]?.specs?.combustible) || '-'}</td>)}
                 </tr>
                 <tr className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
                   <td className="p-4 font-bold bg-[#F8F9FA] border-r border-[#C0C0C0] text-[10px] uppercase tracking-widest text-[#C0C0C0] sticky left-0 z-10">Motor</td>

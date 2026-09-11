@@ -5,16 +5,22 @@ import React, { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
+import { getStoredCompareList, saveCompareList } from '../../lib/compareStorage';
+import { useToast } from '../context/ToastContext';
+import { formatFechaLarga } from '../../lib/fecha';
+import CarroceriaIcon from '../components/CarroceriaIcon';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns, getCachedConcesionarias } from '../../lib/catalogCache';
 import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
 import NewsletterForm from '../components/NewsletterForm'; // INYECCIÓN B2C
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
+import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
 import { normalizeExternalUrl } from '../../lib/externalUrl';
 import { buildCheckedDealershipSet, isDatacarCheck, DATACAR_CHECK_BODY } from '../../lib/datacarCheck';
 import DatacarCheckBadge from '../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../components/Navbar';
+import Modal from '../components/a11y/Modal';
 
 const NAV_ITEMS: NavItem[] = [
   { type: 'link', label: 'Recomendador', href: '/recomendador' },
@@ -32,21 +38,33 @@ const NAV_ITEMS: NavItem[] = [
 // INTERFACES (Alineadas a Matriz 4 y Ads)
 // ==========================================
 interface AutoModel {
-  id: string; 
-  brandId: string; 
-  brand: string; 
-  name: string; 
+  id: string;
+  versionId: string;
+  brandId: string;
+  brand: string;
+  name: string;
   versionName: string;
   tipo_carroceria: string;
-  price: number; 
-  img: string; 
+  price: number;
+  img: string;
   transmision: string;
-  combustible: string; 
-  traccion: string; 
+  combustible: string;
+  traccion: string;
   plazas: string;
   origen_marca: string;
-  concesionaria?: string; 
+  concesionaria?: string;
+  destacado: boolean;
+  precioActualizado: string | null;
+  versiones: { id: string; name: string; price: number }[];
 }
+
+type SortKey = 'relevancia' | 'precio_asc' | 'precio_desc' | 'nombre';
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'relevancia', label: 'Relevancia' },
+  { value: 'precio_asc', label: 'Precio: menor a mayor' },
+  { value: 'precio_desc', label: 'Precio: mayor a menor' },
+  { value: 'nombre', label: 'Marca y modelo (A-Z)' },
+];
 interface AdCampaign { 
   id: string; sponsor: string; headline: string; highlight: string; 
   price: string; link: string; img: string; location: string; 
@@ -54,17 +72,6 @@ interface AdCampaign {
   startDate: string; endDate: string; isActive: boolean; 
 }
 
-// Diccionario Explicativo de Combustibles
-const combustibleLabels: Record<string, string> = {
-  'EV': 'Eléctrico Puro',
-  'PHEV': 'Híbrido Enchufable',
-  'HEV': 'Híbrido Convencional',
-  'MHEV': 'Micro Híbrido',
-  'REEV': 'Rango Extendido',
-  'Flex': 'Nafta/Etanol',
-  'Nafta': 'Combustión Interna',
-  'Diesel': 'Combustión Interna'
-};
 
 function CatalogoContent() {
   const searchParams = useSearchParams();
@@ -76,6 +83,38 @@ function CatalogoContent() {
 
   // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
   const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
+
+  // COMPARADOR: seleccion rapida desde la tarjeta, compartida via localStorage
+  // con la ficha y el /comparador (misma key en lib/compareStorage).
+  const { showToast } = useToast();
+  const [compareItems, setCompareItems] = useState<{ id: string; name: string; price: number }[]>([]);
+  useEffect(() => { setCompareItems(getStoredCompareList()); }, []);
+  const compareIds = useMemo(() => new Set(compareItems.map(v => v.id)), [compareItems]);
+
+  // Version elegida en cada tarjeta para comparar (por defecto, la base).
+  const [versionSel, setVersionSel] = useState<Record<string, string>>({});
+  const versionAComparar = (auto: AutoModel) =>
+    auto.versiones.find(v => v.id === versionSel[auto.id]) ||
+    auto.versiones.find(v => v.id === auto.versionId) ||
+    auto.versiones[0] ||
+    (auto.versionId ? { id: auto.versionId, name: auto.versionName, price: auto.price } : null);
+
+  const toggleCompare = (auto: AutoModel) => {
+    const ver = versionAComparar(auto);
+    if (!ver?.id) { showToast('Este modelo todavía no tiene una versión para comparar.'); return; }
+    setCompareItems(prev => {
+      const exists = prev.some(v => v.id === ver.id);
+      if (exists) {
+        const next = prev.filter(v => v.id !== ver.id);
+        saveCompareList(next);
+        return next;
+      }
+      if (prev.length >= 3) { showToast('El comparador admite hasta 3 autos.'); return prev; }
+      const next = [...prev, { id: ver.id, name: `${auto.brand} ${auto.name} ${ver.name}`.trim(), price: ver.price }];
+      saveCompareList(next);
+      return next;
+    });
+  };
 
   // Referencia para el ancla de paginación
   const topRef = useRef<HTMLDivElement>(null);
@@ -91,38 +130,77 @@ function CatalogoContent() {
   const transmisionesOpciones = ['Automática', 'Manual'];
   const traccionesOpciones = ['4x2 / Simple', '4x4 / Integral'];
 
-  // Estados de Filtros URL
-  const [priceRange, setPriceRange] = useState({ 
-    from: searchParams?.get('minPrice') || '', 
-    to: searchParams?.get('maxPrice') || '' 
+  // ==========================================
+  // ESTADO DE FILTROS -- se hidrata desde la URL en el primer render y se
+  // vuelve a escribir en la URL ante cada cambio (con history.replaceState,
+  // sin re-navegar). Asi, al entrar a una ficha y volver con el navegador,
+  // los filtros, el orden y la pagina se conservan; ademas el catalogo
+  // filtrado queda compartible por link.
+  // ==========================================
+  // Multi-valor por parametro repetido (?marca=A&marca=B); tolera tambien el
+  // formato viejo de valor unico y las variantes de combustible sin normalizar.
+  const readListParam = (key: string, normalizer?: (v: string) => string): string[] => {
+    const all = searchParams?.getAll(key) ?? [];
+    return all.filter(Boolean).map(v => (normalizer ? normalizer(v) : v));
+  };
+
+  const [priceRange, setPriceRange] = useState({
+    from: searchParams?.get('minPrice') || '',
+    to: searchParams?.get('maxPrice') || ''
   });
 
   const [activeFilters, setActiveFilters] = useState({
-    tipos: searchParams?.get('tipo') ? [searchParams.get('tipo') as string] : [],
-    marcas: searchParams?.get('marca') ? [searchParams.get('marca') as string] : [],
-    transmisiones: [] as string[], 
-    combustibles: searchParams?.get('combustible') ? [searchParams.get('combustible') as string] : [],
-    tracciones: [] as string[], 
-    plazas: [] as string[],
-    origenes: [] as string[]
+    tipos: readListParam('tipo'),
+    marcas: readListParam('marca'),
+    transmisiones: readListParam('transmision'),
+    combustibles: readListParam('combustible', normalizeCombustible),
+    tracciones: readListParam('traccion'),
+    plazas: readListParam('plazas'),
+    origenes: readListParam('origen'),
+  });
+
+  // Buscador local del filtro de marca (no va a la URL: es solo para acotar
+  // la lista visible de 45+ checkboxes).
+  const [marcaQuery, setMarcaQuery] = useState('');
+
+  const [sortBy, setSortBy] = useState<SortKey>(() => {
+    const s = searchParams?.get('orden') as SortKey | null;
+    return s && SORT_OPTIONS.some(o => o.value === s) ? s : 'relevancia';
   });
 
   // ESTADO DE PAGINACIÓN
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const p = Number(searchParams?.get('pagina'));
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const ITEMS_PER_PAGE = 12; // Múltiplo de 3 para grillas perfectas
 
-  useEffect(() => {
-    const minP = searchParams?.get('minPrice');
-    const maxP = searchParams?.get('maxPrice');
-    if (minP || maxP) {
-      setPriceRange(prev => ({ ...prev, from: minP || prev.from, to: maxP || prev.to }));
-    }
-  }, [searchParams]);
+  // Evita que el primer render (con la pagina hidratada de la URL) la pise a 1.
+  const filtersHydrated = useRef(false);
 
-  // RESETEAR PAGINACIÓN AL CAMBIAR FILTROS
+  // RESETEAR PAGINACIÓN AL CAMBIAR FILTROS (no en el primer render)
   useEffect(() => {
+    if (!filtersHydrated.current) { filtersHydrated.current = true; return; }
     setCurrentPage(1);
-  }, [activeFilters, priceRange]);
+  }, [activeFilters, priceRange, sortBy]);
+
+  // ESCRIBIR EL ESTADO EN LA URL (sin re-navegar)
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (priceRange.from) params.set('minPrice', priceRange.from);
+    if (priceRange.to) params.set('maxPrice', priceRange.to);
+    activeFilters.tipos.forEach(v => params.append('tipo', v));
+    activeFilters.marcas.forEach(v => params.append('marca', v));
+    activeFilters.transmisiones.forEach(v => params.append('transmision', v));
+    activeFilters.combustibles.forEach(v => params.append('combustible', v));
+    activeFilters.tracciones.forEach(v => params.append('traccion', v));
+    activeFilters.plazas.forEach(v => params.append('plazas', v));
+    activeFilters.origenes.forEach(v => params.append('origen', v));
+    if (sortBy !== 'relevancia') params.set('orden', sortBy);
+    if (currentPage > 1) params.set('pagina', String(currentPage));
+    const qs = params.toString();
+    window.history.replaceState(null, '', qs ? `/catalogo?${qs}` : '/catalogo');
+  }, [activeFilters, priceRange, sortBy, currentPage]);
 
   // ==========================================
   // 1. SINCRONIZACIÓN Y DEDUPLICACIÓN
@@ -181,6 +259,7 @@ function CatalogoContent() {
 
           const autoData: AutoModel = {
             id: mData.id,
+            versionId: baseVersion.id || '',
             brandId: mData.brandId || 'sin-marca',
             brand: brandInfo.name,
             name: mData.name || '',
@@ -189,11 +268,16 @@ function CatalogoContent() {
             price: price,
             img: mData.imgUrl || '',
             transmision: specs.transmision || '',
-            combustible: specs.combustible || '',
+            combustible: normalizeCombustible(specs.combustible),
             traccion: specs.traccion || '',
             plazas: specs.plazas?.toString() || '',
             origen_marca: brandInfo.origen,
-            concesionaria: baseVersion.concesionaria || mData.concesionaria || ''
+            concesionaria: baseVersion.concesionaria || mData.concesionaria || '',
+            destacado: mData.isPopular === true,
+            precioActualizado: formatFechaLarga(baseVersion.updatedAt ?? mData.updatedAt),
+            versiones: (validVersions.length ? validVersions : modelVersions)
+              .filter(v => v.id)
+              .map(v => ({ id: v.id as string, name: (v.name as string) || 'Versión', price: Number(v.price) || 0 }))
           };
 
           if (modelsTemp.has(uniqueKey)) {
@@ -207,7 +291,7 @@ function CatalogoContent() {
 
           if (mData.tipo_carroceria) tempTipos.add(normalizeCarroceria(mData.tipo_carroceria));
           if (specs.plazas) tempPlazas.add(specs.plazas.toString());
-          if (specs.combustible) tempCombustibles.add(specs.combustible);
+          if (specs.combustible) tempCombustibles.add(normalizeCombustible(specs.combustible));
         });
 
         setAutos(Array.from(modelsTemp.values()));
@@ -241,8 +325,25 @@ function CatalogoContent() {
     });
   };
 
+  // Drawer de filtros en mobile: en pantallas chicas el panel deja de ir
+  // apilado arriba de los resultados (obligaba a scrollear todo eso antes
+  // de ver un solo auto) y pasa a un cajón que se abre a pedido.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (priceRange.from || priceRange.to ? 1 : 0) +
+    activeFilters.tipos.length + activeFilters.marcas.length + activeFilters.transmisiones.length +
+    activeFilters.combustibles.length + activeFilters.tracciones.length + activeFilters.plazas.length +
+    activeFilters.origenes.length;
+
+  const marcasFiltradas = useMemo(() => {
+    const q = marcaQuery.trim().toLowerCase();
+    if (!q) return marcasDisponibles;
+    return marcasDisponibles.filter(m => m.toLowerCase().includes(q));
+  }, [marcasDisponibles, marcaQuery]);
+
   const clearFilters = () => {
     setPriceRange({ from: '', to: '' });
+    setMarcaQuery('');
     setActiveFilters({ tipos: [], marcas: [], transmisiones: [], combustibles: [], tracciones: [], plazas: [], origenes: [] });
   };
 
@@ -284,6 +385,22 @@ function CatalogoContent() {
     });
   }, [activeFilters, priceRange, autos]);
 
+  // Orden aplicado sobre el resultado filtrado. "relevancia" respeta el orden
+  // de origen (destacados primero como desempate suave).
+  const autosOrdenados = useMemo(() => {
+    const list = [...autosFiltrados];
+    switch (sortBy) {
+      case 'precio_asc':
+        return list.sort((a, b) => a.price - b.price);
+      case 'precio_desc':
+        return list.sort((a, b) => b.price - a.price);
+      case 'nombre':
+        return list.sort((a, b) => `${a.brand} ${a.name}`.localeCompare(`${b.brand} ${b.name}`, 'es'));
+      default:
+        return list.sort((a, b) => Number(b.destacado) - Number(a.destacado));
+    }
+  }, [autosFiltrados, sortBy]);
+
   // ==========================================
   // 3. MOTOR DE INYECCIÓN CONTEXTUAL (ADS)
   // ==========================================
@@ -306,19 +423,25 @@ function CatalogoContent() {
   // ==========================================
   // 4. LÓGICA DE PAGINACIÓN
   // ==========================================
-  const totalPages = Math.ceil(autosFiltrados.length / ITEMS_PER_PAGE);
-  
+  const totalPages = Math.ceil(autosOrdenados.length / ITEMS_PER_PAGE);
+
+  // La pagina hidratada de la URL puede quedar fuera de rango si el catalogo
+  // devuelve menos resultados que antes.
+  useEffect(() => {
+    if (!isLoading && totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [isLoading, totalPages, currentPage]);
+
   const currentAutos = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return autosFiltrados.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [autosFiltrados, currentPage]);
+    return autosOrdenados.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [autosOrdenados, currentPage]);
 
   const goToPage = (pageNumber: number) => {
     setCurrentPage(pageNumber);
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const FlatCheckbox = ({ label, value, category, subLabel, onToggle }: { label: string, value?: string, category: keyof typeof activeFilters, subLabel?: string, onToggle: () => void }) => {
+  const FlatCheckbox = ({ label, value, category, subLabel, icon, onToggle }: { label: string, value?: string, category: keyof typeof activeFilters, subLabel?: string, icon?: React.ReactNode, onToggle: () => void }) => {
     const matchValue = value !== undefined ? value : label;
     const isChecked = activeFilters[category].some(item => item.toLowerCase() === matchValue.toLowerCase());
 
@@ -328,6 +451,7 @@ function CatalogoContent() {
         <div aria-hidden="true" className={`mt-0.5 w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
           {isChecked && <svg className="w-3 h-3 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
         </div>
+        {icon && <span className={`shrink-0 -mt-0.5 transition-colors ${isChecked ? 'text-[#0A1F33]' : 'text-[#C0C0C0] group-hover:text-[#3A3A3C]'}`}>{icon}</span>}
         <div className="flex flex-col">
           <span className={`text-[11px] uppercase tracking-wide transition-colors ${isChecked ? 'font-bold text-[#0A1F33]' : 'text-[#3A3A3C] font-medium group-hover:text-[#0A1F33]'}`}>{label}</span>
           {subLabel && <span className="text-[9px] text-[#C0C0C0] uppercase tracking-widest">{subLabel}</span>}
@@ -363,6 +487,85 @@ function CatalogoContent() {
     );
   };
 
+  // Secciones de filtro compartidas entre el sidebar de escritorio y el
+  // drawer de mobile, para no duplicar el markup de cada categoría.
+  const filtrosSecciones = (
+    <>
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Presupuesto (USD)</h3>
+        <div className="flex flex-col gap-2">
+          <input type="number" aria-label="Presupuesto mínimo en dólares" placeholder="Mínimo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.from} onChange={(e) => setPriceRange({...priceRange, from: e.target.value})} />
+          <input type="number" aria-label="Presupuesto máximo en dólares" placeholder="Máximo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.to} onChange={(e) => setPriceRange({...priceRange, to: e.target.value})} />
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Marca Automotriz</h3>
+        {marcasDisponibles.length > 8 && (
+          <input
+            type="search"
+            aria-label="Buscar marca"
+            placeholder="Buscar marca..."
+            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none mb-3"
+            value={marcaQuery}
+            onChange={(e) => setMarcaQuery(e.target.value)}
+          />
+        )}
+        <div className="flex flex-col gap-3 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+          {marcasDisponibles.length === 0 ? (
+            <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>
+          ) : marcasFiltradas.length > 0 ? (
+            marcasFiltradas.map(item => <FlatCheckbox key={item} label={item} category="marcas" onToggle={() => toggleFilter('marcas', item)} />)
+          ) : (
+            <span className="text-[10px] text-[#C0C0C0] italic uppercase">Sin marcas para “{marcaQuery}”</span>
+          )}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tipo de Carrocería</h3>
+        <div className="flex flex-col gap-3">
+          {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" icon={<CarroceriaIcon tipo={item} className="w-5 h-5" />} onToggle={() => toggleFilter('tipos', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Transmisión</h3>
+        <div className="flex flex-col gap-3">
+          {transmisionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="transmisiones" onToggle={() => toggleFilter('transmisiones', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Motorización</h3>
+        <div className="flex flex-col gap-3">
+          {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={combustibleLabel(item) || item} value={item} category="combustibles" subLabel={combustibleLabel(item) ? item : undefined} onToggle={() => toggleFilter('combustibles', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tracción</h3>
+        <div className="flex flex-col gap-3">
+          {traccionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="tracciones" onToggle={() => toggleFilter('tracciones', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Capacidad</h3>
+        <div className="flex flex-col gap-3">
+          {plazasDisponibles.map(item => (<FlatCheckbox key={item} label={`${item} Plazas`} value={item} category="plazas" onToggle={() => toggleFilter('plazas', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0] md:border-b-0">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Origen de Marca</h3>
+        <div className="flex flex-col gap-3">
+          {origenesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="origenes" onToggle={() => toggleFilter('origenes', item)} />))}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <>
       <header className="w-full border-b border-[#C0C0C0] bg-[#FFFFFF] pt-6 pb-6">
@@ -374,70 +577,56 @@ function CatalogoContent() {
 
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-8 flex flex-col md:flex-row gap-8 items-start mb-24" ref={topRef}>
         
-        <aside className="w-full md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-none border border-[#C0C0C0]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+        {/* Disparador del drawer de filtros -- solo mobile/tablet. En desktop
+            los filtros van siempre visibles en el sidebar de la derecha. */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen(true)}
+          className="md:hidden w-full flex items-center justify-between gap-2 border border-[#0A1F33] bg-[#FFFFFF] px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[#0A1F33]"
+        >
+          <span className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h18M6 12h12M10 20h4" /></svg>
+            Filtros y orden
+            {activeFilterCount > 0 && <span className="bg-[#00BFFF] text-[#FFFFFF] w-5 h-5 rounded-full flex items-center justify-center text-[10px]">{activeFilterCount}</span>}
+          </span>
+          <span aria-hidden="true">↓</span>
+        </button>
+
+        {/* Drawer mobile: cajón inferior con los mismos filtros, para no
+            obligar a scrollear todo el panel antes de llegar a un solo auto. */}
+        <Modal
+          isOpen={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          overlayClassName="fixed inset-0 bg-[#0A1F33]/70 z-[160] md:hidden"
+          panelClassName="fixed inset-x-0 bottom-0 z-[170] md:hidden bg-[#FFFFFF] max-h-[85vh] flex flex-col rounded-none border-t-4 border-[#00BFFF]"
+        >
+          <div className="p-4 border-b border-[#C0C0C0] flex justify-between items-center bg-[#F5F5F5] shrink-0">
+            <h2 className="font-bold text-[#0A1F33] text-sm uppercase tracking-wider">Parámetros</h2>
+            <div className="flex items-center gap-4">
+              <button onClick={clearFilters} className="text-[10px] text-[#D93025] hover:underline font-bold uppercase tracking-widest border-none outline-none">Restablecer</button>
+              <button onClick={() => setFiltersOpen(false)} aria-label="Cerrar filtros" className="text-[#0A1F33] border-none outline-none">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+          <div className="overflow-y-auto custom-scrollbar flex-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+            {filtrosSecciones}
+          </div>
+          <div className="p-4 border-t border-[#C0C0C0] shrink-0">
+            <button onClick={() => setFiltersOpen(false)} className="w-full bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 rounded-none">
+              Ver {autosOrdenados.length} autos
+            </button>
+          </div>
+        </Modal>
+
+        {/* Sidebar de escritorio: siempre visible, con scroll propio. */}
+        <aside className="hidden md:block md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-none border border-[#C0C0C0]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <div className="bg-[#FFFFFF]">
             <div className="p-4 border-b border-[#C0C0C0] flex justify-between items-center bg-[#F5F5F5] sticky top-0 z-10">
               <h2 className="font-bold text-[#0A1F33] text-sm uppercase tracking-wider">Parámetros</h2>
               <button onClick={clearFilters} className="text-[10px] text-[#D93025] hover:underline font-bold uppercase tracking-widest border-none outline-none">Restablecer</button>
             </div>
-            
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Presupuesto (USD)</h3>
-              <div className="flex flex-col gap-2">
-                <input type="number" aria-label="Presupuesto mínimo en dólares" placeholder="Mínimo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.from} onChange={(e) => setPriceRange({...priceRange, from: e.target.value})} />
-                <input type="number" aria-label="Presupuesto máximo en dólares" placeholder="Máximo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.to} onChange={(e) => setPriceRange({...priceRange, to: e.target.value})} />
-              </div>
-            </div>
-            
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Marca Automotriz</h3>
-              <div className="flex flex-col gap-3">
-                {marcasDisponibles.length > 0 ? marcasDisponibles.map(item => <FlatCheckbox key={item} label={item} category="marcas" onToggle={() => toggleFilter('marcas', item)} />) : <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tipo de Carrocería</h3>
-              <div className="flex flex-col gap-3">
-                {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" onToggle={() => toggleFilter('tipos', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Transmisión</h3>
-              <div className="flex flex-col gap-3">
-                {transmisionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="transmisiones" onToggle={() => toggleFilter('transmisiones', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Motorización</h3>
-              <div className="flex flex-col gap-3">
-                {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="combustibles" subLabel={combustibleLabels[item.toUpperCase()]} onToggle={() => toggleFilter('combustibles', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tracción</h3>
-              <div className="flex flex-col gap-3">
-                {traccionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="tracciones" onToggle={() => toggleFilter('tracciones', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Capacidad</h3>
-              <div className="flex flex-col gap-3">
-                {plazasDisponibles.map(item => (<FlatCheckbox key={item} label={`${item} Plazas`} value={item} category="plazas" onToggle={() => toggleFilter('plazas', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Origen de Marca</h3>
-              <div className="flex flex-col gap-3">
-                {origenesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="origenes" onToggle={() => toggleFilter('origenes', item)} />))}
-              </div>
-            </div>
-            
+            {filtrosSecciones}
           </div>
         </aside>
 
@@ -465,15 +654,24 @@ function CatalogoContent() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b border-[#C0C0C0]">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 pb-4 border-b border-[#C0C0C0]">
             <span className="text-[11px] text-[#3A3A3C] uppercase tracking-widest">
-              {isLoading ? 'Cargando catálogo...' : <><span className="font-bold text-[#0A1F33] text-sm">{autosFiltrados.length}</span> autos disponibles</>}
+              {isLoading ? 'Cargando catálogo...' : <><span className="font-bold text-[#0A1F33] text-sm">{autosOrdenados.length}</span> autos disponibles</>}
+              {!isLoading && totalPages > 1 && (
+                <span className="text-[#C0C0C0] font-bold"> · Página {currentPage} de {totalPages}</span>
+              )}
             </span>
-            {!isLoading && totalPages > 1 && (
-              <span className="text-[11px] text-[#C0C0C0] font-bold uppercase tracking-widest mt-2 sm:mt-0">
-                Página {currentPage} de {totalPages}
-              </span>
-            )}
+            <label className="flex items-center gap-2 text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">
+              Ordenar por
+              <select
+                aria-label="Ordenar resultados"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+                className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-3 focus:outline-none focus:border-[#0A1F33] rounded-none"
+              >
+                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -488,12 +686,27 @@ function CatalogoContent() {
                   index === 6 || (index === currentAutos.length - 1 && currentAutos.length <= 6)
                 );
 
+                const verSel = versionAComparar(auto);
+                const enCompare = !!verSel && compareIds.has(verSel.id);
+                const multiVersion = auto.versiones.length > 1;
+
                 return (
                   <React.Fragment key={auto.id}>
                     {/* Renderizamos el Ad justo ANTES de la tarjeta número 7 */}
                     {showAdHere && index === 6 && renderAdBanner()}
 
-                    <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
+                    <div className="relative h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
+                      <button
+                        type="button"
+                        onClick={() => toggleCompare(auto)}
+                        aria-pressed={enCompare}
+                        aria-label={enCompare ? `Quitar ${auto.brand} ${auto.name} del comparador` : `Agregar ${auto.brand} ${auto.name} al comparador`}
+                        title={enCompare ? 'Quitar del comparador' : 'Agregar al comparador'}
+                        className={`absolute top-2 right-2 z-20 flex items-center gap-1 border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                        {enCompare ? 'Comparando' : 'Comparar'}
+                      </button>
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
                         <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
                           {isDatacarCheck(auto.concesionaria, checkedDealershipSet) && (
@@ -520,24 +733,47 @@ function CatalogoContent() {
                           <p className="text-[11px] font-bold text-[#C0C0C0] uppercase mb-2 truncate" title={auto.versionName || 'Versión Base'}>
                             {auto.versionName || 'Versión Base'}
                           </p>
-                          <p className="text-[10px] text-[#3A3A3C] font-medium uppercase mb-4" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                          <p className="text-[10px] text-[#3A3A3C] font-medium uppercase mb-4 flex items-center gap-1.5" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                            <CarroceriaIcon tipo={auto.tipo_carroceria} className="w-4 h-4 text-[#C0C0C0]" />
                             {auto.tipo_carroceria} • {auto.transmision || 'Consultar'}
                           </p>
                           
                           <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50 flex justify-between items-end">
-                            <div className="flex flex-col">
-                              <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-0.5">Desde</span>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-0.5 truncate">
+                                {verSel && verSel.id !== auto.versionId
+                                  ? `Versión ${verSel.name}`
+                                  : `Desde · versión ${auto.versionName || 'base'}`}
+                              </span>
                               <span className="font-black text-[18px] text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-                                US$ {auto.price.toLocaleString()}
+                                US$ {(verSel?.price || auto.price).toLocaleString()}
                               </span>
                             </div>
                           </div>
+                          {auto.precioActualizado && (
+                            <p className="text-[9px] text-[#C0C0C0] font-medium tracking-wide mt-2">Actualizado el {auto.precioActualizado}</p>
+                          )}
                         </div>
                       </Link>
 
                       <div className="px-5 pb-5 flex flex-col gap-2 mt-auto">
-                        <BotonCotizar 
-                          vehiculoInteres={`${auto.brand} ${auto.name} ${auto.versionName}`}
+                        {multiVersion && (
+                          <label className="flex flex-col gap-1 text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest">
+                            Versión para comparar
+                            <select
+                              aria-label={`Elegir versión de ${auto.brand} ${auto.name} para comparar`}
+                              value={verSel?.id || ''}
+                              onChange={(e) => setVersionSel(prev => ({ ...prev, [auto.id]: e.target.value }))}
+                              className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-2 focus:outline-none focus:border-[#0A1F33] rounded-none"
+                            >
+                              {auto.versiones.map(v => (
+                                <option key={v.id} value={v.id}>{v.name} — US$ {v.price.toLocaleString()}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        <BotonCotizar
+                          vehiculoInteres={`${auto.brand} ${auto.name} ${verSel?.name || auto.versionName}`}
                           marcaVehiculo={auto.brand}
                           concesionariaDestino={auto.concesionaria || ''}
                           origenLead="Catálogo General"
@@ -600,6 +836,21 @@ function CatalogoContent() {
 
         </section>
       </div>
+
+      {compareItems.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-[150] bg-[#0A1F33] border-t-4 border-[#00BFFF] px-4 lg:px-8 py-3">
+          <div className="max-w-[1400px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest shrink-0">Comparador · {compareItems.length}/3</span>
+              <span className="text-[11px] text-[#FFFFFF]/70 truncate hidden sm:block">{compareItems.map(v => v.name).join('  ·  ')}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => { setCompareItems([]); saveCompareList([]); }} className="text-[10px] font-bold text-[#FFFFFF]/70 hover:text-[#FFFFFF] uppercase tracking-widest border border-[#FFFFFF]/20 hover:border-[#FFFFFF] px-3 py-2 transition-colors rounded-none">Vaciar</button>
+              <Link href="/comparador" className="text-[10px] font-bold text-[#0A1F33] bg-[#00BFFF] hover:bg-[#FFFFFF] uppercase tracking-widest px-4 py-2 transition-colors rounded-none">Comparar ahora →</Link>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

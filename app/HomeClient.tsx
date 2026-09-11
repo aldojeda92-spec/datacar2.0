@@ -236,7 +236,7 @@ export default function HomeClient() {
       items: marcas.map(marca => ({ label: marca.name, href: `/catalogo?marca=${encodeURIComponent(marca.name)}` })),
     },
     {
-      type: 'megamenu', label: 'Herramientas', columns: 1, width: 250,
+      type: 'megamenu', label: 'Herramientas', columns: 1, width: 300,
       items: [
         { label: 'Comparador de Versiones', href: '/comparador' },
         { label: 'Calculadora de Cuotas', href: '/calculadora' },
@@ -409,6 +409,9 @@ export default function HomeClient() {
               <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
               <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
               <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
+              <p className="col-span-2 lg:col-span-3 text-[9px] text-[#C0C0C0]/70 leading-relaxed text-left mt-1">
+                Promedios sobre operaciones cerradas a través de DATACAR. El ahorro compara el precio final negociado contra el precio de lista publicado; el retorno es ese ahorro frente al costo del servicio.
+              </p>
             </div>
           </div>
         </div>
