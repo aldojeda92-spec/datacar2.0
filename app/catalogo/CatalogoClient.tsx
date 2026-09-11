@@ -20,6 +20,7 @@ import { normalizeExternalUrl } from '../../lib/externalUrl';
 import { buildCheckedDealershipSet, isDatacarCheck, DATACAR_CHECK_BODY } from '../../lib/datacarCheck';
 import DatacarCheckBadge from '../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../components/Navbar';
+import Modal from '../components/a11y/Modal';
 
 const NAV_ITEMS: NavItem[] = [
   { type: 'link', label: 'Recomendador', href: '/recomendador' },
@@ -324,6 +325,16 @@ function CatalogoContent() {
     });
   };
 
+  // Drawer de filtros en mobile: en pantallas chicas el panel deja de ir
+  // apilado arriba de los resultados (obligaba a scrollear todo eso antes
+  // de ver un solo auto) y pasa a un cajón que se abre a pedido.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (priceRange.from || priceRange.to ? 1 : 0) +
+    activeFilters.tipos.length + activeFilters.marcas.length + activeFilters.transmisiones.length +
+    activeFilters.combustibles.length + activeFilters.tracciones.length + activeFilters.plazas.length +
+    activeFilters.origenes.length;
+
   const marcasFiltradas = useMemo(() => {
     const q = marcaQuery.trim().toLowerCase();
     if (!q) return marcasDisponibles;
@@ -476,6 +487,85 @@ function CatalogoContent() {
     );
   };
 
+  // Secciones de filtro compartidas entre el sidebar de escritorio y el
+  // drawer de mobile, para no duplicar el markup de cada categoría.
+  const filtrosSecciones = (
+    <>
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Presupuesto (USD)</h3>
+        <div className="flex flex-col gap-2">
+          <input type="number" aria-label="Presupuesto mínimo en dólares" placeholder="Mínimo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.from} onChange={(e) => setPriceRange({...priceRange, from: e.target.value})} />
+          <input type="number" aria-label="Presupuesto máximo en dólares" placeholder="Máximo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.to} onChange={(e) => setPriceRange({...priceRange, to: e.target.value})} />
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Marca Automotriz</h3>
+        {marcasDisponibles.length > 8 && (
+          <input
+            type="search"
+            aria-label="Buscar marca"
+            placeholder="Buscar marca..."
+            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none mb-3"
+            value={marcaQuery}
+            onChange={(e) => setMarcaQuery(e.target.value)}
+          />
+        )}
+        <div className="flex flex-col gap-3 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+          {marcasDisponibles.length === 0 ? (
+            <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>
+          ) : marcasFiltradas.length > 0 ? (
+            marcasFiltradas.map(item => <FlatCheckbox key={item} label={item} category="marcas" onToggle={() => toggleFilter('marcas', item)} />)
+          ) : (
+            <span className="text-[10px] text-[#C0C0C0] italic uppercase">Sin marcas para “{marcaQuery}”</span>
+          )}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tipo de Carrocería</h3>
+        <div className="flex flex-col gap-3">
+          {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" icon={<CarroceriaIcon tipo={item} className="w-5 h-5" />} onToggle={() => toggleFilter('tipos', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Transmisión</h3>
+        <div className="flex flex-col gap-3">
+          {transmisionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="transmisiones" onToggle={() => toggleFilter('transmisiones', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Motorización</h3>
+        <div className="flex flex-col gap-3">
+          {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={combustibleLabel(item) || item} value={item} category="combustibles" subLabel={combustibleLabel(item) ? item : undefined} onToggle={() => toggleFilter('combustibles', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tracción</h3>
+        <div className="flex flex-col gap-3">
+          {traccionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="tracciones" onToggle={() => toggleFilter('tracciones', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0]">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Capacidad</h3>
+        <div className="flex flex-col gap-3">
+          {plazasDisponibles.map(item => (<FlatCheckbox key={item} label={`${item} Plazas`} value={item} category="plazas" onToggle={() => toggleFilter('plazas', item)} />))}
+        </div>
+      </div>
+
+      <div className="p-5 border-b border-[#C0C0C0] md:border-b-0">
+        <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Origen de Marca</h3>
+        <div className="flex flex-col gap-3">
+          {origenesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="origenes" onToggle={() => toggleFilter('origenes', item)} />))}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <>
       <header className="w-full border-b border-[#C0C0C0] bg-[#FFFFFF] pt-6 pb-6">
@@ -487,86 +577,56 @@ function CatalogoContent() {
 
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-8 flex flex-col md:flex-row gap-8 items-start mb-24" ref={topRef}>
         
-        <aside className="w-full md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-none border border-[#C0C0C0]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+        {/* Disparador del drawer de filtros -- solo mobile/tablet. En desktop
+            los filtros van siempre visibles en el sidebar de la derecha. */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen(true)}
+          className="md:hidden w-full flex items-center justify-between gap-2 border border-[#0A1F33] bg-[#FFFFFF] px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[#0A1F33]"
+        >
+          <span className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h18M6 12h12M10 20h4" /></svg>
+            Filtros y orden
+            {activeFilterCount > 0 && <span className="bg-[#00BFFF] text-[#FFFFFF] w-5 h-5 rounded-full flex items-center justify-center text-[10px]">{activeFilterCount}</span>}
+          </span>
+          <span aria-hidden="true">↓</span>
+        </button>
+
+        {/* Drawer mobile: cajón inferior con los mismos filtros, para no
+            obligar a scrollear todo el panel antes de llegar a un solo auto. */}
+        <Modal
+          isOpen={filtersOpen}
+          onClose={() => setFiltersOpen(false)}
+          overlayClassName="fixed inset-0 bg-[#0A1F33]/70 z-[160] md:hidden"
+          panelClassName="fixed inset-x-0 bottom-0 z-[170] md:hidden bg-[#FFFFFF] max-h-[85vh] flex flex-col rounded-none border-t-4 border-[#00BFFF]"
+        >
+          <div className="p-4 border-b border-[#C0C0C0] flex justify-between items-center bg-[#F5F5F5] shrink-0">
+            <h2 className="font-bold text-[#0A1F33] text-sm uppercase tracking-wider">Parámetros</h2>
+            <div className="flex items-center gap-4">
+              <button onClick={clearFilters} className="text-[10px] text-[#D93025] hover:underline font-bold uppercase tracking-widest border-none outline-none">Restablecer</button>
+              <button onClick={() => setFiltersOpen(false)} aria-label="Cerrar filtros" className="text-[#0A1F33] border-none outline-none">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+          <div className="overflow-y-auto custom-scrollbar flex-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+            {filtrosSecciones}
+          </div>
+          <div className="p-4 border-t border-[#C0C0C0] shrink-0">
+            <button onClick={() => setFiltersOpen(false)} className="w-full bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 rounded-none">
+              Ver {autosOrdenados.length} autos
+            </button>
+          </div>
+        </Modal>
+
+        {/* Sidebar de escritorio: siempre visible, con scroll propio. */}
+        <aside className="hidden md:block md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-none border border-[#C0C0C0]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <div className="bg-[#FFFFFF]">
             <div className="p-4 border-b border-[#C0C0C0] flex justify-between items-center bg-[#F5F5F5] sticky top-0 z-10">
               <h2 className="font-bold text-[#0A1F33] text-sm uppercase tracking-wider">Parámetros</h2>
               <button onClick={clearFilters} className="text-[10px] text-[#D93025] hover:underline font-bold uppercase tracking-widest border-none outline-none">Restablecer</button>
             </div>
-            
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Presupuesto (USD)</h3>
-              <div className="flex flex-col gap-2">
-                <input type="number" aria-label="Presupuesto mínimo en dólares" placeholder="Mínimo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.from} onChange={(e) => setPriceRange({...priceRange, from: e.target.value})} />
-                <input type="number" aria-label="Presupuesto máximo en dólares" placeholder="Máximo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.to} onChange={(e) => setPriceRange({...priceRange, to: e.target.value})} />
-              </div>
-            </div>
-            
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Marca Automotriz</h3>
-              {marcasDisponibles.length > 8 && (
-                <input
-                  type="search"
-                  aria-label="Buscar marca"
-                  placeholder="Buscar marca..."
-                  className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none mb-3"
-                  value={marcaQuery}
-                  onChange={(e) => setMarcaQuery(e.target.value)}
-                />
-              )}
-              <div className="flex flex-col gap-3 max-h-64 overflow-y-auto custom-scrollbar pr-1">
-                {marcasDisponibles.length === 0 ? (
-                  <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>
-                ) : marcasFiltradas.length > 0 ? (
-                  marcasFiltradas.map(item => <FlatCheckbox key={item} label={item} category="marcas" onToggle={() => toggleFilter('marcas', item)} />)
-                ) : (
-                  <span className="text-[10px] text-[#C0C0C0] italic uppercase">Sin marcas para “{marcaQuery}”</span>
-                )}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tipo de Carrocería</h3>
-              <div className="flex flex-col gap-3">
-                {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" icon={<CarroceriaIcon tipo={item} className="w-5 h-5" />} onToggle={() => toggleFilter('tipos', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Transmisión</h3>
-              <div className="flex flex-col gap-3">
-                {transmisionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="transmisiones" onToggle={() => toggleFilter('transmisiones', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Motorización</h3>
-              <div className="flex flex-col gap-3">
-                {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={combustibleLabel(item) || item} value={item} category="combustibles" subLabel={combustibleLabel(item) ? item : undefined} onToggle={() => toggleFilter('combustibles', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tracción</h3>
-              <div className="flex flex-col gap-3">
-                {traccionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="tracciones" onToggle={() => toggleFilter('tracciones', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Capacidad</h3>
-              <div className="flex flex-col gap-3">
-                {plazasDisponibles.map(item => (<FlatCheckbox key={item} label={`${item} Plazas`} value={item} category="plazas" onToggle={() => toggleFilter('plazas', item)} />))}
-              </div>
-            </div>
-
-            <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Origen de Marca</h3>
-              <div className="flex flex-col gap-3">
-                {origenesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="origenes" onToggle={() => toggleFilter('origenes', item)} />))}
-              </div>
-            </div>
-            
+            {filtrosSecciones}
           </div>
         </aside>
 
