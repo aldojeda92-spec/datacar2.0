@@ -11,6 +11,7 @@ import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
+import GlosarioSiglas from '../components/GlosarioSiglas';
 import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../../lib/mailer';
 import Navbar from '../components/Navbar';
 import Modal from '../components/a11y/Modal';
@@ -684,10 +685,18 @@ export default function RecomendadorPage() {
                 })}
               </div>
 
+              {['combustible', 'features'].includes(WIZARD_STEPS[step - 1].id) && (
+                <GlosarioSiglas
+                  className="mt-6"
+                  titulo="¿Qué significan estas siglas?"
+                  fuentes={WIZARD_STEPS[step - 1].options.flatMap(o => [o.label, o.value, o.desc])}
+                />
+              )}
+
               {WIZARD_STEPS[step - 1].isMultiple && (
                 <div className="mt-8 text-center">
-                  <button 
-                    onClick={() => advanceMultiple(WIZARD_STEPS[step-1].id)} 
+                  <button
+                    onClick={() => advanceMultiple(WIZARD_STEPS[step-1].id)}
                     disabled={!answers[WIZARD_STEPS[step-1].id] || answers[WIZARD_STEPS[step-1].id].length === 0}
                     className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-12 transition-colors inline-block disabled:opacity-30 disabled:bg-[#C0C0C0] disabled:cursor-not-allowed rounded-none"
                   >

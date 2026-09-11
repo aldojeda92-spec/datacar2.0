@@ -12,6 +12,7 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../../../../lib/imageSrc
 import { normalizeCarroceria } from '../../../../lib/carroceria';
 import { combustibleLabel } from '../../../../lib/combustible';
 import { formatFechaLarga } from '../../../../lib/fecha';
+import GlosarioSiglas from '../../../components/GlosarioSiglas';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../../../../lib/finance';
 import LeadModal from '../../../components/LeadModal';
 import NewsletterForm from '../../../components/NewsletterForm';
@@ -368,6 +369,18 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
                  <div><p className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest">Habitáculo</p><p className="font-bold text-xs text-[#0A1F33] uppercase">{baseVersion.specs.plazas} Asientos</p></div>
                </div>
             </div>
+
+            <GlosarioSiglas
+              className="mb-8"
+              fuentes={[
+                baseVersion.specs.combustible,
+                baseVersion.specs.transmision,
+                baseVersion.specs.traccion,
+                baseVersion.specs.alimentacion,
+                ...(baseVersion.features?.adas || []),
+                ...(baseVersion.features?.seguridad_standard || []),
+              ]}
+            />
 
             {/* Grillas de Datos Detallados */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
