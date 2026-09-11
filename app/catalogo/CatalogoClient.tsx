@@ -5,6 +5,8 @@ import React, { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
+import { getStoredCompareList, saveCompareList } from '../../lib/compareStorage';
+import { useToast } from '../context/ToastContext';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns, getCachedConcesionarias } from '../../lib/catalogCache';
 import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
@@ -33,21 +35,31 @@ const NAV_ITEMS: NavItem[] = [
 // INTERFACES (Alineadas a Matriz 4 y Ads)
 // ==========================================
 interface AutoModel {
-  id: string; 
-  brandId: string; 
-  brand: string; 
-  name: string; 
+  id: string;
+  versionId: string;
+  brandId: string;
+  brand: string;
+  name: string;
   versionName: string;
   tipo_carroceria: string;
-  price: number; 
-  img: string; 
+  price: number;
+  img: string;
   transmision: string;
-  combustible: string; 
-  traccion: string; 
+  combustible: string;
+  traccion: string;
   plazas: string;
   origen_marca: string;
-  concesionaria?: string; 
+  concesionaria?: string;
+  destacado: boolean;
 }
+
+type SortKey = 'relevancia' | 'precio_asc' | 'precio_desc' | 'nombre';
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'relevancia', label: 'Relevancia' },
+  { value: 'precio_asc', label: 'Precio: menor a mayor' },
+  { value: 'precio_desc', label: 'Precio: mayor a menor' },
+  { value: 'nombre', label: 'Marca y modelo (A-Z)' },
+];
 interface AdCampaign { 
   id: string; sponsor: string; headline: string; highlight: string; 
   price: string; link: string; img: string; location: string; 
@@ -67,6 +79,29 @@ function CatalogoContent() {
   // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
   const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
 
+  // COMPARADOR: seleccion rapida desde la tarjeta, compartida via localStorage
+  // con la ficha y el /comparador (misma key en lib/compareStorage).
+  const { showToast } = useToast();
+  const [compareItems, setCompareItems] = useState<{ id: string; name: string; price: number }[]>([]);
+  useEffect(() => { setCompareItems(getStoredCompareList()); }, []);
+  const compareIds = useMemo(() => new Set(compareItems.map(v => v.id)), [compareItems]);
+
+  const toggleCompare = (auto: AutoModel) => {
+    if (!auto.versionId) { showToast('Este modelo todavía no tiene una versión para comparar.'); return; }
+    setCompareItems(prev => {
+      const exists = prev.some(v => v.id === auto.versionId);
+      if (exists) {
+        const next = prev.filter(v => v.id !== auto.versionId);
+        saveCompareList(next);
+        return next;
+      }
+      if (prev.length >= 3) { showToast('El comparador admite hasta 3 autos.'); return prev; }
+      const next = [...prev, { id: auto.versionId, name: `${auto.brand} ${auto.name} ${auto.versionName}`.trim(), price: auto.price }];
+      saveCompareList(next);
+      return next;
+    });
+  };
+
   // Referencia para el ancla de paginación
   const topRef = useRef<HTMLDivElement>(null);
 
@@ -81,38 +116,73 @@ function CatalogoContent() {
   const transmisionesOpciones = ['Automática', 'Manual'];
   const traccionesOpciones = ['4x2 / Simple', '4x4 / Integral'];
 
-  // Estados de Filtros URL
-  const [priceRange, setPriceRange] = useState({ 
-    from: searchParams?.get('minPrice') || '', 
-    to: searchParams?.get('maxPrice') || '' 
+  // ==========================================
+  // ESTADO DE FILTROS -- se hidrata desde la URL en el primer render y se
+  // vuelve a escribir en la URL ante cada cambio (con history.replaceState,
+  // sin re-navegar). Asi, al entrar a una ficha y volver con el navegador,
+  // los filtros, el orden y la pagina se conservan; ademas el catalogo
+  // filtrado queda compartible por link.
+  // ==========================================
+  // Multi-valor por parametro repetido (?marca=A&marca=B); tolera tambien el
+  // formato viejo de valor unico y las variantes de combustible sin normalizar.
+  const readListParam = (key: string, normalizer?: (v: string) => string): string[] => {
+    const all = searchParams?.getAll(key) ?? [];
+    return all.filter(Boolean).map(v => (normalizer ? normalizer(v) : v));
+  };
+
+  const [priceRange, setPriceRange] = useState({
+    from: searchParams?.get('minPrice') || '',
+    to: searchParams?.get('maxPrice') || ''
   });
 
   const [activeFilters, setActiveFilters] = useState({
-    tipos: searchParams?.get('tipo') ? [searchParams.get('tipo') as string] : [],
-    marcas: searchParams?.get('marca') ? [searchParams.get('marca') as string] : [],
-    transmisiones: [] as string[], 
-    combustibles: searchParams?.get('combustible') ? [normalizeCombustible(searchParams.get('combustible'))] : [],
-    tracciones: [] as string[], 
-    plazas: [] as string[],
-    origenes: [] as string[]
+    tipos: readListParam('tipo'),
+    marcas: readListParam('marca'),
+    transmisiones: readListParam('transmision'),
+    combustibles: readListParam('combustible', normalizeCombustible),
+    tracciones: readListParam('traccion'),
+    plazas: readListParam('plazas'),
+    origenes: readListParam('origen'),
+  });
+
+  const [sortBy, setSortBy] = useState<SortKey>(() => {
+    const s = searchParams?.get('orden') as SortKey | null;
+    return s && SORT_OPTIONS.some(o => o.value === s) ? s : 'relevancia';
   });
 
   // ESTADO DE PAGINACIÓN
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const p = Number(searchParams?.get('pagina'));
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const ITEMS_PER_PAGE = 12; // Múltiplo de 3 para grillas perfectas
 
-  useEffect(() => {
-    const minP = searchParams?.get('minPrice');
-    const maxP = searchParams?.get('maxPrice');
-    if (minP || maxP) {
-      setPriceRange(prev => ({ ...prev, from: minP || prev.from, to: maxP || prev.to }));
-    }
-  }, [searchParams]);
+  // Evita que el primer render (con la pagina hidratada de la URL) la pise a 1.
+  const filtersHydrated = useRef(false);
 
-  // RESETEAR PAGINACIÓN AL CAMBIAR FILTROS
+  // RESETEAR PAGINACIÓN AL CAMBIAR FILTROS (no en el primer render)
   useEffect(() => {
+    if (!filtersHydrated.current) { filtersHydrated.current = true; return; }
     setCurrentPage(1);
-  }, [activeFilters, priceRange]);
+  }, [activeFilters, priceRange, sortBy]);
+
+  // ESCRIBIR EL ESTADO EN LA URL (sin re-navegar)
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (priceRange.from) params.set('minPrice', priceRange.from);
+    if (priceRange.to) params.set('maxPrice', priceRange.to);
+    activeFilters.tipos.forEach(v => params.append('tipo', v));
+    activeFilters.marcas.forEach(v => params.append('marca', v));
+    activeFilters.transmisiones.forEach(v => params.append('transmision', v));
+    activeFilters.combustibles.forEach(v => params.append('combustible', v));
+    activeFilters.tracciones.forEach(v => params.append('traccion', v));
+    activeFilters.plazas.forEach(v => params.append('plazas', v));
+    activeFilters.origenes.forEach(v => params.append('origen', v));
+    if (sortBy !== 'relevancia') params.set('orden', sortBy);
+    if (currentPage > 1) params.set('pagina', String(currentPage));
+    const qs = params.toString();
+    window.history.replaceState(null, '', qs ? `/catalogo?${qs}` : '/catalogo');
+  }, [activeFilters, priceRange, sortBy, currentPage]);
 
   // ==========================================
   // 1. SINCRONIZACIÓN Y DEDUPLICACIÓN
@@ -171,6 +241,7 @@ function CatalogoContent() {
 
           const autoData: AutoModel = {
             id: mData.id,
+            versionId: baseVersion.id || '',
             brandId: mData.brandId || 'sin-marca',
             brand: brandInfo.name,
             name: mData.name || '',
@@ -183,7 +254,8 @@ function CatalogoContent() {
             traccion: specs.traccion || '',
             plazas: specs.plazas?.toString() || '',
             origen_marca: brandInfo.origen,
-            concesionaria: baseVersion.concesionaria || mData.concesionaria || ''
+            concesionaria: baseVersion.concesionaria || mData.concesionaria || '',
+            destacado: mData.isPopular === true
           };
 
           if (modelsTemp.has(uniqueKey)) {
@@ -274,6 +346,22 @@ function CatalogoContent() {
     });
   }, [activeFilters, priceRange, autos]);
 
+  // Orden aplicado sobre el resultado filtrado. "relevancia" respeta el orden
+  // de origen (destacados primero como desempate suave).
+  const autosOrdenados = useMemo(() => {
+    const list = [...autosFiltrados];
+    switch (sortBy) {
+      case 'precio_asc':
+        return list.sort((a, b) => a.price - b.price);
+      case 'precio_desc':
+        return list.sort((a, b) => b.price - a.price);
+      case 'nombre':
+        return list.sort((a, b) => `${a.brand} ${a.name}`.localeCompare(`${b.brand} ${b.name}`, 'es'));
+      default:
+        return list.sort((a, b) => Number(b.destacado) - Number(a.destacado));
+    }
+  }, [autosFiltrados, sortBy]);
+
   // ==========================================
   // 3. MOTOR DE INYECCIÓN CONTEXTUAL (ADS)
   // ==========================================
@@ -296,12 +384,18 @@ function CatalogoContent() {
   // ==========================================
   // 4. LÓGICA DE PAGINACIÓN
   // ==========================================
-  const totalPages = Math.ceil(autosFiltrados.length / ITEMS_PER_PAGE);
-  
+  const totalPages = Math.ceil(autosOrdenados.length / ITEMS_PER_PAGE);
+
+  // La pagina hidratada de la URL puede quedar fuera de rango si el catalogo
+  // devuelve menos resultados que antes.
+  useEffect(() => {
+    if (!isLoading && totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [isLoading, totalPages, currentPage]);
+
   const currentAutos = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return autosFiltrados.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [autosFiltrados, currentPage]);
+    return autosOrdenados.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [autosOrdenados, currentPage]);
 
   const goToPage = (pageNumber: number) => {
     setCurrentPage(pageNumber);
@@ -455,15 +549,24 @@ function CatalogoContent() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b border-[#C0C0C0]">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 pb-4 border-b border-[#C0C0C0]">
             <span className="text-[11px] text-[#3A3A3C] uppercase tracking-widest">
-              {isLoading ? 'Cargando catálogo...' : <><span className="font-bold text-[#0A1F33] text-sm">{autosFiltrados.length}</span> autos disponibles</>}
+              {isLoading ? 'Cargando catálogo...' : <><span className="font-bold text-[#0A1F33] text-sm">{autosOrdenados.length}</span> autos disponibles</>}
+              {!isLoading && totalPages > 1 && (
+                <span className="text-[#C0C0C0] font-bold"> · Página {currentPage} de {totalPages}</span>
+              )}
             </span>
-            {!isLoading && totalPages > 1 && (
-              <span className="text-[11px] text-[#C0C0C0] font-bold uppercase tracking-widest mt-2 sm:mt-0">
-                Página {currentPage} de {totalPages}
-              </span>
-            )}
+            <label className="flex items-center gap-2 text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">
+              Ordenar por
+              <select
+                aria-label="Ordenar resultados"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+                className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-3 focus:outline-none focus:border-[#0A1F33] rounded-none"
+              >
+                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -483,7 +586,23 @@ function CatalogoContent() {
                     {/* Renderizamos el Ad justo ANTES de la tarjeta número 7 */}
                     {showAdHere && index === 6 && renderAdBanner()}
 
-                    <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
+                    <div className="relative h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
+                      {(() => {
+                        const enCompare = compareIds.has(auto.versionId);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => toggleCompare(auto)}
+                            aria-pressed={enCompare}
+                            aria-label={enCompare ? `Quitar ${auto.brand} ${auto.name} del comparador` : `Agregar ${auto.brand} ${auto.name} al comparador`}
+                            title={enCompare ? 'Quitar del comparador' : 'Agregar al comparador'}
+                            className={`absolute top-2 right-2 z-20 flex items-center gap-1 border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                            {enCompare ? 'Comparando' : 'Comparar'}
+                          </button>
+                        );
+                      })()}
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
                         <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
                           {isDatacarCheck(auto.concesionaria, checkedDealershipSet) && (
@@ -590,6 +709,21 @@ function CatalogoContent() {
 
         </section>
       </div>
+
+      {compareItems.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-[150] bg-[#0A1F33] border-t-4 border-[#00BFFF] px-4 lg:px-8 py-3">
+          <div className="max-w-[1400px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest shrink-0">Comparador · {compareItems.length}/3</span>
+              <span className="text-[11px] text-[#FFFFFF]/70 truncate hidden sm:block">{compareItems.map(v => v.name).join('  ·  ')}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => { setCompareItems([]); saveCompareList([]); }} className="text-[10px] font-bold text-[#FFFFFF]/70 hover:text-[#FFFFFF] uppercase tracking-widest border border-[#FFFFFF]/20 hover:border-[#FFFFFF] px-3 py-2 transition-colors rounded-none">Vaciar</button>
+              <Link href="/comparador" className="text-[10px] font-bold text-[#0A1F33] bg-[#00BFFF] hover:bg-[#FFFFFF] uppercase tracking-widest px-4 py-2 transition-colors rounded-none">Comparar ahora →</Link>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
