@@ -147,6 +147,10 @@ function CatalogoContent() {
     origenes: readListParam('origen'),
   });
 
+  // Buscador local del filtro de marca (no va a la URL: es solo para acotar
+  // la lista visible de 45+ checkboxes).
+  const [marcaQuery, setMarcaQuery] = useState('');
+
   const [sortBy, setSortBy] = useState<SortKey>(() => {
     const s = searchParams?.get('orden') as SortKey | null;
     return s && SORT_OPTIONS.some(o => o.value === s) ? s : 'relevancia';
@@ -306,8 +310,15 @@ function CatalogoContent() {
     });
   };
 
+  const marcasFiltradas = useMemo(() => {
+    const q = marcaQuery.trim().toLowerCase();
+    if (!q) return marcasDisponibles;
+    return marcasDisponibles.filter(m => m.toLowerCase().includes(q));
+  }, [marcasDisponibles, marcaQuery]);
+
   const clearFilters = () => {
     setPriceRange({ from: '', to: '' });
+    setMarcaQuery('');
     setActiveFilters({ tipos: [], marcas: [], transmisiones: [], combustibles: [], tracciones: [], plazas: [], origenes: [] });
   };
 
@@ -477,9 +488,25 @@ function CatalogoContent() {
             </div>
             
             <div className="p-5 border-b border-[#C0C0C0]">
-              <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Marca Automotriz</h3>
-              <div className="flex flex-col gap-3">
-                {marcasDisponibles.length > 0 ? marcasDisponibles.map(item => <FlatCheckbox key={item} label={item} category="marcas" onToggle={() => toggleFilter('marcas', item)} />) : <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>}
+              <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Marca Automotriz</h3>
+              {marcasDisponibles.length > 8 && (
+                <input
+                  type="search"
+                  aria-label="Buscar marca"
+                  placeholder="Buscar marca..."
+                  className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none mb-3"
+                  value={marcaQuery}
+                  onChange={(e) => setMarcaQuery(e.target.value)}
+                />
+              )}
+              <div className="flex flex-col gap-3 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                {marcasDisponibles.length === 0 ? (
+                  <span className="text-[10px] text-[#C0C0C0] italic uppercase">Cargando...</span>
+                ) : marcasFiltradas.length > 0 ? (
+                  marcasFiltradas.map(item => <FlatCheckbox key={item} label={item} category="marcas" onToggle={() => toggleFilter('marcas', item)} />)
+                ) : (
+                  <span className="text-[10px] text-[#C0C0C0] italic uppercase">Sin marcas para “{marcaQuery}”</span>
+                )}
               </div>
             </div>
 
