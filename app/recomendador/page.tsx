@@ -12,6 +12,7 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
 import GlosarioSiglas from '../components/GlosarioSiglas';
+import CarroceriaIcon from '../components/CarroceriaIcon';
 import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../../lib/mailer';
 import Navbar from '../components/Navbar';
 import Modal from '../components/a11y/Modal';
@@ -666,11 +667,15 @@ export default function RecomendadorPage() {
                       className={`bg-[#FFFFFF] border p-6 transition-colors flex flex-row items-center gap-4 text-left group rounded-none
                         ${isSelected ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] hover:border-[#0A1F33]'}`}
                     >
-                      {opt.icon && (
+                      {qId === 'carroceria' && opt.value !== 'any' ? (
+                        <div className={`w-10 h-10 flex items-center justify-center shrink-0 ${isSelected ? 'text-[#00BFFF]' : 'text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>
+                          <CarroceriaIcon tipo={opt.value} className="w-9 h-9" />
+                        </div>
+                      ) : opt.icon ? (
                         <div className={`w-10 h-10 flex items-center justify-center text-xl shrink-0 ${isSelected ? '' : 'grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100'}`}>
                           {opt.icon}
                         </div>
-                      )}
+                      ) : null}
                       <div className="flex-grow">
                         <span className={`font-bold text-sm block ${isSelected ? 'text-[#00BFFF]' : 'text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>{opt.label}</span>
                         {opt.desc && <span className="text-[10px] text-[#C0C0C0] mt-1 block">{opt.desc}</span>}

@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import { getStoredCompareList, saveCompareList } from '../../lib/compareStorage';
 import { useToast } from '../context/ToastContext';
 import { formatFechaLarga } from '../../lib/fecha';
+import CarroceriaIcon from '../components/CarroceriaIcon';
 import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns, getCachedConcesionarias } from '../../lib/catalogCache';
 import BotonCotizar from '../components/BotonCotizar';
 import { LeadProvider } from '../context/LeadContext';
@@ -416,7 +417,7 @@ function CatalogoContent() {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const FlatCheckbox = ({ label, value, category, subLabel, onToggle }: { label: string, value?: string, category: keyof typeof activeFilters, subLabel?: string, onToggle: () => void }) => {
+  const FlatCheckbox = ({ label, value, category, subLabel, icon, onToggle }: { label: string, value?: string, category: keyof typeof activeFilters, subLabel?: string, icon?: React.ReactNode, onToggle: () => void }) => {
     const matchValue = value !== undefined ? value : label;
     const isChecked = activeFilters[category].some(item => item.toLowerCase() === matchValue.toLowerCase());
 
@@ -426,6 +427,7 @@ function CatalogoContent() {
         <div aria-hidden="true" className={`mt-0.5 w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
           {isChecked && <svg className="w-3 h-3 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
         </div>
+        {icon && <span className={`shrink-0 -mt-0.5 transition-colors ${isChecked ? 'text-[#0A1F33]' : 'text-[#C0C0C0] group-hover:text-[#3A3A3C]'}`}>{icon}</span>}
         <div className="flex flex-col">
           <span className={`text-[11px] uppercase tracking-wide transition-colors ${isChecked ? 'font-bold text-[#0A1F33]' : 'text-[#3A3A3C] font-medium group-hover:text-[#0A1F33]'}`}>{label}</span>
           {subLabel && <span className="text-[9px] text-[#C0C0C0] uppercase tracking-widest">{subLabel}</span>}
@@ -513,7 +515,7 @@ function CatalogoContent() {
             <div className="p-5 border-b border-[#C0C0C0]">
               <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tipo de Carrocería</h3>
               <div className="flex flex-col gap-3">
-                {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" onToggle={() => toggleFilter('tipos', item)} />))}
+                {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" icon={<CarroceriaIcon tipo={item} className="w-5 h-5" />} onToggle={() => toggleFilter('tipos', item)} />))}
               </div>
             </div>
 
@@ -659,13 +661,16 @@ function CatalogoContent() {
                           <p className="text-[11px] font-bold text-[#C0C0C0] uppercase mb-2 truncate" title={auto.versionName || 'Versión Base'}>
                             {auto.versionName || 'Versión Base'}
                           </p>
-                          <p className="text-[10px] text-[#3A3A3C] font-medium uppercase mb-4" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                          <p className="text-[10px] text-[#3A3A3C] font-medium uppercase mb-4 flex items-center gap-1.5" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                            <CarroceriaIcon tipo={auto.tipo_carroceria} className="w-4 h-4 text-[#C0C0C0]" />
                             {auto.tipo_carroceria} • {auto.transmision || 'Consultar'}
                           </p>
                           
                           <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50 flex justify-between items-end">
-                            <div className="flex flex-col">
-                              <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-0.5">Desde</span>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-0.5 truncate">
+                                Desde · versión {auto.versionName || 'base'}
+                              </span>
                               <span className="font-black text-[18px] text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                                 US$ {auto.price.toLocaleString()}
                               </span>
