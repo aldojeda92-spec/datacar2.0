@@ -372,7 +372,13 @@ function ComparadorContent() {
           </div>
         ) : (
           <div className="relative border border-[#C0C0C0] bg-[#FFFFFF] shadow-none">
-          <div className="overflow-x-auto custom-scrollbar">
+          {/* max-h + overflow-y explícito: sin un alto acotado, este contenedor
+              (que ya scrollea en X) nunca llega a scrollear en Y -- y sin scroll
+              interno real, el thead "sticky top-0" no tiene de qué colgarse y
+              nunca se queda fijo. Con el alto acotado, el auto+precio de cada
+              vehículo queda fijo (como fila congelada de Excel) mientras el
+              resto de la matriz se desplaza debajo. */}
+          <div className="overflow-auto custom-scrollbar overscroll-contain max-h-[75vh]">
             <table className="w-full text-left border-separate border-spacing-0 min-w-[900px] bg-[#FFFFFF]">
 
               {/* CABECERAS DE VEHÍCULOS */}
