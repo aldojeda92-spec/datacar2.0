@@ -5,7 +5,7 @@ import React, { useState, useEffect, Suspense, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../lib/compareStorage';
@@ -107,6 +107,9 @@ function ComparadorContent() {
   // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
   const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
 
+  // Popular Comparisons
+  const [popularComparisons, setPopularComparisons] = useState<{combo: string, ids: string[], count: number}[]>([]);
+
   // ==========================================
   // 1. CARGA DE DATOS Y LECTURA DE URL
   // ==========================================
@@ -189,6 +192,37 @@ function ComparadorContent() {
     };
     fetchCompareData();
   }, [searchParams]);
+
+  // ==========================================
+  // 1.5. CARGA DE COMPARACIONES POPULARES
+  // ==========================================
+  useEffect(() => {
+    const fetchPopularComparisons = async () => {
+      try {
+        const statsSnap = await getDocs(collection(db, 'comparison_stats'));
+        const counts: Record<string, { combo: string, ids: string[], count: number }> = {};
+        
+        statsSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.combo && data.ids && Array.isArray(data.ids)) {
+            if (!counts[data.combo]) {
+              counts[data.combo] = { combo: data.combo, ids: data.ids, count: 0 };
+            }
+            counts[data.combo].count += 1;
+          }
+        });
+
+        const sortedComparisons = Object.values(counts)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 8); // Top 5-8
+
+        setPopularComparisons(sortedComparisons);
+      } catch (error) {
+        console.error("Error fetching popular comparisons", error);
+      }
+    };
+    fetchPopularComparisons();
+  }, []);
 
   // ==========================================
   // 2. RASTREADOR SILENCIOSO DE BIG DATA B2B
@@ -541,6 +575,27 @@ function ComparadorContent() {
           </div>
             <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#FFFFFF] to-transparent lg:hidden" aria-hidden="true" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#FFFFFF] to-transparent lg:hidden" aria-hidden="true" />
+          </div>
+        )}
+
+        {/* COMPONENT: LOS USUARIOS TAMBIÉN COMPARAN */}
+        {popularComparisons.length > 0 && (
+          <div className="w-full mt-12 mb-8 text-center flex flex-col items-center">
+            <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest mb-2">Descubrí otras opciones</p>
+            <h3 className="font-black text-[#0A1F33] text-xl md:text-2xl uppercase mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+              {vehiclesData.length === 0 ? 'Los usuarios también comparan' : 'También podrías comparar'}
+            </h3>
+            <div className="flex flex-wrap justify-center gap-3">
+              {popularComparisons.map((comp, idx) => (
+                <Link 
+                  key={idx}
+                  href={`/comparador?autos=${comp.ids.join(',')}`}
+                  className="border border-[#C0C0C0] hover:border-[#00BFFF] text-[#3A3A3C] hover:text-[#00BFFF] px-4 py-2 text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors bg-[#FFFFFF]"
+                >
+                  {comp.combo}
+                </Link>
+              ))}
+            </div>
           </div>
         )}
       </div>

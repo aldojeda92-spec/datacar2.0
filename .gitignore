@@ -47,3 +47,13 @@ next-env.d.ts
 
 # Claude Code (config local de herramientas)
 /.claude/
+
+# Scripts locales de desarrollo (contienen credenciales)
+/scripts/
+
+# Service accounts de Firebase (NUNCA subir a Git)
+serviceAccount*.json*
+
+# Previsualizaciones locales y uploads temporales
+/public/emails-preview/
+/public/uploads/

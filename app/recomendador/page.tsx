@@ -11,12 +11,14 @@ import { getCachedBrands, getCachedModels, getCachedVersions, getCachedCampaigns
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
+import { normalizeExternalUrl } from '../../lib/externalUrl';
 import GlosarioSiglas from '../components/GlosarioSiglas';
 import CarroceriaIcon from '../components/CarroceriaIcon';
 import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../../lib/mailer';
 import Navbar from '../components/Navbar';
 import Modal from '../components/a11y/Modal';
 import { useToast } from '../context/ToastContext';
+import { track } from '../../lib/analytics';
 
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
@@ -65,7 +67,24 @@ interface ScoredModel {
   matchReasons: MatchReason[];
 }
 
-interface AdCampaign { id: string; sponsor: string; headline: string; highlight: string; price: string; link: string; img: string; location: string; isActive: boolean; targetCategory?: string; }
+interface AdCampaign { 
+  id: string; 
+  sponsor: string; 
+  headline: string; 
+  highlight: string; 
+  price: string; 
+  link: string; 
+  img: string; 
+  location: string; 
+  isActive: boolean; 
+  targetCategory?: string; 
+  startDate?: string;
+  endDate?: string;
+  ctaEnabled?: boolean;
+  ctaText?: string;
+  ctaUrl?: string;
+  ctaColor?: string;
+}
 
 // Interfaz para definir correctamente los pasos del Wizard y evitar errores de inferencia
 interface WizardStep {
@@ -183,7 +202,19 @@ export default function RecomendadorPage() {
           };
         });
 
-        const activeAds = (campaignsData as AdCampaign[]).filter(c => c.isActive);
+        // Campañas activas para el Recomendador (con fecha local del navegador)
+        const now = new Date();
+        const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+        const activeAds = (campaignsData as AdCampaign[]).filter(c => {
+          if (!c.isActive) return false;
+          const loc = (c.location || '').toLowerCase();
+          const validLoc = !loc || loc === 'recomendador' || loc === 'ambos' || loc === 'todas';
+          if (!validLoc) return false;
+          if (c.startDate && c.startDate > localToday) return false;
+          if (c.endDate && c.endDate < localToday) return false;
+          return true;
+        });
 
         setTiposDisponibles(Array.from(tempTipos).sort());
         setMarcasDisponibles(Array.from(tempMarcas).sort());
@@ -605,23 +636,52 @@ export default function RecomendadorPage() {
     setTopMatches(finalTop3);
     setOtherMatches(validMatches.slice(0, 4));
 
-    // Ads Contextuales
-    const winningBrand = finalTop3[0]?.brandName.toLowerCase();
-    const winningCategory = finalTop3[0]?.tipo_carroceria.toLowerCase();
-    
-    let selectedAd = ads.find(a => a.sponsor.toLowerCase() === winningBrand);
-    if (!selectedAd) selectedAd = ads.find(a => a.targetCategory?.toLowerCase() === winningCategory);
+    // Selección Inteligente y Contextual de Ads en el Recomendador
+    const winningBrand = finalTop3[0]?.brandName?.toLowerCase() || '';
+    const winningCategory = finalTop3[0]?.tipo_carroceria?.toLowerCase() || '';
+
+    // 1. Prioridad: Coincidencia por marca del sponsor (ej: Vicar SA / Honda, o nombre de marca)
+    let selectedAd = ads.find(a => {
+      if (!a.sponsor) return false;
+      const sp = a.sponsor.toLowerCase();
+      return winningBrand && (sp === winningBrand || sp.includes(winningBrand) || winningBrand.includes(sp));
+    });
+
+    // 2. Prioridad: Coincidencia por categoría específica (ej: SUV, Sedan)
+    if (!selectedAd && winningCategory) {
+      selectedAd = ads.find(a => {
+        if (!a.targetCategory) return false;
+        const cat = a.targetCategory.toLowerCase();
+        return cat !== 'todas' && cat !== 'todos' && cat === winningCategory;
+      });
+    }
+
+    // 3. Prioridad: Campañas dirigidas a "Todas" las categorías o generales para Recomendador
+    if (!selectedAd) {
+      selectedAd = ads.find(a => {
+        if (!a.targetCategory) return true;
+        const cat = a.targetCategory.toLowerCase();
+        return cat === 'todas' || cat === 'todos';
+      });
+    }
+
+    // 4. Prioridad: Cualquier otra campaña activa para el recomendador
+    if (!selectedAd && ads.length > 0) {
+      selectedAd = ads[0];
+    }
+
+    // 5. Fallback institucional DATACAR sólo si no hay ninguna campaña cargada en la base de datos
     if (!selectedAd) {
       selectedAd = {
-        id: 'fallback_datacar', sponsor: 'Servicio DATACAR',
-        headline: '¿Cansado de negociar', highlight: 'con vendedores?',
-        price: 'Asesoría Premium', link: '/negociamos-por-vos',
-        // Sin img: via.placeholder.com (usado antes acá) es un servicio externo
-        // caído/poco confiable -- mismo patrón que el resto del sitio (HomeClient,
-        // CatalogoClient, comparador). isValidImageSrc('') es false, así que el
-        // bloque de imagen simplemente no se renderiza en vez de mostrarse roto.
+        id: 'fallback_datacar',
+        sponsor: 'Servicio DATACAR',
+        headline: '¿Cansado de negociar',
+        highlight: 'con vendedores?',
+        price: 'Asesoría Premium',
+        link: '/negociamos-por-vos',
         img: '',
-        location: 'recomendador', isActive: true
+        location: 'recomendador',
+        isActive: true
       };
     }
     setSmartAd(selectedAd);
@@ -633,11 +693,13 @@ export default function RecomendadorPage() {
   // ==========================================
   const submitLeadAndShowResults = async (e: React.FormEvent) => {
     e.preventDefault();
+    track('lead_submit_attempt', { origen: 'Recomendador Interactivo' });
     setIsSubmittingLead(true);
     setFeedback({ type: '', message: 'Analizando base de datos automotriz...' });
     
     const phoneRegex = /^09\d{8}$/;
     if (!phoneRegex.test(leadForm.telefono)) {
+      track('lead_submit_error', { origen: 'Recomendador Interactivo', motivo: 'telefono_invalido' });
       setFeedback({ type: 'error', message: 'El celular debe tener 10 dígitos y empezar con 09.' });
       setIsSubmittingLead(false); return;
     }
@@ -647,6 +709,7 @@ export default function RecomendadorPage() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const emailIngresado = leadForm.email.trim();
     if (emailIngresado && !emailRegex.test(emailIngresado)) {
+      track('lead_submit_error', { origen: 'Recomendador Interactivo', motivo: 'email_invalido' });
       setFeedback({ type: 'error', message: 'El correo no parece válido. Podés dejarlo vacío si preferís.' });
       setIsSubmittingLead(false); return;
     }
@@ -667,6 +730,10 @@ export default function RecomendadorPage() {
         createdAt: serverTimestamp()
       });
 
+      track('lead_submit_success', { origen: 'Recomendador Interactivo', canal: 'wizard' });
+
+      const finalTop3 = runAlgorithm();
+
       // Disparo de correo B2B a la gerencia (fail-safe: el lead ya está guardado
       // en DB, sendLeadNotificationEmail nunca throwea, solo loguea si falla).
       await sendLeadNotificationEmail({
@@ -675,10 +742,17 @@ export default function RecomendadorPage() {
         leadEmail: emailIngresado || 'No proporcionado',
         vehicleOfInterest: 'Perfilado por Recomendador Interactivo',
         origen: 'Recomendador Interactivo',
-        concesionariaDestino: 'A designar (Central DATACAR)'
+        concesionariaDestino: 'A designar (Central DATACAR)',
+        wizardAnswers: answers,
+        topMatches: finalTop3.map(m => ({
+          brandName: m.brandName,
+          modelName: m.modelName,
+          startingPrice: m.startingPrice,
+          matchPercentage: m.matchPercentage,
+          badge: m.badge,
+        })),
       });
 
-      const finalTop3 = runAlgorithm();
       if (emailIngresado) {
         await sendRecommendationResultsEmail(emailIngresado, finalTop3.map(m => ({
           brandName: m.brandName, modelName: m.modelName, startingPrice: m.startingPrice,
@@ -1148,28 +1222,71 @@ export default function RecomendadorPage() {
               </div>
             </div>
 
-            {/* INYECCIÓN SMART AD */}
-            {smartAd && (
-              <a href={smartAd.link} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col md:flex-row items-center p-6 md:p-8 mb-12 relative group hover:border-[#0A1F33] transition-colors shadow-none rounded-none">
-                <span className="absolute top-4 left-4 bg-[#F5F5F5] border border-[#C0C0C0] text-[#3A3A3C] text-[8px] uppercase font-bold px-2 py-0.5 tracking-widest z-20 rounded-none">Patrocinado: {smartAd.sponsor}</span>
-                <div className="relative w-full h-48 md:w-1/2 z-10 pt-6 md:pt-0">
-                  {isValidImageSrc(smartAd.img) && (
-                    <Image
-                      src={smartAd.img}
-                      alt="Banner"
-                      fill
-                      sizes="(max-width: 768px) 100vw, 50vw"
-                      className="object-contain group-hover:scale-105 transition-transform duration-500"
-                      unoptimized={!isOptimizableImageSrc(smartAd.img)}
-                    />
+            {/* INYECCIÓN SMART AD (100% IMAGEN DE BANNER) */}
+            {/* INYECCIÓN SMART AD (100% IMAGEN DE BANNER O FORMATO EDITORIAL) */}
+            {smartAd && (() => {
+              const targetUrl = normalizeExternalUrl(smartAd.ctaUrl || smartAd.link);
+              const isClickable = targetUrl !== '#';
+              const isExternal = isClickable && targetUrl.startsWith('http');
+              return isValidImageSrc(smartAd.img) ? (
+                <a
+                  href={targetUrl}
+                  target={isExternal ? '_blank' : undefined}
+                  rel={isExternal ? 'noopener noreferrer' : undefined}
+                  className="block w-full relative group overflow-hidden border border-[#C0C0C0] hover:border-[#0A1F33] transition-colors mb-12 rounded-none bg-transparent shadow-sm"
+                >
+                  <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm">
+                    Patrocinado: {smartAd.sponsor}
+                  </span>
+                  <Image
+                    src={smartAd.img}
+                    alt={smartAd.sponsor || 'Patrocinio'}
+                    width={1200}
+                    height={400}
+                    sizes="(max-width: 1400px) 100vw, 1200px"
+                    className="w-full h-auto block object-cover group-hover:brightness-105 transition-all"
+                    unoptimized={!isOptimizableImageSrc(smartAd.img)}
+                  />
+                  {smartAd.ctaEnabled && smartAd.ctaText && (
+                    <span
+                      className="absolute bottom-4 right-4 font-bold text-xs uppercase px-5 py-2.5 shadow-lg tracking-wider transition-transform group-hover:scale-105 z-20"
+                      style={{ backgroundColor: smartAd.ctaColor || '#00BFFF', color: '#FFFFFF' }}
+                    >
+                      {smartAd.ctaText} →
+                    </span>
                   )}
-                </div>
-                <div className="md:w-1/2 text-center md:text-left mt-6 md:mt-0 z-10 border-t md:border-t-0 md:border-l border-[#C0C0C0] pt-6 md:pt-0 md:pl-10">
-                  <h3 className="font-black text-2xl sm:text-3xl md:text-4xl text-[#0A1F33] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{smartAd.headline} <br/><span className="text-[#00BFFF]">{smartAd.highlight}</span></h3>
-                  <p className="font-black text-xl sm:text-2xl text-[#0A1F33] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1 break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{smartAd.price}</p>
-                </div>
-              </a>
-            )}
+                </a>
+              ) : (
+                <a
+                  href={targetUrl}
+                  target={isExternal ? '_blank' : undefined}
+                  rel={isExternal ? 'noopener noreferrer' : undefined}
+                  className="block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 mb-12 relative group transition-colors shadow-none rounded-none text-center"
+                >
+                  <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">
+                    Patrocinado: {smartAd.sponsor}
+                  </span>
+                  <h3 className="font-black text-2xl sm:text-3xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                    {smartAd.headline} <span className="text-[#00BFFF]">{smartAd.highlight}</span>
+                  </h3>
+                  {smartAd.price && (
+                    <p className="font-black text-xl text-[#00BFFF] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1 break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      {smartAd.price}
+                    </p>
+                  )}
+                  {smartAd.ctaEnabled && smartAd.ctaText && (
+                    <div className="mt-4">
+                      <span
+                        className="inline-block font-bold text-xs uppercase px-6 py-3 tracking-wider shadow-md"
+                        style={{ backgroundColor: smartAd.ctaColor || '#00BFFF', color: '#FFFFFF' }}
+                      >
+                        {smartAd.ctaText} →
+                      </span>
+                    </div>
+                  )}
+                </a>
+              );
+            })()}
 
             {/* RUNNER-UPS (OTRAS OPCIONES - HORIZONTAL FLAT) */}
             {otherMatches.length > 0 && (

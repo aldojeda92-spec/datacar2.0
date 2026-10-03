@@ -12,6 +12,7 @@ export type NavItem =
 interface NavbarProps {
   items: NavItem[];
   cta?: { label: string; href: string; compact?: boolean };
+  secondaryCta?: { label: string; href: string; compact?: boolean };
   logoHref?: string;
 }
 
@@ -21,7 +22,7 @@ const ChevronIcon = ({ open }: { open: boolean }) => (
   </svg>
 );
 
-export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
+export default function Navbar({ items, cta, secondaryCta, logoHref = '/' }: NavbarProps) {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<string | null>(null);
@@ -130,7 +131,16 @@ export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
         </div>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {secondaryCta && (
+          <Link
+            href={secondaryCta.href}
+            className={`${hasItems ? 'hidden lg:inline-flex' : 'inline-flex'} bg-[#00BFFF] border border-[#00BFFF] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest ${secondaryCta.compact ? 'py-2 px-5' : 'py-3 px-6'} hover:bg-[#0A1F33] hover:text-[#FFFFFF] hover:border-[#0A1F33] transition-colors rounded-none`}
+          >
+            {secondaryCta.label}
+          </Link>
+        )}
+
         {cta && (
           <Link href={cta.href} className={`${hasItems ? 'hidden lg:inline-flex' : 'inline-flex'} ${ctaClasses}`}>
             {cta.label}
@@ -217,15 +227,26 @@ export default function Navbar({ items, cta, logoHref = '/' }: NavbarProps) {
                   })}
                 </div>
 
-                {cta && (
-                  <div className="p-4 mt-auto border-t border-[#C0C0C0] shrink-0">
-                    <Link
-                      href={cta.href}
-                      className="block text-center bg-[#0A1F33] text-[#FFFFFF] font-bold text-[11px] uppercase tracking-widest py-4 px-8 hover:bg-[#00BFFF] transition-colors"
-                      onClick={() => setMobileOpen(false)}
-                    >
-                      {cta.label}
-                    </Link>
+                {(cta || secondaryCta) && (
+                  <div className="p-4 mt-auto border-t border-[#C0C0C0] shrink-0 flex flex-col gap-2">
+                    {secondaryCta && (
+                      <Link
+                        href={secondaryCta.href}
+                        className="block text-center bg-[#00BFFF] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-6 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors rounded-none"
+                        onClick={() => setMobileOpen(false)}
+                      >
+                        {secondaryCta.label}
+                      </Link>
+                    )}
+                    {cta && (
+                      <Link
+                        href={cta.href}
+                        className="block text-center bg-[#0A1F33] text-[#FFFFFF] font-bold text-[11px] uppercase tracking-widest py-3 px-6 hover:bg-[#00BFFF] hover:text-[#0A1F33] transition-colors rounded-none"
+                        onClick={() => setMobileOpen(false)}
+                      >
+                        {cta.label}
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>

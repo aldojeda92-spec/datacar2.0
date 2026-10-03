@@ -168,6 +168,30 @@ function CatalogoContent() {
     return s && SORT_OPTIONS.some(o => o.value === s) ? s : 'relevancia';
   });
 
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSearchModelId, setSelectedSearchModelId] = useState<string | null>(null);
+  const [similarModel, setSimilarModel] = useState<AutoModel | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const searchSuggestions = useMemo(() => {
+    if (globalSearchQuery.length < 2) return [];
+    const q = globalSearchQuery.toLowerCase();
+    return autos.filter(a => 
+      a.name.toLowerCase().includes(q) || a.brand.toLowerCase().includes(q)
+    ).slice(0, 5);
+  }, [globalSearchQuery, autos]);
+
   // ESTADO DE PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(() => {
     const p = Number(searchParams?.get('pagina'));
@@ -182,7 +206,7 @@ function CatalogoContent() {
   useEffect(() => {
     if (!filtersHydrated.current) { filtersHydrated.current = true; return; }
     setCurrentPage(1);
-  }, [activeFilters, priceRange, sortBy]);
+  }, [activeFilters, priceRange, sortBy, selectedSearchModelId, similarModel]);
 
   // ESCRIBIR EL ESTADO EN LA URL (sin re-navegar)
   useEffect(() => {
@@ -333,7 +357,7 @@ function CatalogoContent() {
     (priceRange.from || priceRange.to ? 1 : 0) +
     activeFilters.tipos.length + activeFilters.marcas.length + activeFilters.transmisiones.length +
     activeFilters.combustibles.length + activeFilters.tracciones.length + activeFilters.plazas.length +
-    activeFilters.origenes.length;
+    activeFilters.origenes.length + (selectedSearchModelId ? 1 : 0) + (similarModel ? 1 : 0);
 
   const marcasFiltradas = useMemo(() => {
     const q = marcaQuery.trim().toLowerCase();
@@ -345,6 +369,9 @@ function CatalogoContent() {
     setPriceRange({ from: '', to: '' });
     setMarcaQuery('');
     setActiveFilters({ tipos: [], marcas: [], transmisiones: [], combustibles: [], tracciones: [], plazas: [], origenes: [] });
+    setSelectedSearchModelId(null);
+    setGlobalSearchQuery('');
+    setSimilarModel(null);
   };
 
   // ==========================================
@@ -352,6 +379,17 @@ function CatalogoContent() {
   // ==========================================
   const autosFiltrados = useMemo(() => {
     return autos.filter(auto => {
+      // Filtros especiales
+      if (selectedSearchModelId && auto.id !== selectedSearchModelId) return false;
+      
+      if (similarModel) {
+        if (auto.tipo_carroceria !== similarModel.tipo_carroceria) return false;
+        const minPrice = similarModel.price * 0.8;
+        const maxPrice = similarModel.price * 1.2;
+        if (auto.price < minPrice || auto.price > maxPrice) return false;
+        if (similarModel.combustible && similarModel.combustible !== 'No Definido' && auto.combustible !== similarModel.combustible) return false;
+      }
+
       if (priceRange.from && auto.price < Number(priceRange.from)) return false;
       if (priceRange.to && auto.price > Number(priceRange.to)) return false;
       
@@ -383,7 +421,7 @@ function CatalogoContent() {
 
       return true;
     });
-  }, [activeFilters, priceRange, autos]);
+  }, [activeFilters, priceRange, autos, selectedSearchModelId, similarModel]);
 
   // Orden aplicado sobre el resultado filtrado. "relevancia" respeta el orden
   // de origen (destacados primero como desempate suave).
@@ -460,29 +498,49 @@ function CatalogoContent() {
     );
   };
 
-  // Renderizador del Anuncio Contextual
+  // Renderizador del Anuncio Contextual (100% Imagen de Banner)
   const renderAdBanner = () => {
     if (!adToShow) return null;
-    return (
-      <a href={normalizeExternalUrl(adToShow.link)} target="_blank" rel="noopener noreferrer" key={`injected-ad-${adToShow.id}`} className="col-span-full block w-full bg-[#3A3A3C] border-2 border-transparent hover:border-[#00BFFF] flex flex-col md:flex-row justify-between items-center p-6 md:p-8 relative transition-colors group overflow-hidden mb-2 mt-2 rounded-none">
-        <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Patrocinado: {adToShow.sponsor}</span>
-        <div className="flex flex-col text-left z-10 mt-6 md:mt-0">
-          <p className="font-black text-2xl sm:text-3xl md:text-4xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{adToShow.headline} <span className="text-[#00BFFF]">{adToShow.highlight}</span></p>
-          <p className="font-black text-xl sm:text-2xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{adToShow.price}</p>
-        </div>
-        <div className="mt-6 md:mt-0 flex justify-end z-10 relative h-32 w-full md:w-1/2">
-          {isValidImageSrc(adToShow.img) && (
-            <Image
-              src={adToShow.img}
-              alt={adToShow.sponsor}
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-contain group-hover:scale-105 transition-transform origin-right"
-              style={{ objectPosition: 'right bottom' }}
-              unoptimized={!isOptimizableImageSrc(adToShow.img)}
-            />
-          )}
-        </div>
+    return isValidImageSrc(adToShow.img) ? (
+      <a
+        href={normalizeExternalUrl(adToShow.link)}
+        target="_blank"
+        rel="noopener noreferrer"
+        key={`injected-ad-${adToShow.id}`}
+        className="col-span-full block w-full relative group overflow-hidden border border-[#C0C0C0] hover:border-[#00BFFF] transition-colors mb-6 mt-2 rounded-none bg-transparent shadow-sm"
+      >
+        <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm">
+          Patrocinado: {adToShow.sponsor}
+        </span>
+        <Image
+          src={adToShow.img}
+          alt={adToShow.sponsor || 'Patrocinio'}
+          width={1200}
+          height={400}
+          sizes="(max-width: 1400px) 100vw, 1200px"
+          className="w-full h-auto block object-cover group-hover:brightness-105 transition-all"
+          unoptimized={!isOptimizableImageSrc(adToShow.img)}
+        />
+      </a>
+    ) : (
+      <a
+        href={normalizeExternalUrl(adToShow.link)}
+        target="_blank"
+        rel="noopener noreferrer"
+        key={`injected-ad-${adToShow.id}`}
+        className="col-span-full block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 relative transition-colors group overflow-hidden mb-6 mt-2 rounded-none text-center"
+      >
+        <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">
+          Patrocinado: {adToShow.sponsor}
+        </span>
+        <p className="font-black text-2xl sm:text-3xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+          {adToShow.headline} <span className="text-[#00BFFF]">{adToShow.highlight}</span>
+        </p>
+        {adToShow.price && (
+          <p className="font-black text-xl text-[#00BFFF] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+            {adToShow.price}
+          </p>
+        )}
       </a>
     );
   };
@@ -654,24 +712,85 @@ function CatalogoContent() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 pb-4 border-b border-[#C0C0C0]">
-            <span className="text-[11px] text-[#3A3A3C] uppercase tracking-widest">
+          {similarModel && (
+            <div className="bg-[#0A1F33] text-[#FFFFFF] p-5 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-none shadow-none border-l-4 border-[#00BFFF]">
+              <div className="flex items-center gap-4">
+                <div className="bg-[#FFFFFF]/10 p-2 rounded-full shrink-0">
+                  <svg className="w-6 h-6 text-[#00BFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-1">Búsqueda de Similares</p>
+                  <p className="text-sm font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                    Mostrando alternativas a <span className="font-bold">{similarModel.brand} {similarModel.name}</span>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSimilarModel(null)} 
+                className="text-[10px] font-bold text-[#FFFFFF] hover:text-[#00BFFF] border border-[#FFFFFF]/20 hover:border-[#00BFFF] px-4 py-2 uppercase tracking-widest transition-colors w-full sm:w-auto rounded-none"
+              >
+                ✕ Quitar Filtro
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6 pb-4 border-b border-[#C0C0C0]">
+            <span className="text-[11px] text-[#3A3A3C] uppercase tracking-widest shrink-0">
               {isLoading ? 'Cargando catálogo...' : <><span className="font-bold text-[#0A1F33] text-sm">{autosOrdenados.length}</span> autos disponibles</>}
               {!isLoading && totalPages > 1 && (
                 <span className="text-[#C0C0C0] font-bold"> · Página {currentPage} de {totalPages}</span>
               )}
             </span>
-            <label className="flex items-center gap-2 text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">
-              Ordenar por
-              <select
-                aria-label="Ordenar resultados"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortKey)}
-                className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-3 focus:outline-none focus:border-[#0A1F33] rounded-none"
-              >
-                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </label>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
+              <div className="relative flex-grow sm:flex-grow-0 sm:w-64" ref={searchContainerRef}>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={globalSearchQuery}
+                    onChange={(e) => { setGlobalSearchQuery(e.target.value); setShowSuggestions(true); }}
+                    onFocus={() => setShowSuggestions(true)}
+                    placeholder="Buscar marca o modelo"
+                    className="w-full border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-bold uppercase tracking-widest py-2 px-3 pr-8 focus:outline-none focus:border-[#0A1F33] rounded-none"
+                  />
+                  {globalSearchQuery && (
+                    <button 
+                      onClick={() => { setGlobalSearchQuery(''); setSelectedSearchModelId(null); setShowSuggestions(false); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#C0C0C0] hover:text-[#0A1F33]"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                {showSuggestions && searchSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-[#FFFFFF] border border-[#C0C0C0] shadow-lg z-50">
+                    {searchSuggestions.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setSelectedSearchModelId(s.id);
+                          setGlobalSearchQuery(`${s.brand} ${s.name}`);
+                          setShowSuggestions(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-[#3A3A3C] hover:bg-[#F8F9FA] hover:text-[#0A1F33] border-b border-[#F8F9FA] last:border-b-0"
+                      >
+                        {s.brand} {s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <label className="flex items-center gap-2 text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest shrink-0">
+                Ordenar por
+                <select
+                  aria-label="Ordenar resultados"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortKey)}
+                  className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-3 focus:outline-none focus:border-[#0A1F33] rounded-none"
+                >
+                  {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </label>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -696,17 +815,19 @@ function CatalogoContent() {
                     {showAdHere && index === 6 && renderAdBanner()}
 
                     <div className="relative h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
-                      <button
-                        type="button"
-                        onClick={() => toggleCompare(auto)}
-                        aria-pressed={enCompare}
-                        aria-label={enCompare ? `Quitar ${auto.brand} ${auto.name} del comparador` : `Agregar ${auto.brand} ${auto.name} al comparador`}
-                        title={enCompare ? 'Quitar del comparador' : 'Agregar al comparador'}
-                        className={`absolute top-2 right-2 z-20 flex items-center gap-1 border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-                        {enCompare ? 'Comparando' : 'Comparar'}
-                      </button>
+                      <div className="absolute top-2 right-2 z-20 flex flex-col items-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleCompare(auto)}
+                          aria-pressed={enCompare}
+                          aria-label={enCompare ? `Quitar ${auto.brand} ${auto.name} del comparador` : `Agregar ${auto.brand} ${auto.name} al comparador`}
+                          title={enCompare ? 'Quitar del comparador' : 'Agregar al comparador'}
+                          className={`flex items-center gap-1 border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                          {enCompare ? 'Comparando' : 'Comparar'}
+                        </button>
+                      </div>
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
                         <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
                           {isDatacarCheck(auto.concesionaria, checkedDealershipSet) && (
@@ -727,9 +848,27 @@ function CatalogoContent() {
                         </div>
                         
                         <div className="p-5 flex flex-col">
-                          <h3 className="text-[14px] text-[#3A3A3C] uppercase tracking-wide mb-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
-                            {auto.brand} <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.name}</span>
-                          </h3>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <h3 className="text-[14px] text-[#3A3A3C] uppercase tracking-wide truncate" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+                              {auto.brand} <span className="font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.name}</span>
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSimilarModel(auto);
+                                topRef.current?.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              title={`Buscar similares a ${auto.brand} ${auto.name}`}
+                              aria-label={`Buscar similares a ${auto.brand} ${auto.name}`}
+                              className="p-1.5 text-[#C0C0C0] hover:text-[#00BFFF] hover:bg-[#F5FBFF] border border-[#C0C0C0]/50 hover:border-[#00BFFF] transition-colors shrink-0 rounded-none"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                              </svg>
+                            </button>
+                          </div>
                           <p className="text-[11px] font-bold text-[#C0C0C0] uppercase mb-2 truncate" title={auto.versionName || 'Versión Base'}>
                             {auto.versionName || 'Versión Base'}
                           </p>

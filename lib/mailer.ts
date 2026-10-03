@@ -11,6 +11,14 @@ export interface LeadNotificationParams {
   vehicleOfInterest: string;
   origen: string;
   concesionariaDestino: string;
+  wizardAnswers?: Record<string, any>;
+  topMatches?: Array<{
+    brandName: string;
+    modelName: string;
+    startingPrice: number;
+    matchPercentage: number;
+    badge?: string;
+  }>;
 }
 
 export const sendLeadNotificationEmail = async (params: LeadNotificationParams) => {
@@ -54,6 +62,8 @@ export const sendLeadNotificationEmail = async (params: LeadNotificationParams) 
           vehicleOfInterest: params.vehicleOfInterest,
           nombreConcesionariaOficial,
           waLink,
+          wizardAnswers: params.wizardAnswers,
+          topMatches: params.topMatches,
         },
       }),
     });

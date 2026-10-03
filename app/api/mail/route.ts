@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import fs from 'fs';
+import path from 'path';
 
 const ALLOWED_ORIGINS = [
   'https://datacarpy.com',
   'https://www.datacarpy.com',
   'https://datacar2-0.vercel.app',
   'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost',
 ];
 
 // Rate limit best-effort en memoria (por IP). En serverless se resetea entre
@@ -37,6 +41,61 @@ function checkRateLimit(ip: string): boolean {
 }
 
 function buildLeadHtml(d: any): string {
+  const formatPresupuesto = (p: string) => {
+    switch (p) {
+      case '18000': return 'Hasta US$ 18.000';
+      case '25000': return 'US$ 18.000 a US$ 25.000';
+      case '40000': return 'US$ 25.000 a US$ 40.000';
+      case '999999': return 'Más de US$ 40.000';
+      default: return p || 'No especificado';
+    }
+  };
+
+  const hasWizardData = !!d?.wizardAnswers || (d?.topMatches && d.topMatches.length > 0);
+  let extraHtml = '';
+  if (hasWizardData) {
+    extraHtml += `
+      <h2 style="color: #0A1F33; font-size: 16px; text-transform: uppercase; font-weight: 900; margin-top: 32px; border-bottom: 1px solid #C0C0C0; padding-bottom: 8px; font-family: 'Montserrat', sans-serif;">
+        Perfil del Prospecto
+      </h2>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; color: #3A3A3C;">
+        ${d.wizardAnswers?.presupuesto ? `<tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 35%; text-transform: uppercase; color: #C0C0C0;">Presupuesto:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33;">${escapeHtml(formatPresupuesto(d.wizardAnswers.presupuesto))}</td></tr>` : ''}
+        ${d.wizardAnswers?.uso ? `<tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 35%; text-transform: uppercase; color: #C0C0C0;">Tipo de uso:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33;">${escapeHtml(d.wizardAnswers.uso)}</td></tr>` : ''}
+        ${d.wizardAnswers?.personas ? `<tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 35%; text-transform: uppercase; color: #C0C0C0;">Personas:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33;">${escapeHtml(d.wizardAnswers.personas)}</td></tr>` : ''}
+        ${d.wizardAnswers?.carroceria ? `<tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 35%; text-transform: uppercase; color: #C0C0C0;">Carrocería:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33;">${escapeHtml(Array.isArray(d.wizardAnswers.carroceria) ? d.wizardAnswers.carroceria.join(', ') : d.wizardAnswers.carroceria)}</td></tr>` : ''}
+        ${d.wizardAnswers?.combustible ? `<tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 35%; text-transform: uppercase; color: #C0C0C0;">Combustible:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33;">${escapeHtml(Array.isArray(d.wizardAnswers.combustible) ? d.wizardAnswers.combustible.join(', ') : d.wizardAnswers.combustible)}</td></tr>` : ''}
+      </table>
+    `;
+
+    if (d.topMatches && d.topMatches.length > 0) {
+      extraHtml += `
+        <h2 style="color: #0A1F33; font-size: 16px; text-transform: uppercase; font-weight: 900; margin-top: 32px; border-bottom: 1px solid #C0C0C0; padding-bottom: 8px; font-family: 'Montserrat', sans-serif;">
+          Top 3 Recomendados
+        </h2>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; color: #3A3A3C;">
+          <thead>
+            <tr>
+              <th style="padding: 12px; border-bottom: 2px solid #C0C0C0; text-align: left; text-transform: uppercase; color: #0A1F33;">Modelo</th>
+              <th style="padding: 12px; border-bottom: 2px solid #C0C0C0; text-align: left; text-transform: uppercase; color: #0A1F33;">Precio</th>
+              <th style="padding: 12px; border-bottom: 2px solid #C0C0C0; text-align: left; text-transform: uppercase; color: #0A1F33;">Match</th>
+              <th style="padding: 12px; border-bottom: 2px solid #C0C0C0; text-align: left; text-transform: uppercase; color: #0A1F33;">Atributo</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${d.topMatches.map((m: any) => `
+              <tr>
+                <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; color: #0A1F33;">${escapeHtml(m.brandName)} ${escapeHtml(m.modelName)}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; color: #3A3A3C;">US$ ${escapeHtml(Number(m.startingPrice || 0).toLocaleString('en-US'))}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; color: #1E8E3E; font-weight: 700;">${escapeHtml(m.matchPercentage)}%</td>
+                <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; color: #00BFFF; font-weight: 700;">${escapeHtml(m.badge || '')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+
   return `
     <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #F8F9FA;">
       <div style="background-color: #0A1F33; border-bottom: 4px solid #00BFFF; padding: 24px; text-align: center;">
@@ -58,6 +117,9 @@ function buildLeadHtml(d: any): string {
           <tr><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #C0C0C0;">Email:</td><td style="padding: 12px; border-bottom: 1px solid #E6E6E6; color: #3A3A3C;">${escapeHtml(d?.leadEmail || 'No proporcionado')}</td></tr>
           <tr><td style="padding: 12px; font-weight: 700; text-transform: uppercase; color: #C0C0C0;">Asignación:</td><td style="padding: 12px; font-weight: 900; color: #0A1F33; text-transform: uppercase;">${escapeHtml(d?.nombreConcesionariaOficial)}</td></tr>
         </table>
+        
+        ${extraHtml}
+
         <div style="margin-top: 32px; text-align: center;">
           ${d?.waLink
             ? `<a href="${escapeHtml(d.waLink)}" style="background-color: #1E8E3E; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">Contactar por WhatsApp</a>`
@@ -182,7 +244,10 @@ function buildRecommendationResultsHtml(d: any): string {
 
 export async function POST(request: Request) {
   const origin = request.headers.get('origin') || request.headers.get('referer') || '';
-  if (!ALLOWED_ORIGINS.some((o) => origin.startsWith(o))) {
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  // En producción se valida estrictamente el origen; en desarrollo se admite localhost y peticiones internas
+  if (!isDev && origin && !ALLOWED_ORIGINS.some((o) => origin.startsWith(o))) {
     return NextResponse.json({ error: 'Origen no permitido' }, { status: 403 });
   }
 
@@ -192,7 +257,7 @@ export async function POST(request: Request) {
   }
 
   const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > 10_000) {
+  if (contentLength > 50_000) {
     return NextResponse.json({ error: 'Payload demasiado grande' }, { status: 413 });
   }
 
@@ -206,19 +271,25 @@ export async function POST(request: Request) {
   const { type, destinatarios, data } = body || {};
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (
-    !Array.isArray(destinatarios) ||
-    destinatarios.length === 0 ||
-    destinatarios.length > 3 ||
-    !destinatarios.every((e: unknown) => typeof e === 'string' && emailRegex.test(e))
-  ) {
+  // Sanitizar y validar lista de destinatarios
+  const rawList = Array.isArray(destinatarios) ? destinatarios : [destinatarios];
+  const cleanDestinatarios = Array.from(
+    new Set(
+      rawList
+        .flatMap((item: unknown) => String(item || '').split(/[,;]/))
+        .map((e: string) => e.trim().toLowerCase())
+        .filter((e: string) => emailRegex.test(e))
+    )
+  );
+
+  if (cleanDestinatarios.length === 0) {
     return NextResponse.json({ error: 'Destinatarios inválidos' }, { status: 400 });
   }
 
   let subject: string;
   let html: string;
   if (type === 'lead_notification') {
-    subject = `🔥 NUEVO LEAD DATACAR: ${escapeHtml(data?.vehicleOfInterest)}`;
+    subject = `🔥 NUEVO LEAD DATACAR: ${escapeHtml(data?.vehicleOfInterest || 'Consulta Web')}`;
     html = buildLeadHtml(data);
   } else if (type === 'welcome') {
     subject = 'Bienvenido a DATACAR 🚘';
@@ -236,11 +307,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Tipo de correo no soportado' }, { status: 400 });
   }
 
+  // ==========================================
+  // ENTORNO DEV / PRUEBAS SIN CREDENCIALES SMTP
+  // ==========================================
+  // Si no hay credenciales SMTP configuradas en .env.local, NO rompemos la app ni la experiencia.
+  // Generamos el HTML completo y lo guardamos en /public/emails-preview/latest.html para poder
+  // inspeccionar el diseño real en el navegador inmediatamente.
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.error('❌ [API MAIL] Fallo: Credenciales .env.local ausentes.');
-    return NextResponse.json({ error: 'Credenciales SMTP ausentes' }, { status: 500 });
+    console.log('\n==========================================');
+    console.log('📨 [API MAIL - MODO SIMULACIÓN DEV]');
+    console.log(`Tipo: ${type}`);
+    console.log(`Para: ${cleanDestinatarios.join(', ')}`);
+    console.log(`Asunto: ${subject}`);
+
+    try {
+      const previewDir = path.join(process.cwd(), 'public', 'emails-preview');
+      if (!fs.existsSync(previewDir)) {
+        fs.mkdirSync(previewDir, { recursive: true });
+      }
+      const latestPath = path.join(previewDir, 'latest.html');
+      const typedPath = path.join(previewDir, `${type}.html`);
+      fs.writeFileSync(latestPath, html, 'utf-8');
+      fs.writeFileSync(typedPath, html, 'utf-8');
+      console.log(`✅ Previsualización guardada en: http://localhost:3000/emails-preview/latest.html`);
+      console.log('==========================================\n');
+    } catch (saveErr) {
+      console.error('Error guardando archivo de previsualización:', saveErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      simulated: true,
+      message: 'Correo procesado y previsualizado con éxito en modo desarrollo.',
+      previewUrl: '/emails-preview/latest.html',
+      destinatarios: cleanDestinatarios,
+      subject,
+    });
   }
 
+  // ==========================================
+  // PRODUCCIÓN O CREDENCIALES REALES DISPONIBLES
+  // ==========================================
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -252,13 +359,13 @@ export async function POST(request: Request) {
   try {
     const info = await transporter.sendMail({
       from: `"DATACAR CRM" <${process.env.EMAIL_USER}>`,
-      to: destinatarios.join(', '),
+      to: cleanDestinatarios.join(', '),
       subject,
       html,
     });
     return NextResponse.json({ success: true, message: 'Correo enviado.', id: info.messageId });
   } catch (error: any) {
     console.error('❌ [API MAIL] Error crítico de SMTP:', error);
-    return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+    return NextResponse.json({ error: 'Error interno de envío SMTP', details: error.message }, { status: 500 });
   }
 }

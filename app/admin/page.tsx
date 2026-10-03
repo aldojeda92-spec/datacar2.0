@@ -14,6 +14,7 @@ import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarCheck';
+import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { useToast } from '../context/ToastContext';
 
 // ==========================================
@@ -57,42 +58,85 @@ function ImageUploadField({ label, folder, value, onChange, accentClass }: {
     if (!file) return;
     setError('');
     setUploading(true);
+
     try {
+      // 1. Intentar subida mediante el endpoint interno del servidor (evita bloqueos de CORS)
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', folder);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          onChange(data.url);
+          return;
+        }
+      }
+
+      // 2. Fallback a Firebase Storage si el endpoint local no está disponible
       const path = `${folder}/${Date.now()}_${file.name}`;
       const fileRef = ref(storage, path);
       await uploadBytes(fileRef, file);
       const url = await getDownloadURL(fileRef);
       onChange(url);
     } catch (err: any) {
-      setError(err.message || 'Error al subir la imagen.');
+      console.error('Error al subir imagen:', err);
+      setError(err.message || 'Error al subir la imagen. También podés pegar una URL directa abajo.');
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div>
-      <label htmlFor={inputId} className={`text-[10px] font-bold uppercase block mb-1 ${accentClass || 'text-[#3A3A3C]'}`}>{label}</label>
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={inputId} className={`text-[10px] font-bold uppercase block ${accentClass || 'text-[#3A3A3C]'}`}>{label}</label>
+      
       {isValidImageSrc(value) && (
-        <Image
-          src={value}
-          alt="Vista previa"
-          width={96}
-          height={48}
-          className="h-12 w-auto object-contain mb-2 border border-[#C0C0C0]/50 p-1"
-          unoptimized={!isOptimizableImageSrc(value)}
-        />
+        <div className="flex items-center gap-3 p-2 bg-[#F8F9FA] border border-[#C0C0C0]/50 w-full mb-1">
+          <Image
+            src={value}
+            alt="Vista previa"
+            width={96}
+            height={48}
+            className="h-12 w-auto object-contain border border-[#C0C0C0]/50 p-1 bg-[#FFFFFF]"
+            unoptimized={!isOptimizableImageSrc(value)}
+          />
+          <div className="flex flex-col flex-grow min-w-0">
+            <span className="text-[9px] font-bold text-[#0A1F33] uppercase truncate">URL Actual:</span>
+            <span className="text-[9px] text-[#3A3A3C] font-mono truncate">{value}</span>
+          </div>
+        </div>
       )}
-      <input
-        id={inputId}
-        type="file"
-        accept="image/*"
-        onChange={handleFile}
-        disabled={uploading}
-        className={`w-full border p-3 text-xs focus:outline-none disabled:opacity-50 ${accentClass ? 'border-[#00BFFF]/30 focus:border-[#00BFFF]' : 'focus:border-[#0A1F33]'}`}
-      />
-      {uploading && <p className="text-[10px] text-[#00BFFF] mt-1">Subiendo imagen...</p>}
-      {error && <p className="text-[10px] text-red-600 mt-1">{error}</p>}
+
+      <div className="flex flex-col gap-2">
+        <input
+          id={inputId}
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          disabled={uploading}
+          className={`w-full border p-2.5 text-xs focus:outline-none disabled:opacity-50 ${accentClass ? 'border-[#00BFFF]/30 focus:border-[#00BFFF]' : 'focus:border-[#0A1F33]'}`}
+        />
+
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest shrink-0">O pegar URL:</span>
+          <input
+            type="text"
+            placeholder="https://... o /uploads/..."
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="flex-1 border p-1.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+          />
+        </div>
+      </div>
+
+      {uploading && <p className="text-[10px] text-[#00BFFF] font-bold uppercase tracking-wider mt-0.5">Subiendo imagen al servidor...</p>}
+      {error && <p className="text-[10px] text-red-600 mt-0.5">{error}</p>}
     </div>
   );
 }
@@ -108,7 +152,7 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<User | null>(null);
 
   // Pestañas del Sistema
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'financiero' | 'accesos'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'financiero' | 'accesos' | 'analitica'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,7 +164,14 @@ export default function AdminDashboardPage() {
   const [concesionariasList, setConcesionariasList] = useState<any[]>([]);
   const [campaignsList, setCampaignsList] = useState<any[]>([]);
   const [leadsList, setLeadsList] = useState<LeadData[]>([]);
+  const [comparisonStatsList, setComparisonStatsList] = useState<any[]>([]);
   
+  // Filtros Analítica
+  const [filterCompBrand, setFilterCompBrand] = useState('Todas');
+  const [filterCompModel, setFilterCompModel] = useState('Todos');
+  const [filterCompDateFrom, setFilterCompDateFrom] = useState('');
+  const [filterCompDateTo, setFilterCompDateTo] = useState('');
+
   // Estados para Accesos B2B y Admins
   const [usuariosSistemaList, setUsuariosSistemaList] = useState<any[]>([]);
   const [solicitudesList, setSolicitudesList] = useState<any[]>([]);
@@ -148,7 +199,8 @@ export default function AdminDashboardPage() {
   // FORMULARIO DE ADS
   const [adForm, setAdForm] = useState({ 
     sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', 
-    location: 'ambos', targetCategory: 'Todas', startDate: '', endDate: '' 
+    location: 'ambos', targetCategory: 'Todas', startDate: '', endDate: '',
+    ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF'
   });
   
   const [finForm, setFinForm] = useState({ tasa_anual: 0.09, gastos_admin: 0.022, seguro_vida: 0.005 });
@@ -176,7 +228,7 @@ export default function AdminDashboardPage() {
       const qLeads = query(collection(db, 'leads'), orderBy('createdAt', 'desc'));
       const qReqs = query(collection(db, 'dealership_requests'), orderBy('createdAt', 'desc'));
 
-      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap] = await Promise.all([
+      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap] = await Promise.all([
         getDocs(collection(db, 'brands')),
         getDocs(collection(db, 'models')),
         getDocs(collection(db, 'versions')),
@@ -184,7 +236,8 @@ export default function AdminDashboardPage() {
         getDocs(qLeads),
         getDocs(collection(db, 'concesionarias')),
         getDocs(collection(db, 'users')),
-        getDocs(qReqs)
+        getDocs(qReqs),
+        getDocs(collection(db, 'comparison_stats'))
       ]);
       
       setMarcasList(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -192,6 +245,7 @@ export default function AdminDashboardPage() {
       setVersionesList(vSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCampaignsList(adSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setConcesionariasList(cSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setComparisonStatsList(compSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       
       // Accesos B2B y Admins
       setUsuariosSistemaList(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -308,6 +362,46 @@ export default function AdminDashboardPage() {
   const topVehiculos = useMemo(() => getTopItems(filteredLeads, l => l.vehiculo, 5), [filteredLeads]);
   const leadsPorOrigen = useMemo(() => getTopItems(filteredLeads, l => l.origen, 5), [filteredLeads]);
   const leadsPorConcesionaria = useMemo(() => getTopItems(filteredLeads, l => l.concesionaria_destino, 5), [filteredLeads]);
+
+  // Analítica Comparaciones
+  const compModelosParaSelect = useMemo(() => {
+    if (filterCompBrand === 'Todas') return modelosList;
+    return modelosList.filter(m => m.brandId === filterCompBrand);
+  }, [modelosList, filterCompBrand]);
+
+  const filteredComparisons = useMemo(() => {
+    return comparisonStatsList.filter(comp => {
+      // Filtrar por marca
+      if (filterCompBrand !== 'Todas') {
+        const marcaObj = marcasList.find(m => m.id === filterCompBrand);
+        if (marcaObj && !comp.combo.toUpperCase().includes(marcaObj.name.toUpperCase())) return false;
+      }
+      // Filtrar por modelo
+      if (filterCompModel !== 'Todos') {
+        const modeloObj = modelosList.find(m => m.id === filterCompModel);
+        if (modeloObj && !comp.combo.toUpperCase().includes(modeloObj.name.toUpperCase())) return false;
+      }
+      // Filtrar por fecha
+      if (comp.timestamp) {
+        const compDate = comp.timestamp.toDate ? comp.timestamp.toDate().getTime() : new Date(comp.timestamp).getTime();
+        if (filterCompDateFrom && compDate < new Date(filterCompDateFrom).getTime()) return false;
+        if (filterCompDateTo) {
+          const toDate = new Date(filterCompDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          if (compDate > toDate.getTime()) return false;
+        }
+      }
+      return true;
+    });
+  }, [comparisonStatsList, filterCompBrand, filterCompModel, filterCompDateFrom, filterCompDateTo, marcasList, modelosList]);
+
+  const topComparisons = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredComparisons.forEach(c => {
+      counts[c.combo] = (counts[c.combo] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  }, [filteredComparisons]);
 
   const BarChart = ({ data, total }: { data: [string, number][], total: number }) => (
     <div className="flex flex-col gap-3">
@@ -548,6 +642,7 @@ export default function AdminDashboardPage() {
     try {
       const id = marcaForm.id || generarSlug(marcaForm.name);
       await setDoc(doc(db, 'brands', id), { name: marcaForm.name.toUpperCase(), origen_marca: marcaForm.origen_marca, logoUrl: marcaForm.logoUrl, updatedAt: serverTimestamp() }, { merge: true });
+      invalidateCatalogCache('brands');
       setFeedback({ type: 'success', message: 'Identidad de Marca guardada correctamente.' });
       setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '' }); fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
@@ -558,6 +653,7 @@ export default function AdminDashboardPage() {
     try {
       const id = modeloForm.id || generarSlug(modeloForm.name);
       await setDoc(doc(db, 'models', id), { ...modeloForm, name: modeloForm.name.toUpperCase(), tipo_carroceria: normalizeCarroceria(modeloForm.tipo_carroceria), startingPrice: Number(modeloForm.startingPrice) || 0, isPopular: modeloForm.isPopular, updatedAt: serverTimestamp() }, { merge: true });
+      invalidateCatalogCache('models');
       setFeedback({ type: 'success', message: 'Modelo guardado correctamente.' });
       setModeloForm({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', subsegmento: '', origen: '', startingPrice: '', imgUrl: '', isPopular: false }); fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
@@ -576,6 +672,7 @@ export default function AdminDashboardPage() {
         updatedAt: serverTimestamp()
       }, { merge: true });
       
+      invalidateCatalogCache('versions');
       setFeedback({ type: 'success', message: 'Versión técnica guardada de forma integral.' });
       setVersionForm({ id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '', airbags: '', tamanho_pantalla: '', conectividad: '', camaras: '', garantia: '', adas: '', asiento_cuero: '', techo_panoramico: '', alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '', confort_conveniencia: '', seguridad_standard: '' });
       fetchAllData();
@@ -587,6 +684,7 @@ export default function AdminDashboardPage() {
     try {
       const id = concesionariaForm.id || generarSlug(concesionariaForm.name);
       await setDoc(doc(db, 'concesionarias', id), { name: concesionariaForm.name.toUpperCase(), email_gerencia: concesionariaForm.email_gerencia, status: concesionariaForm.status, datacarCheck: concesionariaForm.datacarCheck, updatedAt: serverTimestamp() }, { merge: true });
+      invalidateCatalogCache('concesionarias');
       setFeedback({ type: 'success', message: 'Concesionaria guardada y actualizada correctamente.' });
       setConcesionariaForm({ id: '', name: '', status: 'active', email_gerencia: '', datacarCheck: false }); fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
@@ -595,7 +693,12 @@ export default function AdminDashboardPage() {
   const handleDelete = async (col: string, id: string) => {
     if (!confirm('¿Confirmas la eliminación permanente de este registro individual?')) return;
     setLoading(true);
-    try { await deleteDoc(doc(db, col, id)); setFeedback({ type: 'success', message: 'Registro eliminado.' }); fetchAllData(); } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
+    try { 
+      await deleteDoc(doc(db, col, id)); 
+      invalidateCatalogCache(col);
+      setFeedback({ type: 'success', message: 'Registro eliminado.' }); 
+      fetchAllData(); 
+    } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
   const triggerEditMarca = (m: any) => { setMarcaForm({ id: m.id, name: m.name || '', origen_marca: m.origen_marca || '', logoUrl: m.logoUrl || '' }); window.scrollTo(0,0); };
@@ -619,8 +722,9 @@ export default function AdminDashboardPage() {
     try {
       const newId = `ad_${generarId()}`;
       await setDoc(doc(db, 'campaigns', newId), { ...adForm, isActive: false, createdAt: serverTimestamp() });
+      invalidateCatalogCache('campaigns');
       setFeedback({ type: 'success', message: 'Anuncio inyectado en la bóveda publicitaria.' });
-      setAdForm({ sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', location: 'ambos', targetCategory: 'Todas', startDate: '', endDate: '' }); fetchAllData();
+      setAdForm({ sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', location: 'ambos', targetCategory: 'Todas', startDate: '', endDate: '', ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF' }); fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
@@ -628,6 +732,7 @@ export default function AdminDashboardPage() {
     setLoading(true);
     try { 
       await setDoc(doc(db, 'campaigns', id), { isActive: !currentStatus }, { merge: true }); 
+      invalidateCatalogCache('campaigns');
       setFeedback({ type: 'success', message: `Campaña ${!currentStatus ? 'Activada' : 'Pausada'} correctamente.` }); fetchAllData(); 
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
@@ -655,6 +760,7 @@ export default function AdminDashboardPage() {
         <nav className="flex flex-col flex-grow py-6 text-[10px] font-bold uppercase tracking-widest overflow-y-auto custom-scrollbar" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <span className="text-[#C0C0C0] px-6 mb-3">CRM & Operaciones</span>
           <button onClick={() => { setActiveTab('dashboard'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'dashboard' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Dashboard Leads</button>
+          <button onClick={() => { setActiveTab('analitica'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'analitica' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Analítica Comparaciones</button>
           
           <button onClick={() => { setActiveTab('accesos'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'accesos' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Accesos y Permisos</button>
 
@@ -983,6 +1089,78 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
+          {activeTab === 'analitica' && (
+            <div className="flex flex-col gap-6 h-full">
+              {/* FILTROS */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-wrap gap-4 items-end shrink-0">
+                <div className="flex-1 min-w-[150px]">
+                  <label htmlFor="filterCompBrand" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Marca</label>
+                  <select id="filterCompBrand" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompBrand} onChange={e => { setFilterCompBrand(e.target.value); setFilterCompModel('Todos'); }}>
+                    <option value="Todas">Todas</option>
+                    {marcasList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1 min-w-[150px]">
+                  <label htmlFor="filterCompModel" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Modelo</label>
+                  <select id="filterCompModel" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompModel} onChange={e => setFilterCompModel(e.target.value)} disabled={filterCompBrand === 'Todas'}>
+                    <option value="Todos">Todos</option>
+                    {compModelosParaSelect.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1 min-w-[120px]">
+                  <label htmlFor="filterCompDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Desde</label>
+                  <input id="filterCompDateFrom" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompDateFrom} onChange={e => setFilterCompDateFrom(e.target.value)} />
+                </div>
+                <div className="flex-1 min-w-[120px]">
+                  <label htmlFor="filterCompDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Hasta</label>
+                  <input id="filterCompDateTo" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompDateTo} onChange={e => setFilterCompDateTo(e.target.value)} />
+                </div>
+                <div>
+                  <button onClick={() => { setFilterCompBrand('Todas'); setFilterCompModel('Todos'); setFilterCompDateFrom(''); setFilterCompDateTo(''); }} className="border border-[#C0C0C0] px-4 py-2 text-[10px] font-bold uppercase hover:bg-[#F5F5F5] transition-colors text-[#3A3A3C]">Limpiar</button>
+                </div>
+              </div>
+
+              {/* GRÁFICOS Y MÉTRICAS */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0">
+                <div className="lg:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col justify-center items-center h-48">
+                  <span className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest text-center mb-2">Total de Comparaciones</span>
+                  <span className="text-5xl font-black text-[#00BFFF]">{filteredComparisons.length}</span>
+                </div>
+                <div className="lg:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-48 overflow-y-auto custom-scrollbar">
+                  <h3 className="text-xs font-bold text-[#0A1F33] uppercase tracking-widest mb-4">Top 10 Combos Más Comparados</h3>
+                  <BarChart data={topComparisons} total={filteredComparisons.length} />
+                </div>
+              </div>
+
+              {/* TABLA DE DETALLE */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex-grow overflow-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse whitespace-nowrap min-w-[700px]">
+                  <thead className="bg-[#F8F9FA] sticky top-0 z-10 border-b border-[#C0C0C0]">
+                    <tr className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-widest">
+                      <th className="p-4 border-r border-[#C0C0C0]/50">Vehículos Comparados (Combo)</th>
+                      <th className="p-4 border-r border-[#C0C0C0]/50 text-center">ID Vehículos</th>
+                      <th className="p-4 text-center">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[11px] text-[#3A3A3C]">
+                    {filteredComparisons.length === 0 ? (
+                      <tr><td colSpan={3} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No hay datos de comparaciones para estos filtros.</td></tr>
+                    ) : filteredComparisons.map((comp) => {
+                      const compDate = comp.timestamp ? (comp.timestamp.toDate ? comp.timestamp.toDate() : new Date(comp.timestamp)) : null;
+                      return (
+                        <tr key={comp.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors">
+                          <td className="p-4 border-r border-[#C0C0C0]/50 font-bold text-[#0A1F33] uppercase">{comp.combo}</td>
+                          <td className="p-4 border-r border-[#C0C0C0]/50 text-center text-[9px] text-[#C0C0C0] whitespace-normal max-w-xs">{comp.vehicles?.join(' vs ') || '-'}</td>
+                          <td className="p-4 text-center">{compDate ? `${compDate.toLocaleDateString()} ${compDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'financiero' && (
             <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-8 max-w-3xl">
               <h2 className="font-bold text-[#0A1F33] text-lg uppercase border-b border-[#C0C0C0] pb-4 mb-6">Configuración de Motor Matemático</h2>
@@ -1291,12 +1469,48 @@ export default function AdminDashboardPage() {
 
                   <div><label htmlFor="adForm-sponsor" className="text-[10px] font-bold uppercase block mb-1">Patrocinador (Marca/Empresa)</label><input id="adForm-sponsor" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.sponsor} onChange={e => setAdForm({...adForm, sponsor: e.target.value})} required /></div>
                   <div className="grid grid-cols-2 gap-2">
-                     <div><label htmlFor="adForm-headline" className="text-[10px] font-bold uppercase block mb-1">Titular Corto</label><input id="adForm-headline" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.headline} onChange={e => setAdForm({...adForm, headline: e.target.value})} required /></div>
-                     <div><label htmlFor="adForm-highlight" className="text-[10px] font-bold uppercase block mb-1">Resalte Cyan</label><input id="adForm-highlight" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.highlight} onChange={e => setAdForm({...adForm, highlight: e.target.value})} /></div>
+                     <div><label htmlFor="adForm-headline" className="text-[10px] font-bold uppercase block mb-1">Titular (Opcional)</label><input id="adForm-headline" type="text" placeholder="Ej: Nueva Generación" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.headline} onChange={e => setAdForm({...adForm, headline: e.target.value})} /></div>
+                     <div><label htmlFor="adForm-highlight" className="text-[10px] font-bold uppercase block mb-1">Resalte Cyan (Opcional)</label><input id="adForm-highlight" type="text" placeholder="Ej: 2026" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.highlight} onChange={e => setAdForm({...adForm, highlight: e.target.value})} /></div>
                   </div>
                   <div><label htmlFor="adForm-price" className="text-[10px] font-bold uppercase block mb-1">Precio Promo</label><input id="adForm-price" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.price} onChange={e => setAdForm({...adForm, price: e.target.value})} /></div>
-                  <div><label htmlFor="adForm-link" className="text-[10px] font-bold uppercase block mb-1">URL Enlace</label><input id="adForm-link" type="text" placeholder="https://www.ejemplo.com.py o /negociamos-por-vos" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.link} onChange={e => setAdForm({...adForm, link: e.target.value})} /></div>
+                  <div><label htmlFor="adForm-link" className="text-[10px] font-bold uppercase block mb-1">URL Enlace (General)</label><input id="adForm-link" type="text" placeholder="https://www.ejemplo.com.py o /negociamos-por-vos" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.link} onChange={e => setAdForm({...adForm, link: e.target.value})} /></div>
                   <ImageUploadField label="Imagen del Banner" folder="campaigns" value={adForm.img} onChange={url => setAdForm({...adForm, img: url})} />
+                  
+                  {/* BOTÓN DE ACCIÓN (CTA) */}
+                  <div className="border border-[#C0C0C0] p-4 bg-[#F8F9FA] flex flex-col gap-3">
+                    <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2">
+                      <span className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest block">Botón de Acción (Opcional)</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" checked={adForm.ctaEnabled} onChange={e => setAdForm({...adForm, ctaEnabled: e.target.checked})} />
+                        <div className="w-9 h-5 bg-[#C0C0C0] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#00BFFF]/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#00BFFF]"></div>
+                      </label>
+                    </div>
+
+                    {adForm.ctaEnabled && (
+                      <>
+                        <div>
+                          <label htmlFor="adForm-ctaText" className="text-[9px] font-bold uppercase block mb-1">Texto del Botón</label>
+                          <input id="adForm-ctaText" type="text" placeholder="Ej: Ver Oferta" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.ctaText} onChange={e => setAdForm({...adForm, ctaText: e.target.value})} />
+                        </div>
+                        <div>
+                          <label htmlFor="adForm-ctaUrl" className="text-[9px] font-bold uppercase block mb-1">URL del Botón</label>
+                          <input id="adForm-ctaUrl" type="text" placeholder="https://..." className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.ctaUrl} onChange={e => setAdForm({...adForm, ctaUrl: e.target.value})} />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase block mb-1">Color del Botón</label>
+                          <div className="flex gap-2">
+                            {['#00BFFF', '#0A1F33', '#FFFFFF', '#D93025'].map(color => (
+                              <button key={color} type="button" onClick={() => setAdForm({...adForm, ctaColor: color})} className={`w-8 h-8 rounded-none border-2 transition-colors ${adForm.ctaColor === color ? 'border-[#3A3A3C]' : 'border-[#C0C0C0]'}`} style={{ backgroundColor: color }} aria-label={`Color ${color}`} />
+                            ))}
+                          </div>
+                        </div>
+                        <div className="mt-2 text-center p-3 border border-[#C0C0C0] bg-white">
+                          <span className="text-[8px] text-[#C0C0C0] uppercase block mb-2">Vista previa:</span>
+                          <span className="inline-block px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-transparent" style={{ backgroundColor: adForm.ctaColor, color: ['#FFFFFF'].includes(adForm.ctaColor) ? '#0A1F33' : '#FFFFFF' }}>{adForm.ctaText || 'BOTÓN'}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <button type="submit" disabled={loading} className="mt-2 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Inyectar Campaña</button>
                 </form>
               </div>
@@ -1307,13 +1521,26 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="overflow-auto flex-grow custom-scrollbar p-6 flex flex-col gap-4">
                   {campaignsList.length === 0 ? <p className="text-[10px] text-center text-[#C0C0C0] font-bold uppercase">Sin campañas.</p> : campaignsList.map((camp: any) => (
-                    <div key={camp.id} className={`border p-4 flex justify-between items-center transition-colors ${camp.isActive ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] bg-[#F8F9FA]'}`}>
-                       <div>
-                         <p className="text-[9px] font-bold text-[#3A3A3C] uppercase">{camp.sponsor} • Categoría: {camp.targetCategory || 'Todas'}</p>
-                         <p className="font-black text-sm text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{camp.headline}</p>
-                         <p className="text-[8px] text-[#C0C0C0] uppercase mt-1">Ubicación: {camp.location} | Vence: {camp.endDate}</p>
+                    <div key={camp.id} className={`border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${camp.isActive ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] bg-[#F8F9FA]'}`}>
+                       <div className="flex items-center gap-4 min-w-0">
+                         {isValidImageSrc(camp.img) && (
+                           <div className="w-24 h-12 relative bg-white border border-[#C0C0C0]/50 shrink-0">
+                             <Image
+                               src={camp.img}
+                               alt={camp.sponsor}
+                               fill
+                               className="object-contain"
+                               unoptimized={!isOptimizableImageSrc(camp.img)}
+                             />
+                           </div>
+                         )}
+                         <div className="min-w-0">
+                           <p className="text-[9px] font-bold text-[#3A3A3C] uppercase truncate">{camp.sponsor} • Categoría: {camp.targetCategory || 'Todas'}</p>
+                           <p className="font-black text-sm text-[#0A1F33] uppercase truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{camp.headline || camp.sponsor}</p>
+                           <p className="text-[8px] text-[#C0C0C0] uppercase mt-1">Ubicación: {camp.location} | Vence: {camp.endDate}</p>
+                         </div>
                        </div>
-                       <div className="flex gap-2">
+                       <div className="flex gap-2 shrink-0">
                          <button onClick={() => handleToggleAd(camp.id, camp.isActive)} className={`border ${camp.isActive ? 'border-[#D93025] text-[#D93025]' : 'border-[#0A1F33] text-[#0A1F33]'} px-4 py-2 text-[9px] font-bold uppercase`}>{camp.isActive ? 'Pausar' : 'Activar'}</button>
                          <button onClick={() => handleDelete('campaigns', camp.id)} className="border border-[#C0C0C0] text-[#C0C0C0] px-3 py-2 text-[9px] font-bold uppercase">X</button>
                        </div>

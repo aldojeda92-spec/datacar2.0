@@ -11,7 +11,10 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../lib/imageSrc';
 import { normalizeCarroceria } from '../lib/carroceria';
 import { normalizeExternalUrl } from '../lib/externalUrl';
 import Navbar, { NavItem } from './components/Navbar';
-
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../lib/finance';
+import { useLead } from './context/LeadContext';
 // ==========================================
 // INTERFACES B2B 
 // ==========================================
@@ -104,6 +107,20 @@ export default function HomeClient() {
   
   const [isLoading, setIsLoading] = useState(true);
 
+  // Comparaciones Populares
+  const [topComparisons, setTopComparisons] = useState<{combo: string, ids: string}[]>([]);
+
+  // Calculadora Financiera
+  const { openLeadModal } = useLead();
+  const [financialConfig, setFinancialConfig] = useState<FinancialConfig>(DEFAULT_FINANCIAL_CONFIG);
+  const [calcModel, setCalcModel] = useState<SearchItem | null>(null);
+  const [calcDownPayment, setCalcDownPayment] = useState<string>('');
+  const [calcTerm, setCalcTerm] = useState<number>(60);
+  const [calcResult, setCalcResult] = useState<number | null>(null);
+  const [calcSearchTerm, setCalcSearchTerm] = useState('');
+  const [calcSearchResults, setCalcSearchResults] = useState<SearchItem[]>([]);
+  const [calcDropdownOpen, setCalcDropdownOpen] = useState(false);
+
   // 1. Buscador
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
@@ -176,6 +193,30 @@ export default function HomeClient() {
         );
         if (validCampaign) setActiveAd(validCampaign);
 
+        // Carga de Configuración Financiera
+        const finDoc = await getDoc(doc(db, 'config', 'financial'));
+        if (finDoc.exists()) {
+          setFinancialConfig(finDoc.data() as FinancialConfig);
+        }
+
+        // Carga de Comparaciones Populares
+        const statsSnap = await getDocs(collection(db, 'comparison_stats'));
+        const comboCounts: Record<string, { count: number, ids: string }> = {};
+        statsSnap.forEach(doc => {
+          const data = doc.data();
+          if (data.combo && data.ids) {
+            if (!comboCounts[data.combo]) {
+              comboCounts[data.combo] = { count: 0, ids: data.ids };
+            }
+            comboCounts[data.combo].count += 1;
+          }
+        });
+        const sortedCombos = Object.entries(comboCounts)
+          .sort((a, b) => b[1].count - a[1].count)
+          .slice(0, 6)
+          .map(([combo, data]) => ({ combo, ids: data.ids }));
+        setTopComparisons(sortedCombos);
+
       } catch (error) {
         console.error("Error Firebase:", error);
       } finally {
@@ -197,10 +238,35 @@ export default function HomeClient() {
     }
   }, [searchTerm, searchIndex]);
 
-  // Selección inteligente de "Lo más buscado"
+  // Lógica Predictiva de Calculadora
+  useEffect(() => {
+    if (calcSearchTerm.length >= 2) {
+      const results = searchIndex.filter(item => item.type === 'Modelo' && item.title.toLowerCase().includes(calcSearchTerm.toLowerCase()));
+      setCalcSearchResults(results.slice(0, 5));
+      setCalcDropdownOpen(true);
+    } else {
+      setCalcSearchResults([]);
+      setCalcDropdownOpen(false);
+    }
+  }, [calcSearchTerm, searchIndex]);
+
+  const handleCalculate = () => {
+    if (!calcModel || !calcModel.modelId) return;
+    const model = autos.find(a => a.id === calcModel.modelId);
+    if (!model) return;
+    
+    const dp = parseFloat(calcDownPayment) || 0;
+    const cuota = calcularCuotaFrancesa(model.price, dp, calcTerm, financialConfig);
+    setCalcResult(cuota);
+  };
+
+  // Selección inteligente de "Lo más buscado" (2 filas de 4 = 8 modelos)
   const autosMasBuscados = useMemo(() => {
     const featured = autos.filter(a => a.isPopular);
-    return featured.length > 0 ? featured.slice(0, 6) : autos.slice(0, 6);
+    if (featured.length >= 8) return featured.slice(0, 8);
+    // Si hay menos de 8 populares marcados, completar con los primeros autos del catálogo hasta 8
+    const others = autos.filter(a => !a.isPopular);
+    return [...featured, ...others].slice(0, 8);
   }, [autos]);
   
   // Calcula la cantidad de autos por pestaña y determina cuáles mostrar
@@ -252,7 +318,11 @@ export default function HomeClient() {
       {/* ==========================================
           NAVBAR CORPORATIVO CON MEGA-MENÚS (FLAT)
           ========================================== */}
-      <Navbar items={navItems} cta={{ label: 'Catálogo', href: '/catalogo' }} />
+      <Navbar
+        items={navItems}
+        cta={{ label: 'Catálogo', href: '/catalogo' }}
+        secondaryCta={{ label: 'Promociones', href: '/promociones' }}
+      />
 
       {/* ==========================================
           2.1 BUSCADOR Y FILTROS RÁPIDOS
@@ -263,6 +333,10 @@ export default function HomeClient() {
           <h1 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Visitá todas las concesionarias<br/><span className="text-[#00BFFF]">en un solo lugar.</span>
           </h1>
+          <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8">
+            <Link href="/catalogo" className="bg-[#00BFFF] text-[#FFFFFF] font-bold text-sm uppercase tracking-widest py-5 px-10 transition-colors">Explorar Catálogo</Link>
+            <Link href="/recomendador" className="border-2 border-[#0A1F33] bg-[#FFFFFF] text-[#0A1F33] font-bold text-sm uppercase tracking-widest py-5 px-10 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors">Encontrá tu Auto Ideal</Link>
+          </div>
         </div>
 
         <div className="w-full max-w-4xl relative mb-6">
@@ -331,166 +405,265 @@ export default function HomeClient() {
           2.2 BANNER PUBLICITARIO
           ========================================== */}
       {activeAd && (
-        <section className="max-w-[1400px] mx-auto px-4 md:px-8 mt-12 mb-4 w-full">
-            <a href={normalizeExternalUrl(activeAd.link)} target="_blank" rel="noopener noreferrer" className="block w-full bg-[#3A3A3C] border-2 border-[#3A3A3C] flex flex-col md:flex-row justify-between items-center p-6 md:p-10 relative hover:border-[#00BFFF] transition-colors group overflow-hidden">
-              <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">Auspicio Oficial: {activeAd.sponsor}</span>
-              <div className="flex flex-col text-left md:w-1/2 z-10 mt-6 md:mt-0">
-                <p className="font-black text-3xl sm:text-4xl md:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{activeAd.headline} <span className="text-[#00BFFF]">{activeAd.highlight}</span></p>
-                <p className="font-black text-2xl md:text-4xl text-[#FFFFFF] mt-2 inline-block border-b-4 border-[#00BFFF] w-max pb-1 break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{activeAd.price}</p>
-              </div>
-              <div className="md:w-1/2 mt-6 md:mt-0 flex justify-end z-10 w-full relative h-48 md:h-64">
-                {isValidImageSrc(activeAd.img) && (
-                  <Image
-                    src={activeAd.img}
-                    alt={activeAd.sponsor}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    className="object-contain group-hover:scale-105 transition-transform origin-right"
-                    style={{ objectPosition: 'right bottom' }}
-                    unoptimized={!isOptimizableImageSrc(activeAd.img)}
-                  />
-                )}
-              </div>
+        <section className="max-w-[1400px] mx-auto px-4 md:px-8 mt-12 mb-6 w-full">
+          {isValidImageSrc(activeAd.img) ? (
+            <a
+              href={normalizeExternalUrl(activeAd.link)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full relative group overflow-hidden border border-[#C0C0C0] hover:border-[#00BFFF] transition-colors shadow-sm bg-transparent"
+            >
+              <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm">
+                Auspicio Oficial: {activeAd.sponsor}
+              </span>
+              <Image
+                src={activeAd.img}
+                alt={activeAd.sponsor || 'Auspicio'}
+                width={1200}
+                height={400}
+                sizes="(max-width: 1400px) 100vw, 1400px"
+                className="w-full h-auto block object-cover group-hover:brightness-105 transition-all"
+                unoptimized={!isOptimizableImageSrc(activeAd.img)}
+                priority
+              />
             </a>
+          ) : (
+            <a
+              href={normalizeExternalUrl(activeAd.link)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 md:p-12 relative transition-colors group overflow-hidden text-center"
+            >
+              <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">
+                Auspicio Oficial: {activeAd.sponsor}
+              </span>
+              <p className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                {activeAd.headline} <span className="text-[#00BFFF]">{activeAd.highlight}</span>
+              </p>
+              {activeAd.price && (
+                <p className="font-black text-2xl text-[#00BFFF] mt-2 inline-block border-b-2 border-[#00BFFF] pb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  {activeAd.price}
+                </p>
+              )}
+            </a>
+          )}
         </section>
       )}
 
-      {/* ==========================================
-          2.3 LO MÁS BUSCADO
-          ========================================== */}
-      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 mt-10 mb-12">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
-          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Lo más <span className="text-[#3A3A3C]">buscado</span></h2>
-          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Ver catálogo completo →</Link>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {isLoading ? <div className="col-span-full py-10 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">Cargando inventario...</div> : autosMasBuscados.length > 0 ? autosMasBuscados.map((auto) => (
-            <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block">
-              <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group">
-                <div className="relative p-4 flex-grow h-28 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/30">
-                  {isValidImageSrc(auto.img) ? (
-                    <Image
-                      src={auto.img}
-                      alt={auto.name}
-                      fill
-                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
-                      className="object-contain p-4 group-hover:scale-105 transition-transform"
-                      unoptimized={!isOptimizableImageSrc(auto.img)}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
-                  )}
-                </div>
-                <div className="p-4 flex flex-col">
-                  <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
-                  <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight mb-1 h-8 line-clamp-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.name}</h3>
-                  <div className="mt-2 pt-2 border-t border-[#C0C0C0]/50"><p className="font-black text-[11px] text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {auto.price.toLocaleString()}</p></div>
-                </div>
-              </div>
-            </Link>
-          )) : <div className="col-span-full py-10 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">Base de datos sincronizando...</div>}
-        </div>
-      </section>
 
       {/* ==========================================
-          2.4 NEGOCIAMOS POR VOS
+          3. LO MÁS BUSCADO (AUTOS DESTACADOS AMPLIADOS)
           ========================================== */}
-      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
-        <div className="bg-[#0A1F33] border border-[#0A1F33] w-full p-6 md:p-14 flex flex-col md:flex-row items-center justify-between relative">
-          <div className="absolute top-0 left-0 w-2 h-full bg-[#00BFFF]"></div>
-          <div className="md:w-1/2 z-10 mb-8 md:mb-0 md:pr-8">
-            <span className="border border-[#00BFFF] text-[#00BFFF] text-[9px] font-bold uppercase px-3 py-1 tracking-widest mb-4 inline-block bg-[#FFFFFF]/5">Nuevo Servicio</span>
-            <h2 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
-            <p className="text-[#C0C0C0] text-sm max-w-md mb-8 leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>El mercado vende autos todos los días. Vos comprás uno cada 5 años. Ponemos nuestra experiencia técnica y financiera a tu favor.</p>
-            <Link href="/negociamos-por-vos" className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-10 transition-colors inline-block">Consultar Asesoría →</Link>
+      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 mt-14 mb-16">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
+          <div>
+            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Tendencias del Mercado</span>
+            <h2 className="font-black text-3xl sm:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+              Lo más <span className="text-[#3A3A3C]">buscado</span>
+            </h2>
           </div>
-          <div className="md:w-1/2 flex justify-end w-full z-10">
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-lg text-center">
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
-              <p className="col-span-2 lg:col-span-3 text-[9px] text-[#C0C0C0]/70 leading-relaxed text-left mt-1">
-                Promedios sobre operaciones cerradas a través de DATACAR. El ahorro compara el precio final negociado contra el precio de lista publicado; el retorno es ese ahorro frente al costo del servicio.
-              </p>
+          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+            Ver catálogo completo →
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {isLoading ? (
+            <div className="col-span-full py-16 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-xs">
+              Cargando inventario 0KM...
             </div>
-          </div>
-        </div>
-      </section>
+          ) : autosMasBuscados.length > 0 ? (
+            autosMasBuscados.map((auto) => (
+              <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block group">
+                <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#0A1F33] transition-all flex flex-col overflow-hidden">
+                  {/* Top Bar de la Tarjeta */}
+                  <div className="px-5 py-3 border-b border-[#C0C0C0]/30 flex justify-between items-center bg-[#F8F9FA]">
+                    <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">
+                      {auto.brand}
+                    </span>
+                    <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest border border-[#C0C0C0] px-2 py-0.5 bg-[#FFFFFF]">
+                      {auto.category}
+                    </span>
+                  </div>
 
-      {/* ==========================================
-          2.5 BUSCAR POR MARCA
-          ========================================== */}
-      <section id="marcas-section" className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
-          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Buscá por <span className="text-[#3A3A3C]">marca</span></h2>
-          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0">Ver todas las marcas →</Link>
-        </div>
-        <div className="flex flex-wrap gap-4 justify-center">
-          {isLoading ? <p className="text-[10px] uppercase text-[#C0C0C0] font-bold tracking-widest">Escaneando mercado...</p> : marcas.length > 0 ? marcas.slice(0, 10).map((marca) => (
-            <Link href={`/catalogo?marca=${encodeURIComponent(marca.name)}`} key={marca.id} className="w-28 h-28 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col justify-center items-center hover:border-[#0A1F33] transition-colors group">
-               {isValidImageSrc(marca.logoUrl) ? (
-                 <div className="relative w-12 h-12 mb-3 opacity-80 group-hover:opacity-100 transition-opacity">
-                   <Image
-                     src={marca.logoUrl}
-                     alt={marca.name}
-                     fill
-                     sizes="48px"
-                     className="object-contain"
-                     unoptimized={!isOptimizableImageSrc(marca.logoUrl)}
-                   />
-                 </div>
-               ) : (
-                 <div className="w-12 h-12 bg-[#F5F5F5] mb-3 flex justify-center items-center group-hover:bg-[#0A1F33] transition-colors text-[10px] text-[#C0C0C0] group-hover:text-[#FFFFFF] uppercase font-bold">{marca.name.substring(0,2)}</div>
-               )}
-               <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest truncate max-w-[90%]">{marca.name}</span>
-            </Link>
-          )) : <p className="text-[10px] uppercase text-[#C0C0C0] font-bold tracking-widest">Sin marcas registradas</p>}
-          
-          {marcas.length > 10 && (
-             <Link href="/catalogo" className="w-28 h-28 bg-[#F8F9FA] border border-dashed border-[#C0C0C0] flex flex-col justify-center items-center hover:border-[#00BFFF] transition-colors group">
-                <span className="text-2xl text-[#C0C0C0] group-hover:text-[#00BFFF] mb-2">+</span>
-                <span className="text-[9px] font-bold text-[#C0C0C0] group-hover:text-[#00BFFF] uppercase tracking-widest text-center px-2">Ver Todas</span>
-             </Link>
+                  {/* Imagen Grande y Nítida */}
+                  <div className="relative w-full h-48 sm:h-52 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors p-6">
+                    {isValidImageSrc(auto.img) ? (
+                      <Image
+                        src={auto.img}
+                        alt={`${auto.brand} ${auto.name}`}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                        className="object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                        unoptimized={!isOptimizableImageSrc(auto.img)}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest">
+                        Sin Imagen
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Datos del Auto */}
+                  <div className="p-5 flex flex-col flex-grow border-t border-[#C0C0C0]/40 bg-[#FFFFFF]">
+                    <h3 className="font-black text-lg text-[#0A1F33] uppercase leading-tight mb-3 truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      {auto.name}
+                    </h3>
+
+                    <div className="mt-auto pt-4 border-t border-[#C0C0C0]/40 flex justify-between items-end">
+                      <div>
+                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio de lista desde</span>
+                        <p className="font-black text-2xl text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                          US$ {auto.price.toLocaleString()}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                        Ver ficha →
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className="col-span-full py-16 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-xs">
+              Base de datos sincronizando...
+            </div>
           )}
         </div>
       </section>
 
       {/* ==========================================
-          2.6 CÓMO FUNCIONA DATACAR
+          4. CALCULADORA FINANCIERA COMPRIMIDA HORIZONTALMENTE
           ========================================== */}
-      <section className="bg-[#0A1F33] border-y border-[#0A1F33] py-20 my-16">
-        <div className="max-w-[1400px] mx-auto px-4 lg:px-8 flex flex-col lg:flex-row gap-12 items-center">
-          <div className="lg:w-1/3 border-b lg:border-b-0 lg:border-r border-[#FFFFFF]/20 pb-8 lg:pb-0 lg:pr-8 text-center lg:text-left">
-            <h2 className="font-black text-3xl md:text-4xl text-[#FFFFFF] uppercase leading-tight mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Cómo funciona <br/><span className="text-[#00BFFF]">DataCar?</span></h2>
-            <Link href="/catalogo" className="bg-[#FFFFFF]/10 text-[#00BFFF] text-[10px] font-bold uppercase px-6 py-3 tracking-widest border border-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#0A1F33] transition-colors inline-block mt-2">Explorar Catálogo →</Link>
+      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-14">
+        <div className="bg-[#FFFFFF] border-2 border-[#0A1F33] p-6 lg:p-8">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-2 mb-6 border-b border-[#C0C0C0]/50 pb-4">
+            <div>
+              <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Simulación Financiera</span>
+              <h2 className="font-black text-2xl md:text-3xl text-[#0A1F33] uppercase leading-tight" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                ¿Qué modelo podés comprar por tu cuota?
+              </h2>
+            </div>
+            <p className="text-xs text-[#C0C0C0] font-medium">Calculá tu financiación 0KM en segundos</p>
           </div>
-          <div className="lg:w-2/3 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-            <div className="bg-[#FFFFFF]/5 p-8 border border-[#FFFFFF]/10 hover:border-[#00BFFF] transition-colors">
-              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>1.</span>
-              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Buscá tu auto</h3>
-              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Entre cientos de modelos disponibles con datos duros, especificaciones exactas y sin ruido comercial.</p>
+
+          <div className="flex flex-col xl:flex-row items-stretch xl:items-end gap-5">
+            {/* Controles de Entrada Horizontales */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 flex-grow">
+              {/* 1. Selección de Modelo */}
+              <div className="relative">
+                <label className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1.5 block">1. Modelo</label>
+                <div className="flex bg-[#F5F5F5] border border-[#C0C0C0] focus-within:border-[#00BFFF] transition-colors relative">
+                  <input
+                    type="text"
+                    placeholder="Escribí modelo..."
+                    className="w-full py-2.5 px-3 text-xs font-medium text-[#3A3A3C] bg-transparent focus:outline-none"
+                    value={calcModel ? calcModel.title : calcSearchTerm}
+                    onChange={(e) => { setCalcSearchTerm(e.target.value); setCalcModel(null); }}
+                    onFocus={() => calcSearchTerm.length >= 2 && setCalcDropdownOpen(true)}
+                  />
+                </div>
+                {calcDropdownOpen && calcSearchResults.length > 0 && (
+                  <ul className="absolute top-full left-0 w-full bg-[#FFFFFF] border-2 border-t-0 border-[#00BFFF] max-h-48 overflow-y-auto z-50 shadow-lg">
+                    {calcSearchResults.map(item => (
+                      <li key={item.id} className="px-3 py-2 hover:bg-[#F8F9FA] cursor-pointer text-xs border-b border-[#C0C0C0]/30 last:border-none" onClick={() => { setCalcModel(item); setCalcSearchTerm(''); setCalcDropdownOpen(false); }}>
+                        <span className="font-bold text-[#0A1F33] uppercase">{item.title}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* 2. Entrega Inicial */}
+              <div>
+                <label className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1.5 block">2. Entrega (US$)</label>
+                <input
+                  type="number"
+                  placeholder="Ej: 5000"
+                  className="w-full py-2.5 px-3 text-xs font-medium text-[#3A3A3C] bg-[#F5F5F5] border border-[#C0C0C0] focus:outline-none focus:border-[#00BFFF]"
+                  value={calcDownPayment}
+                  onChange={(e) => setCalcDownPayment(e.target.value)}
+                />
+              </div>
+
+              {/* 3. Plazo en Meses */}
+              <div>
+                <label className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1.5 block">3. Plazo</label>
+                <select
+                  value={calcTerm}
+                  onChange={(e) => setCalcTerm(Number(e.target.value))}
+                  className="w-full py-2.5 px-3 text-xs font-medium text-[#3A3A3C] bg-[#F5F5F5] border border-[#C0C0C0] focus:outline-none focus:border-[#00BFFF] rounded-none cursor-pointer"
+                >
+                  {[12, 24, 36, 48, 60].map(term => (
+                    <option key={term} value={term}>{term} meses</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 4. Botón Calcular */}
+              <div className="flex flex-col justify-end">
+                <button
+                  type="button"
+                  onClick={handleCalculate}
+                  className="w-full bg-[#00BFFF] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-3 px-4 transition-colors rounded-none text-center"
+                >
+                  Calcular
+                </button>
+              </div>
             </div>
-            <div className="bg-[#FFFFFF]/5 p-8 border border-[#FFFFFF]/10 hover:border-[#00BFFF] transition-colors">
-              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>2.</span>
-              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Compará Ofertas</h3>
-              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>De concesionarias oficiales de Paraguay, al instante y con total transparencia en precios y garantías.</p>
-            </div>
-            <div className="bg-[#FFFFFF]/5 p-8 border border-[#FFFFFF]/10 hover:border-[#00BFFF] transition-colors">
-              <span className="text-[#00BFFF] font-black text-5xl block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>3.</span>
-              <h3 className="text-[#FFFFFF] font-bold text-sm uppercase mb-3 tracking-wide" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Elegí y Avanzá</h3>
-              <p className="text-[#C0C0C0] text-[11px] leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Contactá directamente o delegá la transacción en nuestros expertos para proteger el valor de tu inversión.</p>
+
+            {/* Separador Vertical */}
+            <div className="hidden xl:block w-px self-stretch bg-[#C0C0C0]/50"></div>
+
+            {/* Resultado a la Derecha Mismo */}
+            <div className="xl:w-80 bg-[#0A1F33] text-[#FFFFFF] p-5 flex flex-col justify-between shrink-0">
+              {calcResult !== null ? (
+                <>
+                  <div className="mb-3">
+                    <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest block">Cuota Mensual Estimada</span>
+                    <p className="font-black text-2xl lg:text-3xl text-[#FFFFFF] mt-0.5" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      US$ {calcResult.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-normal text-[#C0C0C0]">/mes</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => openLeadModal({
+                      vehiculoInteres: calcModel?.title || 'Cotización Financiera',
+                      marcaVehiculo: calcModel?.brandId || '',
+                      origenLead: 'Calculadora Rápida Home',
+                      concesionariaDestino: 'Central'
+                    })}
+                    className="w-full bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-4 transition-colors text-center"
+                  >
+                    Solicitá tu crédito →
+                  </button>
+                </>
+              ) : (
+                <div className="py-4 flex flex-col justify-center items-center text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#C0C0C0]">
+                    Ingresá los datos y presioná Calcular
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </section>
 
       {/* ==========================================
-          2.7 AUTOS POR MENOS DE
+          5. AUTOS POR MENOS DE
           ========================================== */}
-      <section className="w-full max-w-[1400px] mx-auto px-4 lg:px-8 my-16 mb-24 min-w-0">
+      <section className="w-full max-w-[1400px] mx-auto px-4 lg:px-8 my-16 min-w-0">
         <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6 border-b border-[#C0C0C0] pb-4">
-          <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Autos por <span className="text-[#3A3A3C]">menos de</span></h2>
-          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest mb-1 sm:mb-0" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Ver todos →</Link>
+          <div>
+            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Segmentos de Precio</span>
+            <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+              Autos por <span className="text-[#3A3A3C]">menos de</span>
+            </h2>
+          </div>
+          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest mb-1 sm:mb-0" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+            Ver todos →
+          </Link>
         </div>
         
         {/* Pestañas Lógicas Dinámicas */}
@@ -557,6 +730,116 @@ export default function HomeClient() {
           )}
         </div>
       </section>
+
+      {/* ==========================================
+          6. MARCAS POPULARES
+          ========================================== */}
+      <section id="marcas-section" className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
+          <div>
+            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Ecosistema Oficial</span>
+            <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+              Buscá por <span className="text-[#3A3A3C]">marca</span>
+            </h2>
+          </div>
+          <Link href="/catalogo" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0">
+            Ver todas las marcas →
+          </Link>
+        </div>
+        <div className="flex flex-wrap gap-4 justify-center">
+          {isLoading ? (
+            <p className="text-[10px] uppercase text-[#C0C0C0] font-bold tracking-widest">Escaneando mercado...</p>
+          ) : marcas.length > 0 ? (
+            marcas.slice(0, 10).map((marca) => (
+              <Link href={`/catalogo?marca=${encodeURIComponent(marca.name)}`} key={marca.id} className="w-28 h-28 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col justify-center items-center hover:border-[#0A1F33] transition-colors group">
+                {isValidImageSrc(marca.logoUrl) ? (
+                  <div className="relative w-12 h-12 mb-3 opacity-80 group-hover:opacity-100 transition-opacity">
+                    <Image
+                      src={marca.logoUrl}
+                      alt={marca.name}
+                      fill
+                      sizes="48px"
+                      className="object-contain"
+                      unoptimized={!isOptimizableImageSrc(marca.logoUrl)}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 bg-[#F5F5F5] mb-3 flex justify-center items-center group-hover:bg-[#0A1F33] transition-colors text-[10px] text-[#C0C0C0] group-hover:text-[#FFFFFF] uppercase font-bold">
+                    {marca.name.substring(0,2)}
+                  </div>
+                )}
+                <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest truncate max-w-[90%]">
+                  {marca.name}
+                </span>
+              </Link>
+            ))
+          ) : (
+            <p className="text-[10px] uppercase text-[#C0C0C0] font-bold tracking-widest">Sin marcas registradas</p>
+          )}
+          
+          {marcas.length > 10 && (
+            <Link href="/catalogo" className="w-28 h-28 bg-[#F8F9FA] border border-dashed border-[#C0C0C0] flex flex-col justify-center items-center hover:border-[#00BFFF] transition-colors group">
+              <span className="text-2xl text-[#C0C0C0] group-hover:text-[#00BFFF] mb-2">+</span>
+              <span className="text-[9px] font-bold text-[#C0C0C0] group-hover:text-[#00BFFF] uppercase tracking-widest text-center px-2">Ver Todas</span>
+            </Link>
+          )}
+        </div>
+      </section>
+
+      {/* ==========================================
+          7. COMPARACIONES POPULARES
+          ========================================== */}
+      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
+          <div>
+            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Métricas de Interés</span>
+            <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+              Comparaciones populares
+            </h2>
+            <p className="text-sm text-[#C0C0C0] font-medium mt-1">Lo que más comparan los compradores en Paraguay</p>
+          </div>
+          <Link href="/comparador" className="text-[11px] font-bold text-[#00BFFF] hover:underline uppercase tracking-widest transition-colors mb-1 sm:mb-0">
+            Ir al comparador →
+          </Link>
+        </div>
+        <div className="flex flex-wrap gap-4">
+          {topComparisons.length > 0 ? (
+            topComparisons.map((comp, idx) => (
+              <Link key={idx} href={`/comparador?autos=${comp.ids}`} className="border border-[#C0C0C0] hover:border-[#00BFFF] bg-[#FFFFFF] p-4 text-center font-bold text-[#0A1F33] text-[11px] uppercase tracking-widest transition-colors hover:text-[#00BFFF]">
+                {comp.combo}
+              </Link>
+            ))
+          ) : (
+            <p className="text-[10px] text-[#C0C0C0] font-bold uppercase tracking-widest">Cargando comparaciones...</p>
+          )}
+        </div>
+      </section>
+
+      {/* ==========================================
+          8. NEGOCIAMOS POR VOS
+          ========================================== */}
+      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
+        <div className="bg-[#0A1F33] border border-[#0A1F33] w-full p-6 md:p-14 flex flex-col md:flex-row items-center justify-between relative">
+          <div className="absolute top-0 left-0 w-2 h-full bg-[#00BFFF]"></div>
+          <div className="md:w-1/2 z-10 mb-8 md:mb-0 md:pr-8">
+            <span className="border border-[#00BFFF] text-[#00BFFF] text-[9px] font-bold uppercase px-3 py-1 tracking-widest mb-4 inline-block bg-[#FFFFFF]/5">Nuevo Servicio</span>
+            <h2 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
+            <p className="text-[#C0C0C0] text-sm max-w-md mb-8 leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>El mercado vende autos todos los días. Vos comprás uno cada 5 años. Ponemos nuestra experiencia técnica y financiera a tu favor.</p>
+            <Link href="/negociamos-por-vos" className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-10 transition-colors inline-block">Consultar Asesoría →</Link>
+          </div>
+          <div className="md:w-1/2 flex justify-end w-full z-10">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-lg text-center">
+              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
+              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
+              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
+              <p className="col-span-2 lg:col-span-3 text-[9px] text-[#C0C0C0]/70 leading-relaxed text-left mt-1">
+                Promedios sobre operaciones cerradas a través de DATACAR. El ahorro compara el precio final negociado contra el precio de lista publicado; el retorno es ese ahorro frente al costo del servicio.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
 
       {/* ==========================================
           2.8 FOOTER CORPORATIVO INYECTADO

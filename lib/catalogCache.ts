@@ -11,7 +11,8 @@
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos por defecto para catálogo pesado
+const CAMPAIGNS_TTL_MS = 30 * 1000; // 30 segundos para campañas (pauta publicitaria ágil)
 
 export interface RawDoc {
   id: string;
@@ -26,9 +27,9 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<RawDoc[]>>();
 
-async function getCachedCollection(name: string): Promise<RawDoc[]> {
+async function getCachedCollection(name: string, ttlMs: number = CACHE_TTL_MS): Promise<RawDoc[]> {
   const entry = cache.get(name);
-  if (entry && Date.now() - entry.fetchedAt < CACHE_TTL_MS) {
+  if (entry && Date.now() - entry.fetchedAt < ttlMs) {
     return entry.data;
   }
 
@@ -52,10 +53,16 @@ async function getCachedCollection(name: string): Promise<RawDoc[]> {
 export const getCachedBrands = () => getCachedCollection('brands');
 export const getCachedModels = () => getCachedCollection('models');
 export const getCachedVersions = () => getCachedCollection('versions');
-export const getCachedCampaigns = () => getCachedCollection('campaigns');
+export const getCachedCampaigns = () => getCachedCollection('campaigns', CAMPAIGNS_TTL_MS);
 export const getCachedConcesionarias = () => getCachedCollection('concesionarias');
 
-/** Invalida todo el caché. Útil tras una acción que se sabe cambia el catálogo. */
-export function invalidateCatalogCache(): void {
-  cache.clear();
+/** Invalida todo el caché o una colección específica tras una acción que cambia datos. */
+export function invalidateCatalogCache(collectionName?: string): void {
+  if (collectionName) {
+    cache.delete(collectionName);
+    inFlight.delete(collectionName);
+  } else {
+    cache.clear();
+    inFlight.clear();
+  }
 }
