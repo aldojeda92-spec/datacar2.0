@@ -12,9 +12,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        userDoc().data.role == 'admin';
+      return isSignedIn() && (
+        request.auth.token.email in ['aldojeda92@gmail.com', 'adairojeda.adm@gmail.com', 'antoninovazquezjara@gmail.com'] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && userDoc().data.role == 'admin')
+      );
     }
 
     function isConcesionaria() {
