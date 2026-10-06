@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
@@ -16,6 +16,7 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarCheck';
 import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { useToast } from '../context/ToastContext';
+import { DEFAULT_REELS } from '../components/InstagramReelsSection';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
@@ -152,7 +153,7 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<User | null>(null);
 
   // Pestañas del Sistema
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'financiero' | 'accesos' | 'analitica'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'financiero' | 'accesos' | 'analitica' | 'blog'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -165,6 +166,32 @@ export default function AdminDashboardPage() {
   const [campaignsList, setCampaignsList] = useState<any[]>([]);
   const [leadsList, setLeadsList] = useState<LeadData[]>([]);
   const [comparisonStatsList, setComparisonStatsList] = useState<any[]>([]);
+  const [blogPostsList, setBlogPostsList] = useState<any[]>([]);
+  const [videoReviewsList, setVideoReviewsList] = useState<any[]>([]);
+  const [blogSubTab, setBlogSubTab] = useState<'posts' | 'videos'>('posts');
+
+  // Formularios de Blog y Videos
+  const [blogPostForm, setBlogPostForm] = useState({
+    id: '',
+    title: '',
+    slug: '',
+    category: 'Guías de Compra',
+    excerpt: '',
+    content: '',
+    coverImage: '',
+    author: 'Redacción DATACAR',
+    published: true,
+    readTimeMinutes: 4,
+  });
+
+  const [videoReviewForm, setVideoReviewForm] = useState({
+    id: '',
+    title: '',
+    url: 'https://www.instagram.com/datacarpy/',
+    thumbnail: '',
+    tag: 'Reel IG',
+    order: 1,
+  });
   
   // Filtros Analítica
   const [filterCompBrand, setFilterCompBrand] = useState('Todas');
@@ -209,9 +236,22 @@ export default function AdminDashboardPage() {
   const [csvData, setCsvData] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
 
-  // Filtros Dashboard
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  // Filtros Dashboard: Por defecto, los últimos 30 días según requerimiento
+  const [filterDateFrom, setFilterDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
+  const [filterDateTo, setFilterDateTo] = useState(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
   const [filterOrigin, setFilterOrigin] = useState('Todos');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterMarca, setFilterMarca] = useState('Todas');
@@ -225,10 +265,14 @@ export default function AdminDashboardPage() {
   const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
+      // Sin limitación artificial en leads para disponer del historial completo según los filtros de fecha
       const qLeads = query(collection(db, 'leads'), orderBy('createdAt', 'desc'));
-      const qReqs = query(collection(db, 'dealership_requests'), orderBy('createdAt', 'desc'));
+      const qReqs = query(collection(db, 'dealership_requests'), orderBy('createdAt', 'desc'), limit(50));
+      const qComp = query(collection(db, 'comparison_stats'), limit(150));
+      const qBlog = query(collection(db, 'blog_posts'), limit(50));
+      const qVideos = query(collection(db, 'video_reviews'), limit(20));
 
-      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap] = await Promise.all([
+      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap] = await Promise.all([
         getDocs(collection(db, 'brands')),
         getDocs(collection(db, 'models')),
         getDocs(collection(db, 'versions')),
@@ -237,7 +281,9 @@ export default function AdminDashboardPage() {
         getDocs(collection(db, 'concesionarias')),
         getDocs(collection(db, 'users')),
         getDocs(qReqs),
-        getDocs(collection(db, 'comparison_stats'))
+        getDocs(qComp),
+        getDocs(qBlog),
+        getDocs(qVideos),
       ]);
       
       setMarcasList(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -246,6 +292,8 @@ export default function AdminDashboardPage() {
       setCampaignsList(adSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setConcesionariasList(cSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setComparisonStatsList(compSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setBlogPostsList(blogSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setVideoReviewsList(videosSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       
       // Accesos B2B y Admins
       setUsuariosSistemaList(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -322,6 +370,41 @@ export default function AdminDashboardPage() {
     return Array.from(new Set(cats.map((c: string) => normalizeCarroceria(c)))).sort();
   }, [modelosList]);
 
+  const setDatePreset = (preset: '7d' | '30d' | '90d' | 'year' | 'all') => {
+    const today = new Date();
+    const formatYMD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    if (preset === 'all') {
+      setFilterDateFrom('');
+      setFilterDateTo('');
+      return;
+    }
+
+    setFilterDateTo(formatYMD(today));
+
+    if (preset === '7d') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      setFilterDateFrom(formatYMD(d));
+    } else if (preset === '30d') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      setFilterDateFrom(formatYMD(d));
+    } else if (preset === '90d') {
+      const d = new Date();
+      d.setDate(d.getDate() - 90);
+      setFilterDateFrom(formatYMD(d));
+    } else if (preset === 'year') {
+      const d = new Date(today.getFullYear(), 0, 1);
+      setFilterDateFrom(formatYMD(d));
+    }
+  };
+
   const filteredLeads = useMemo(() => {
     return leadsList.filter(lead => {
       if (filterText && !lead.vehiculo.toLowerCase().includes(filterText.toLowerCase()) && !lead.nombre.toLowerCase().includes(filterText.toLowerCase())) return false;
@@ -339,10 +422,14 @@ export default function AdminDashboardPage() {
       }
 
       const leadDate = lead.createdAt.getTime();
-      if (filterDateFrom && leadDate < new Date(filterDateFrom).getTime()) return false;
+      if (filterDateFrom) {
+        const [y, m, d] = filterDateFrom.split('-').map(Number);
+        const fromDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+        if (leadDate < fromDate.getTime()) return false;
+      }
       if (filterDateTo) {
-        const toDate = new Date(filterDateTo);
-        toDate.setHours(23, 59, 59, 999);
+        const [y, m, d] = filterDateTo.split('-').map(Number);
+        const toDate = new Date(y, m - 1, d, 23, 59, 59, 999);
         if (leadDate > toDate.getTime()) return false;
       }
 
@@ -737,12 +824,145 @@ export default function AdminDashboardPage() {
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
+  const handleSaveBlogPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blogPostForm.title || !blogPostForm.content) return;
+    setLoading(true);
+    try {
+      const slug = (blogPostForm.slug.trim() || generarSlug(blogPostForm.title)).toLowerCase();
+      const id = blogPostForm.id || `post_${generarId()}`;
+      await setDoc(doc(db, 'blog_posts', id), {
+        ...blogPostForm,
+        slug,
+        updatedAt: serverTimestamp(),
+        publishedAt: blogPostForm.published ? new Date().toISOString().split('T')[0] : '',
+      }, { merge: true });
+      setFeedback({ type: 'success', message: 'Artículo de blog guardado exitosamente.' });
+      setBlogPostForm({
+        id: '',
+        title: '',
+        slug: '',
+        category: 'Guías de Compra',
+        excerpt: '',
+        content: '',
+        coverImage: '',
+        author: 'Redacción DATACAR',
+        published: true,
+        readTimeMinutes: 4,
+      });
+      fetchAllData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTogglePostPublish = async (id: string, currentStatus: boolean) => {
+    setLoading(true);
+    try {
+      await setDoc(doc(db, 'blog_posts', id), {
+        published: !currentStatus,
+        updatedAt: serverTimestamp(),
+        publishedAt: !currentStatus ? new Date().toISOString().split('T')[0] : '',
+      }, { merge: true });
+      setFeedback({ type: 'success', message: `Artículo ${!currentStatus ? 'Publicado' : 'Guardado como borrador'}.` });
+      fetchAllData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const triggerEditBlogPost = (post: any) => {
+    setBlogPostForm({
+      id: post.id,
+      title: post.title || '',
+      slug: post.slug || '',
+      category: post.category || 'Guías de Compra',
+      excerpt: post.excerpt || '',
+      content: post.content || '',
+      coverImage: post.coverImage || '',
+      author: post.author || 'Redacción DATACAR',
+      published: post.published !== false,
+      readTimeMinutes: Number(post.readTimeMinutes) || 4,
+    });
+    setBlogSubTab('posts');
+  };
+
+  const handleSaveVideoReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!videoReviewForm.title || !videoReviewForm.url) return;
+    setLoading(true);
+    try {
+      const id = videoReviewForm.id || `vid_${generarId()}`;
+      await setDoc(doc(db, 'video_reviews', id), {
+        ...videoReviewForm,
+        id,
+        order: Number(videoReviewForm.order) || 1,
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+      setFeedback({ type: 'success', message: 'Miniatura y datos del Reel guardados exitosamente.' });
+      setVideoReviewForm({
+        id: '',
+        title: '',
+        url: 'https://www.instagram.com/datacarpy/',
+        thumbnail: '',
+        tag: 'Reel IG',
+        order: (videoReviewsList.length || 0) + 1,
+      });
+      fetchAllData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const triggerEditVideoReview = (video: any) => {
+    setVideoReviewForm({
+      id: video.id,
+      title: video.title || '',
+      url: video.url || '',
+      thumbnail: video.thumbnail || '',
+      tag: video.tag || 'Reel IG',
+      order: Number(video.order) || 1,
+    });
+    setBlogSubTab('videos');
+    const el = document.getElementById('video-review-form-container');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleCancelVideoReviewEdit = () => {
+    setVideoReviewForm({
+      id: '',
+      title: '',
+      url: 'https://www.instagram.com/datacarpy/',
+      thumbnail: '',
+      tag: 'Reel IG',
+      order: (videoReviewsList.length || 0) + 1,
+    });
+  };
+
   const filteredMarcas = useMemo(() => marcasList.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.id.includes(searchTerm)), [marcasList, searchTerm]);
   const filteredModelos = useMemo(() => modelosList.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.id.includes(searchTerm)), [modelosList, searchTerm]);
   const filteredVersiones = useMemo(() => versionesList.filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.id.includes(searchTerm)), [versionesList, searchTerm]);
   const filteredConcesionarias = useMemo(() => concesionariasList.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.id.includes(searchTerm)), [concesionariasList, searchTerm]);
   const checkedDealershipSet = useMemo(() => buildCheckedDealershipSet(concesionariasList), [concesionariasList]);
   const filteredSolicitudes = useMemo(() => solicitudesList.filter(r => r.concesionaria.toLowerCase().includes(searchTerm.toLowerCase())), [solicitudesList, searchTerm]);
+
+  // Combina los 5 reels oficiales predeterminados con los que hayan sido editados o creados en Firestore
+  const combinedReelsList = useMemo(() => {
+    const merged = DEFAULT_REELS.map(def => {
+      const found = videoReviewsList.find((r: any) => r.id === def.id);
+      return found ? { ...def, ...found, isCustomSaved: true } : { ...def, isCustomSaved: false };
+    });
+    const extras = videoReviewsList
+      .filter((r: any) => !DEFAULT_REELS.some(def => def.id === r.id))
+      .map((r: any) => ({ ...r, isCustomSaved: true }));
+    return [...merged, ...extras].sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+  }, [videoReviewsList]);
 
   // Pantalla de Carga de Autenticación
   if (isAuthLoading) return <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center font-bold text-[#0A1F33] tracking-widest uppercase text-sm">Validando credenciales ejecutivas...</div>;
@@ -775,6 +995,7 @@ export default function AdminDashboardPage() {
           <span className="text-[#C0C0C0] px-6 mt-6 mb-3">Herramientas</span>
           <button onClick={() => { setActiveTab('inyector'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'inyector' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Inyector CSV</button>
           <button onClick={() => { setActiveTab('ads'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'ads' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Ads Manager</button>
+          <button onClick={() => { setActiveTab('blog'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'blog' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Blog & Reseñas IG</button>
         </nav>
 
         <div className="p-6 border-t border-[#FFFFFF]/10">
@@ -996,10 +1217,30 @@ export default function AdminDashboardPage() {
             <div className="flex flex-col gap-8">
               {/* KPIs Principales */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#0A1F33]"><p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">Leads Totales</p><p className="font-black text-3xl text-[#0A1F33]">{filteredLeads.length}</p></div>
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#00BFFF]"><p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">Nuevos</p><p className="font-black text-3xl text-[#00BFFF]">{filteredLeads.filter(l => l.estado === 'Nuevo').length}</p></div>
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#3A3A3C]"><p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">En Gestión</p><p className="font-black text-3xl text-[#3A3A3C]">{filteredLeads.filter(l => ['Contactado', 'En Negociación'].includes(l.estado)).length}</p></div>
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#1E8E3E]"><p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">Cerrados ✓</p><p className="font-black text-3xl text-[#1E8E3E]">{filteredLeads.filter(l => l.estado === 'Cerrado').length}</p></div>
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#0A1F33]">
+                  <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">Leads en Período</p>
+                  <p className="font-black text-3xl text-[#0A1F33]">{filteredLeads.length}</p>
+                  <p className="text-[9px] text-[#3A3A3C] font-semibold mt-1">
+                    {filterDateFrom || filterDateTo ? `de ${leadsList.length} en historial total` : 'Todo el historial'}
+                  </p>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#00BFFF]">
+                  <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">Nuevos</p>
+                  <p className="font-black text-3xl text-[#00BFFF]">{filteredLeads.filter(l => l.estado === 'Nuevo').length}</p>
+                  <p className="text-[9px] text-[#3A3A3C] font-semibold mt-1">
+                    {filteredLeads.length > 0 ? `${Math.round((filteredLeads.filter(l => l.estado === 'Nuevo').length / filteredLeads.length) * 100)}% del período` : 'Sin registros'}
+                  </p>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#3A3A3C]">
+                  <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">En Gestión</p>
+                  <p className="font-black text-3xl text-[#3A3A3C]">{filteredLeads.filter(l => ['Contactado', 'En Negociación'].includes(l.estado)).length}</p>
+                  <p className="text-[9px] text-[#3A3A3C] font-semibold mt-1">Contactado / Negociando</p>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 border-l-4 border-l-[#1E8E3E]">
+                  <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1">Cerrados ✓</p>
+                  <p className="font-black text-3xl text-[#1E8E3E]">{filteredLeads.filter(l => l.estado === 'Cerrado').length}</p>
+                  <p className="text-[9px] text-[#1E8E3E] font-semibold mt-1">Ventas concretadas</p>
+                </div>
               </div>
               {filteredLeads.length > 0 && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1009,43 +1250,103 @@ export default function AdminDashboardPage() {
                 </div>
               )}
               <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-4">
-                <h3 className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest border-b border-[#C0C0C0] pb-2">Panel de Filtros</h3>
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 border-b border-[#C0C0C0] pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#00BFFF]" />
+                    <h3 className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest">
+                      Panel de Filtros • Mostrando {filteredLeads.length} de {leadsList.length} leads
+                    </h3>
+                  </div>
+
+                  {/* Acceso Rápido de Rango de Fechas */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[9px] font-bold text-[#3A3A3C] uppercase mr-1">Rango rápido:</span>
+                    <button
+                      type="button"
+                      onClick={() => setDatePreset('7d')}
+                      className="text-[9px] font-bold uppercase px-2.5 py-1 border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] hover:bg-[#FFFFFF] transition-colors rounded-none"
+                    >
+                      7 días
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDatePreset('30d')}
+                      className="text-[9px] font-bold uppercase px-2.5 py-1 border border-[#00BFFF] bg-[#00BFFF]/10 text-[#0080B0] hover:bg-[#00BFFF]/20 transition-colors rounded-none"
+                    >
+                      30 días (Default)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDatePreset('90d')}
+                      className="text-[9px] font-bold uppercase px-2.5 py-1 border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] hover:bg-[#FFFFFF] transition-colors rounded-none"
+                    >
+                      90 días
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDatePreset('year')}
+                      className="text-[9px] font-bold uppercase px-2.5 py-1 border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] hover:bg-[#FFFFFF] transition-colors rounded-none"
+                    >
+                      Este Año
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDatePreset('all')}
+                      className="text-[9px] font-bold uppercase px-2.5 py-1 border border-[#0A1F33] bg-[#0A1F33] text-white hover:bg-[#00BFFF] hover:border-[#00BFFF] transition-colors rounded-none shadow-sm"
+                    >
+                      Todo el Historial ({leadsList.length})
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex flex-col xl:flex-row gap-4 justify-between items-end">
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 w-full">
-                    <div className="flex flex-col gap-1"><label htmlFor="filter-date-from" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Desde</label><input id="filter-date-from" type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} /></div>
-                    <div className="flex flex-col gap-1"><label htmlFor="filter-date-to" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Hasta</label><input id="filter-date-to" type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} /></div>
+                    <div className="flex flex-col gap-1">
+                      <label htmlFor="filter-date-from" className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-widest flex items-center justify-between">
+                        <span>Desde</span>
+                        {filterDateFrom && <button type="button" onClick={() => setFilterDateFrom('')} className="text-[#D93025] hover:underline text-[8px] font-bold">✕ Limpiar</button>}
+                      </label>
+                      <input id="filter-date-from" type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label htmlFor="filter-date-to" className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-widest flex items-center justify-between">
+                        <span>Hasta</span>
+                        {filterDateTo && <button type="button" onClick={() => setFilterDateTo('')} className="text-[#D93025] hover:underline text-[8px] font-bold">✕ Limpiar</button>}
+                      </label>
+                      <input id="filter-date-to" type="date" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} />
+                    </div>
                     <div className="flex flex-col gap-1">
                       <label htmlFor="filter-status" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Estado</label>
-                      <select id="filter-status" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                      <select id="filter-status" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                         <option value="Todos">Todos</option><option value="Nuevo">Nuevo</option><option value="Contactado">Contactado</option><option value="En Negociación">En Negociación</option><option value="Cerrado">Cerrado</option><option value="Perdido">Perdido</option>
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
                       <label htmlFor="filter-origin" className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Origen</label>
-                      <select id="filter-origin" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" value={filterOrigin} onChange={(e) => setFilterOrigin(e.target.value)}>
+                      <select id="filter-origin" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={filterOrigin} onChange={(e) => setFilterOrigin(e.target.value)}>
                         <option value="Todos">Todos</option>{origenesUnicos.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
                       <label htmlFor="filter-marca" className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Marca</label>
-                      <select id="filter-marca" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF]" value={filterMarca} onChange={(e) => { setFilterMarca(e.target.value); setFilterModelo('Todos'); }}>
+                      <select id="filter-marca" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={filterMarca} onChange={(e) => { setFilterMarca(e.target.value); setFilterModelo('Todos'); }}>
                         <option value="Todas">Todas</option>{marcasList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
                       <label htmlFor="filter-modelo" className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Modelo</label>
-                      <select id="filter-modelo" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] disabled:bg-[#F8F9FA]" value={filterModelo} onChange={(e) => setFilterModelo(e.target.value)} disabled={filterMarca === 'Todas'}>
+                      <select id="filter-modelo" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] disabled:bg-[#F8F9FA] rounded-none" value={filterModelo} onChange={(e) => setFilterModelo(e.target.value)} disabled={filterMarca === 'Todas'}>
                         <option value="Todos">Todos</option>{modelosFiltradosParaSelect.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
                       <label htmlFor="filter-concesionaria" className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">Concesionaria</label>
-                      <select id="filter-concesionaria" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF]" value={filterConcesionaria} onChange={(e) => setFilterConcesionaria(e.target.value)}>
+                      <select id="filter-concesionaria" className="border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={filterConcesionaria} onChange={(e) => setFilterConcesionaria(e.target.value)}>
                         <option value="Todas">Todas</option>{concesionariasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   </div>
-                  <div className="w-full xl:w-64 shrink-0"><input type="text" aria-label="Búsqueda rápida" placeholder="Búsqueda rápida..." className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={filterText} onChange={e => setFilterText(e.target.value)} /></div>
+                  <div className="w-full xl:w-64 shrink-0"><input type="text" aria-label="Búsqueda rápida" placeholder="Búsqueda rápida..." className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={filterText} onChange={e => setFilterText(e.target.value)} /></div>
                 </div>
               </div>
               <div className="bg-[#FFFFFF] border border-[#C0C0C0] overflow-x-auto flex-grow">
@@ -1548,6 +1849,486 @@ export default function AdminDashboardPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ======================================= */}
+          {/* VISTA: BLOG & RESEÑAS EN VIDEO (IG)    */}
+          {/* ======================================= */}
+          {activeTab === 'blog' && (
+            <div className="flex flex-col gap-6 h-full">
+              {/* SUBTABS DEL MÓDULO */}
+              <div className="flex items-center justify-between border-b border-[#C0C0C0] bg-[#FFFFFF] p-4 shrink-0">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBlogSubTab('posts')}
+                    className={`text-xs font-bold uppercase tracking-wider px-5 py-2.5 transition-colors rounded-none border ${
+                      blogSubTab === 'posts'
+                        ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]'
+                        : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0]/60 hover:border-[#0A1F33]'
+                    }`}
+                  >
+                    📝 Artículos del Blog ({blogPostsList.length})
+                  </button>
+                  <button
+                    onClick={() => setBlogSubTab('videos')}
+                    className={`text-xs font-bold uppercase tracking-wider px-5 py-2.5 transition-colors rounded-none border ${
+                      blogSubTab === 'videos'
+                        ? 'bg-[#E1306C] text-[#FFFFFF] border-[#E1306C]'
+                        : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0]/60 hover:border-[#E1306C]'
+                    }`}
+                  >
+                    🎬 Reseñas en Video / Reels IG ({combinedReelsList.length})
+                  </button>
+                </div>
+
+                <a
+                  href="/blog"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#00BFFF] uppercase tracking-wider hover:underline"
+                >
+                  <span>Ver Blog en Vivo ↗</span>
+                </a>
+              </div>
+
+              {/* SUB-MÓDULO: ARTÍCULOS DE BLOG */}
+              {blogSubTab === 'posts' && (
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 flex-grow overflow-hidden">
+                  {/* FORMULARIO DE ENTRADA DE BLOG */}
+                  <div className="xl:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 shadow-none flex flex-col h-full overflow-y-auto custom-scrollbar">
+                    <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-2 border-b border-[#C0C0C0] pb-2">
+                      {blogPostForm.id ? 'Editar Artículo' : 'Nuevo Artículo de Blog'}
+                    </h2>
+                    <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest mb-4">
+                      Escribí guías de compra, comparativas o análisis para posicionar DATACAR en Google.
+                    </p>
+
+                    <form onSubmit={handleSaveBlogPost} className="flex flex-col gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Título del Artículo *</label>
+                        <input
+                          type="text"
+                          required
+                          value={blogPostForm.title}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setBlogPostForm(prev => ({
+                              ...prev,
+                              title: val,
+                              slug: prev.id ? prev.slug : generarSlug(val),
+                            }));
+                          }}
+                          placeholder="Ej: Los 5 SUVs más económicos de Paraguay"
+                          className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Slug URL *</label>
+                          <input
+                            type="text"
+                            required
+                            value={blogPostForm.slug}
+                            onChange={e => setBlogPostForm({...blogPostForm, slug: e.target.value})}
+                            placeholder="los-5-suvs-mas-economicos"
+                            className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Categoría</label>
+                          <select
+                            value={blogPostForm.category}
+                            onChange={e => setBlogPostForm({...blogPostForm, category: e.target.value})}
+                            className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none"
+                          >
+                            <option value="Guías de Compra">Guías de Compra</option>
+                            <option value="Comparativas">Comparativas</option>
+                            <option value="Financiación">Financiación</option>
+                            <option value="Lanzamientos 0KM">Lanzamientos 0KM</option>
+                            <option value="Mercado">Mercado</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Extracto / Meta Description *</label>
+                        <textarea
+                          rows={2}
+                          required
+                          value={blogPostForm.excerpt}
+                          onChange={e => setBlogPostForm({...blogPostForm, excerpt: e.target.value})}
+                          placeholder="Resumen corto de 1 o 2 frases que aparecerá en los resultados de Google..."
+                          className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none"
+                        />
+                      </div>
+
+                      {/* Imagen de portada */}
+                      <ImageUploadField
+                        label="Imagen Principal de Portada"
+                        folder="blog"
+                        value={blogPostForm.coverImage}
+                        onChange={(url) => setBlogPostForm({...blogPostForm, coverImage: url})}
+                      />
+
+                      <div>
+                        <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                          Cuerpo del Artículo (Formato Texto / Markdown) *
+                        </label>
+                        <p className="text-[9px] text-[#C0C0C0] mb-1">
+                          Tip: Usá <code>## Subtítulo</code> para títulos, <code>- viñeta</code> para listas y <code>**negrita**</code>.
+                        </p>
+                        <textarea
+                          rows={12}
+                          required
+                          value={blogPostForm.content}
+                          onChange={e => setBlogPostForm({...blogPostForm, content: e.target.value})}
+                          placeholder="Escribí aquí el contenido del artículo..."
+                          className="w-full border p-2.5 text-xs font-mono focus:outline-none focus:border-[#00BFFF] rounded-none leading-relaxed"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 border border-[#C0C0C0] p-3 bg-[#F8F9FA]">
+                        <input
+                          type="checkbox"
+                          id="post-published"
+                          checked={blogPostForm.published}
+                          onChange={e => setBlogPostForm({...blogPostForm, published: e.target.checked})}
+                          className="w-4 h-4 text-[#00BFFF] accent-[#00BFFF]"
+                        />
+                        <label htmlFor="post-published" className="text-xs font-bold text-[#0A1F33] uppercase cursor-pointer">
+                          Publicar inmediatamente en la web
+                        </label>
+                      </div>
+
+                      <div className="flex gap-2 mt-2">
+                        {blogPostForm.id && (
+                          <button
+                            type="button"
+                            onClick={() => setBlogPostForm({
+                              id: '', title: '', slug: '', category: 'Guías de Compra', excerpt: '',
+                              content: '', coverImage: '', author: 'Redacción DATACAR', published: true, readTimeMinutes: 4
+                            })}
+                            className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5] transition-colors rounded-none"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors rounded-none"
+                        >
+                          {blogPostForm.id ? 'Actualizar Artículo' : 'Guardar Artículo'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* LISTADO DE ARTÍCULOS */}
+                  <div className="xl:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-full overflow-hidden">
+                    <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex justify-between items-center shrink-0">
+                      <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">
+                        Artículos Registrados ({blogPostsList.length})
+                      </span>
+                    </div>
+
+                    <div className="overflow-auto flex-grow custom-scrollbar p-6 flex flex-col gap-4">
+                      {blogPostsList.length === 0 ? (
+                        <div className="text-center py-12 text-[#C0C0C0]">
+                          <p className="font-bold uppercase tracking-widest text-xs">Sin artículos creados en base de datos.</p>
+                          <p className="text-[10px] mt-1 text-[#3A3A3C]">Creá tu primer post en el panel izquierdo.</p>
+                        </div>
+                      ) : (
+                        blogPostsList.map((post: any) => (
+                          <div
+                            key={post.id}
+                            className={`border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${
+                              post.published !== false ? 'border-[#00BFFF]/40 bg-[#FFFFFF]' : 'border-[#C0C0C0] bg-[#F8F9FA]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-4 min-w-0">
+                              {isValidImageSrc(post.coverImage) && (
+                                <div className="w-20 h-14 relative bg-white border border-[#C0C0C0]/50 shrink-0">
+                                  <Image
+                                    src={post.coverImage}
+                                    alt={post.title}
+                                    fill
+                                    className="object-cover"
+                                    unoptimized={!isOptimizableImageSrc(post.coverImage)}
+                                  />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-wider">{post.category}</span>
+                                  <span className={`text-[8px] font-bold uppercase px-2 py-0.5 ${post.published !== false ? 'bg-[#E6F4EA] text-[#1E8E3E]' : 'bg-[#F1F3F4] text-[#5F6368]'}`}>
+                                    {post.published !== false ? 'Publicado' : 'Borrador'}
+                                  </span>
+                                </div>
+                                <h3 className="font-bold text-xs sm:text-sm text-[#0A1F33] uppercase truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                                  {post.title}
+                                </h3>
+                                <p className="text-[9px] text-[#C0C0C0] font-mono mt-0.5">/blog/{post.slug}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <a
+                                href={`/blog/${post.slug}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="border border-[#00BFFF] text-[#00BFFF] px-3 py-1.5 text-[9px] font-bold uppercase hover:bg-[#00BFFF] hover:text-white transition-colors"
+                              >
+                                Ver ↗
+                              </a>
+                              <button
+                                onClick={() => triggerEditBlogPost(post)}
+                                className="border border-[#0A1F33] text-[#0A1F33] px-3 py-1.5 text-[9px] font-bold uppercase hover:bg-[#0A1F33] hover:text-white transition-colors"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => handleTogglePostPublish(post.id, post.published !== false)}
+                                className="border border-[#C0C0C0] text-[#3A3A3C] px-3 py-1.5 text-[9px] font-bold uppercase hover:border-[#0A1F33] transition-colors"
+                              >
+                                {post.published !== false ? 'Ocultar' : 'Publicar'}
+                              </button>
+                              <button
+                                onClick={() => handleDelete('blog_posts', post.id)}
+                                className="border border-[#D93025] text-[#D93025] px-2.5 py-1.5 text-[9px] font-bold uppercase hover:bg-[#D93025] hover:text-white transition-colors"
+                              >
+                                X
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-MÓDULO: RESEÑAS EN VIDEO / REELS (REFERENCIA DEL USUARIO) */}
+              {blogSubTab === 'videos' && (
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 flex-grow overflow-hidden">
+                  {/* FORMULARIO REELS */}
+                  <div id="video-review-form-container" className="xl:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 shadow-none flex flex-col h-full overflow-y-auto custom-scrollbar">
+                    <div className="flex items-center justify-between border-b border-[#C0C0C0] pb-2 mb-2">
+                      <h2 className="font-bold text-[#0A1F33] text-sm uppercase flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]" />
+                        <span>{videoReviewForm.id ? 'Editar Miniatura / Reel' : 'Añadir Reseña en Video (Reel IG)'}</span>
+                      </h2>
+                      {videoReviewForm.id && (
+                        <button
+                          type="button"
+                          onClick={handleCancelVideoReviewEdit}
+                          className="text-[10px] font-bold uppercase text-[#E1306C] hover:underline"
+                        >
+                          + Nuevo Reel
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[9px] text-[#3A3A3C] uppercase tracking-widest mb-4">
+                      {videoReviewForm.id 
+                        ? `Modificando reel ID: ${videoReviewForm.id}. Cambiá la miniatura subiendo una foto o un enlace.` 
+                        : 'Incrustá los reels y videos de @datacarpy para mostrarlos en el Home y en el Blog.'}
+                    </p>
+
+                    {videoReviewForm.id && (
+                      <div className="mb-4 p-3 bg-gradient-to-r from-pink-50 via-orange-50 to-white border border-pink-200 text-xs text-[#0A1F33] flex items-center justify-between">
+                        <div>
+                          <span className="font-bold text-[#E1306C] uppercase">Modo Edición:</span>
+                          <span className="ml-1 text-[#3A3A3C] text-[11px] block sm:inline">Cambiá la miniatura abajo y hacé clic en Guardar.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCancelVideoReviewEdit}
+                          className="text-[9px] bg-white border border-pink-300 px-2 py-0.5 font-bold uppercase text-pink-700 hover:bg-pink-100"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSaveVideoReview} className="flex flex-col gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Título del Video / Reel *</label>
+                        <input
+                          type="text"
+                          required
+                          value={videoReviewForm.title}
+                          onChange={e => setVideoReviewForm({...videoReviewForm, title: e.target.value})}
+                          placeholder="Ej: Comparativa SUVs Económicos en Paraguay"
+                          className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#E1306C] rounded-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Enlace del Reel de Instagram *</label>
+                        <input
+                          type="url"
+                          required
+                          value={videoReviewForm.url}
+                          onChange={e => setVideoReviewForm({...videoReviewForm, url: e.target.value})}
+                          placeholder="https://www.instagram.com/reel/..."
+                          className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#E1306C] rounded-none font-mono"
+                        />
+                      </div>
+
+                      {/* Miniatura del video (permite subir archivo a Storage o ingresar URL) */}
+                      <ImageUploadField
+                        label="Miniatura / Cover del Reel (Subir imagen o pegar URL)"
+                        folder="reels"
+                        value={videoReviewForm.thumbnail}
+                        onChange={(url) => setVideoReviewForm({...videoReviewForm, thumbnail: url})}
+                        accentClass="text-[#E1306C]"
+                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Etiqueta / Badge</label>
+                          <input
+                            type="text"
+                            value={videoReviewForm.tag}
+                            onChange={e => setVideoReviewForm({...videoReviewForm, tag: e.target.value})}
+                            placeholder="Ej: Motores, Comparativa, SUV"
+                            className="w-full border p-2 text-xs focus:outline-none focus:border-[#E1306C] rounded-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Orden de Aparición</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={videoReviewForm.order}
+                            onChange={e => setVideoReviewForm({...videoReviewForm, order: Number(e.target.value) || 1})}
+                            className="w-full border p-2 text-xs focus:outline-none focus:border-[#E1306C] rounded-none"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="mt-2 bg-gradient-to-r from-[#f09433] via-[#dc2743] to-[#bc1888] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:opacity-95 transition-opacity rounded-none shadow-sm flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                          <path d="M18.8 2H5.2C3.4 2 2 3.4 2 5.2v13.6C2 20.6 3.4 22 5.2 22h13.6c1.8 0 3.2-1.4 3.2-3.2V5.2C22 3.4 20.6 2 18.8 2zm1.2 16.8c0 .7-.5 1.2-1.2 1.2H5.2c-.7 0-1.2-.5-1.2-1.2V9.8h16v9zm0-11H4V5.2c0-.7.5-1.2 1.2-1.2h1.6l2 2.2h2.4l-2-2.2h2.4l2 2.2h2.4l-2-2.2h1.6c.7 0 1.2.5 1.2 1.2v2.6zM9.5 12.2l6 3.3-6 3.3v-6.6z"/>
+                        </svg>
+                        <span>{videoReviewForm.id ? '💾 Guardar Cambios en Miniatura / Reel' : '+ Publicar Reel en la Web'}</span>
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* LISTADO DE VIDEOS / REELS CARGADOS */}
+                  <div className="xl:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-full overflow-hidden">
+                    <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">
+                          Reels Oficiales en Pantalla ({combinedReelsList.length})
+                        </span>
+                        <span className="text-[10px] text-[#3A3A3C]">• Hacé clic en "Editar Miniatura" para cambiar la imagen</span>
+                      </div>
+                    </div>
+
+                    <div className="overflow-auto flex-grow custom-scrollbar p-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {combinedReelsList.map((video: any) => {
+                          const isSelected = videoReviewForm.id === video.id;
+                          return (
+                            <div
+                              key={video.id}
+                              className={`border bg-[#FFFFFF] flex flex-col justify-between overflow-hidden transition-all ${
+                                isSelected ? 'border-[#E1306C] ring-2 ring-[#E1306C]/40 shadow-md' : 'border-[#C0C0C0]'
+                              }`}
+                            >
+                              <div className="relative aspect-[16/10] bg-[#0A1F33] overflow-hidden">
+                                {isValidImageSrc(video.thumbnail) ? (
+                                  <Image
+                                    src={video.thumbnail}
+                                    alt={video.title}
+                                    fill
+                                    className="object-cover"
+                                    unoptimized={!isOptimizableImageSrc(video.thumbnail)}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full bg-[#0A1F33] flex items-center justify-center text-white/40 text-xs">
+                                    DATACAR Reel
+                                  </div>
+                                )}
+
+                                {/* BOTÓN PLAY ESTILO INSTAGRAM REELS (GRADIENTE + CLAQUETA) */}
+                                <div className="absolute inset-0 bg-black/25 flex items-center justify-center pointer-events-none">
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] flex items-center justify-center text-white shadow-lg ring-2 ring-white/80">
+                                    <svg className="w-4 h-4 fill-white drop-shadow" viewBox="0 0 24 24">
+                                      <path d="M18.8 2H5.2C3.4 2 2 3.4 2 5.2v13.6C2 20.6 3.4 22 5.2 22h13.6c1.8 0 3.2-1.4 3.2-3.2V5.2C22 3.4 20.6 2 18.8 2zm1.2 16.8c0 .7-.5 1.2-1.2 1.2H5.2c-.7 0-1.2-.5-1.2-1.2V9.8h16v9zm0-11H4V5.2c0-.7.5-1.2 1.2-1.2h1.6l2 2.2h2.4l-2-2.2h2.4l2 2.2h2.4l-2-2.2h1.6c.7 0 1.2.5 1.2 1.2v2.6zM9.5 12.2l6 3.3-6 3.3v-6.6z"/>
+                                    </svg>
+                                  </div>
+                                </div>
+
+                                {/* Tag de categoría */}
+                                {video.tag && (
+                                  <span className="absolute top-2 left-2 bg-[#0A1F33]/85 text-[#00BFFF] border border-white/20 text-[9px] font-bold uppercase px-2 py-0.5">
+                                    {video.tag}
+                                  </span>
+                                )}
+
+                                {/* Badge de estado: Oficial o Editado en Base de Datos */}
+                                <span className={`absolute top-2 right-2 text-[8px] font-bold uppercase px-1.5 py-0.5 ${
+                                  video.isCustomSaved ? 'bg-emerald-600 text-white' : 'bg-black/60 text-white/80'
+                                }`}>
+                                  {video.isCustomSaved ? 'Modificado en BD' : 'Oficial'}
+                                </span>
+                              </div>
+
+                              <div className="p-3">
+                                <h4 className="font-bold text-xs text-[#0A1F33] line-clamp-2 uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                                  {video.title}
+                                </h4>
+                                
+                                <div className="mt-3 flex items-center justify-between border-t border-[#C0C0C0]/40 pt-2.5 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => triggerEditVideoReview(video)}
+                                    className="flex-1 bg-gradient-to-r from-[#f09433] via-[#dc2743] to-[#bc1888] text-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider hover:opacity-90 flex items-center justify-center gap-1 transition-opacity"
+                                  >
+                                    <span>✏️</span>
+                                    <span>Editar Miniatura</span>
+                                  </button>
+
+                                  <a
+                                    href={video.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="border border-[#C0C0C0] text-[#E1306C] px-2 py-1 text-[9px] font-bold uppercase hover:border-[#E1306C]"
+                                    title="Ver en Instagram"
+                                  >
+                                    Ver ↗
+                                  </a>
+
+                                  {video.isCustomSaved && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDelete('video_reviews', video.id)}
+                                      className="border border-[#D93025] text-[#D93025] px-2 py-1 text-[8px] font-bold uppercase hover:bg-[#D93025] hover:text-white"
+                                      title="Restablecer miniatura a predeterminada"
+                                    >
+                                      Reset
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -62,6 +62,7 @@ export default function PromocionesClient() {
     { type: 'link', label: 'COMPARADOR', href: '/comparador' },
     { type: 'link', label: 'RECOMENDADOR', href: '/recomendador' },
     { type: 'link', label: 'CALCULADORA', href: '/calculadora' },
+    { type: 'link', label: 'BLOG', href: '/blog' },
   ];
 
   // 1. Filtrar versiones con promoción: excluir vacíos, "no aplica", "sin promo", "sin datos", "ninguna", "n/d", etc.

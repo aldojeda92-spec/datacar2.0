@@ -58,11 +58,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     const title = `${brandName} ${modelName} — Precio, ficha técnica y financiamiento | Datacar`;
     const description = `Precio${startingPrice > 0 ? ` desde US$ ${startingPrice.toLocaleString('en-US')}` : ''}, versiones disponibles, ficha técnica y opciones de financiamiento de ${brandName} ${modelName} en Paraguay. Comparalo y cotizalo con Datacar.`;
+    const canonicalUrl = `https://datacarpy.com/catalogo/${marca}/${modelo}`;
 
     return {
       title,
       description,
-      openGraph: { title, description },
+      alternates: {
+        canonical: canonicalUrl,
+      },
+      openGraph: {
+        title,
+        description,
+        url: canonicalUrl,
+        images: model.imgUrl ? [{ url: model.imgUrl, alt: `${brandName} ${modelName}` }] : [],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: model.imgUrl ? [model.imgUrl] : [],
+      },
     };
   } catch {
     return FALLBACK_METADATA;
@@ -73,5 +88,76 @@ export default async function ModeloDetailPage({ params }: Props) {
   const { marca, modelo } = await params;
   const { model, brand } = await getModeloData(marca, modelo);
 
-  return <ModeloDetailClient initialModel={model} initialBrand={brand} />;
+  const brandName = brand?.name || '';
+  const modelName = model?.name || '';
+  const startingPrice = Number(model?.startingPrice) || 0;
+
+  const vehicleSchema = model ? {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Car',
+        '@id': `https://datacarpy.com/catalogo/${marca}/${modelo}#vehicle`,
+        name: `${brandName} ${modelName}`,
+        brand: {
+          '@type': 'Brand',
+          name: brandName,
+        },
+        image: model.imgUrl || undefined,
+        bodyType: model.tipo_carroceria || undefined,
+        offers: startingPrice > 0 ? {
+          '@type': 'Offer',
+          price: startingPrice,
+          priceCurrency: 'USD',
+          availability: 'https://schema.org/InStock',
+          url: `https://datacarpy.com/catalogo/${marca}/${modelo}`,
+          seller: {
+            '@type': 'AutoDealer',
+            name: 'DATACAR Paraguay',
+          },
+        } : undefined,
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'Inicio',
+            item: 'https://datacarpy.com',
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: 'Catálogo',
+            item: 'https://datacarpy.com/catalogo',
+          },
+          {
+            '@type': 'ListItem',
+            position: 3,
+            name: brandName || 'Marca',
+            item: `https://datacarpy.com/catalogo?marca=${encodeURIComponent(brandName)}`,
+          },
+          {
+            '@type': 'ListItem',
+            position: 4,
+            name: modelName,
+            item: `https://datacarpy.com/catalogo/${marca}/${modelo}`,
+          },
+        ],
+      },
+    ],
+  } : null;
+
+  return (
+    <>
+      {vehicleSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(vehicleSchema) }}
+        />
+      )}
+      <ModeloDetailClient initialModel={model} initialBrand={brand} />
+    </>
+  );
 }

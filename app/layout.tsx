@@ -24,8 +24,84 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Datacar | Inversiones Automotrices Inteligentes",
-  description: "Datos duros y transparencia para tu próximo 0KM en Paraguay.",
+  metadataBase: new URL('https://datacarpy.com'),
+  title: {
+    default: 'DATACAR | Precios 0KM, Cuotas y Comparador de Autos en Paraguay',
+    template: '%s | DATACAR Paraguay',
+  },
+  description: 'Encontrá tu próximo 0KM en Paraguay: catálogo con precios actualizados, cálculo de cuotas corridas, entrega inicial, financiación y comparador técnico de todas las concesionarias oficiales.',
+  keywords: [
+    'autos 0km paraguay',
+    'precios autos paraguay',
+    'cuotas corridas',
+    'entrega inicial auto',
+    'financiacion vehiculos paraguay',
+    'comparador de autos',
+    'suv paraguay',
+    'pick up paraguay',
+    'datacar py',
+    'datacar paraguay',
+  ],
+  authors: [{ name: 'DATACAR Paraguay' }],
+  creator: 'DATACAR Paraguay',
+  publisher: 'DATACAR Paraguay',
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'es_PY',
+    url: 'https://datacarpy.com',
+    siteName: 'DATACAR Paraguay',
+    title: 'DATACAR | Precios 0KM, Cuotas y Comparador de Autos en Paraguay',
+    description: 'Encontrá tu próximo 0KM en Paraguay con precios de lista, cálculo de cuotas corridas y comparador técnico de todas las concesionarias oficiales.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'DATACAR | Precios 0KM, Cuotas y Comparador de Autos en Paraguay',
+    description: 'Encontrá tu próximo 0KM en Paraguay con precios actualizados, cálculo de cuotas y comparador técnico.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+};
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'AutoDealer',
+      '@id': 'https://datacarpy.com/#organization',
+      name: 'DATACAR Paraguay',
+      url: 'https://datacarpy.com',
+      description: 'Plataforma de comparación, cuotas y cotización de autos 0KM en Paraguay de todas las concesionarias oficiales.',
+      areaServed: {
+        '@type': 'Country',
+        name: 'Paraguay',
+      },
+      sameAs: [
+        'https://www.instagram.com/datacarpy/',
+        'https://tiktok.com/@datacar.paraguay',
+      ],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': 'https://datacarpy.com/#website',
+      url: 'https://datacarpy.com',
+      name: 'DATACAR Paraguay',
+      description: 'Catálogo 0KM, cuotas y comparador de vehículos en Paraguay',
+      publisher: { '@id': 'https://datacarpy.com/#organization' },
+      inLanguage: 'es-PY',
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -35,6 +111,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
+      </head>
       <body className={`${montserrat.variable} ${inter.variable} font-inter bg-white text-dataCharcoal antialiased selection:bg-digitalCyan selection:text-authorityBlue`}>
         {/*
          * Analytics diferido con next/script (strategy="afterInteractive"): ya no

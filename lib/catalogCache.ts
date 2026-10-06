@@ -33,6 +33,20 @@ async function getCachedCollection(name: string, ttlMs: number = CACHE_TTL_MS): 
     return entry.data;
   }
 
+  // Comprobar caché de sesión del navegador para cargas inmediatas (0ms)
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = sessionStorage.getItem(`dc_cache_${name}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Date.now() - parsed.fetchedAt < ttlMs) {
+          cache.set(name, parsed);
+          return parsed.data;
+        }
+      }
+    } catch {}
+  }
+
   // Evita disparar múltiples lecturas idénticas en paralelo si dos componentes
   // piden la misma colección al mismo tiempo (ej. al montar dos páginas seguidas).
   const pending = inFlight.get(name);
@@ -42,6 +56,15 @@ async function getCachedCollection(name: string, ttlMs: number = CACHE_TTL_MS): 
     const snap = await getDocs(collection(db, name));
     const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     cache.set(name, { data, fetchedAt: Date.now() });
+
+    if (typeof window !== 'undefined') {
+      try {
+        if (name !== 'versions') {
+          sessionStorage.setItem(`dc_cache_${name}`, JSON.stringify({ data, fetchedAt: Date.now() }));
+        }
+      } catch {}
+    }
+
     inFlight.delete(name);
     return data;
   })();
@@ -61,8 +84,18 @@ export function invalidateCatalogCache(collectionName?: string): void {
   if (collectionName) {
     cache.delete(collectionName);
     inFlight.delete(collectionName);
+    if (typeof window !== 'undefined') {
+      try { sessionStorage.removeItem(`dc_cache_${collectionName}`); } catch {}
+    }
   } else {
     cache.clear();
     inFlight.clear();
+    if (typeof window !== 'undefined') {
+      try {
+        ['brands', 'models', 'campaigns', 'concesionarias'].forEach(k => {
+          sessionStorage.removeItem(`dc_cache_${k}`);
+        });
+      } catch {}
+    }
   }
 }

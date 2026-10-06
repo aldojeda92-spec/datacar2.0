@@ -11,6 +11,7 @@ import { isOptimizableImageSrc, isValidImageSrc } from '../lib/imageSrc';
 import { normalizeCarroceria } from '../lib/carroceria';
 import { normalizeExternalUrl } from '../lib/externalUrl';
 import Navbar, { NavItem } from './components/Navbar';
+import InstagramReelsSection from './components/InstagramReelsSection';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../lib/finance';
@@ -66,6 +67,7 @@ const Footer = () => {
               <li><Link href="/comparador" className="hover:text-[#00BFFF] transition-colors">Comparador de Versiones</Link></li>
               <li><Link href="/negociamos-por-vos" className="hover:text-[#00BFFF] transition-colors">Servicio: Negociamos por vos</Link></li>
               <li><Link href="/concesionarias" className="hover:text-[#00BFFF] transition-colors">Portal de Concesionarias (B2B)</Link></li>
+              <li><Link href="/blog" className="hover:text-[#00BFFF] transition-colors">Blog & Noticias</Link></li>
             </ul>
           </div>
           <div className="md:col-span-1">
@@ -310,6 +312,7 @@ export default function HomeClient() {
       ],
     },
     { type: 'link', label: 'Negociamos por vos', href: '/negociamos-por-vos' },
+    { type: 'link', label: 'Blog & Noticias', href: '/blog' },
   ], [tiposDisponibles, marcas]);
 
   return (
@@ -840,6 +843,11 @@ export default function HomeClient() {
         </div>
       </section>
 
+
+      {/* ==========================================
+          8.5 DATACAR EN INSTAGRAM (REELS & RESEÑAS)
+          ========================================== */}
+      <InstagramReelsSection />
 
       {/* ==========================================
           2.8 FOOTER CORPORATIVO INYECTADO

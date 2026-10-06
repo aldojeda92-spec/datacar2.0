@@ -31,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
     ]
   },
   { type: 'link', label: 'Negociamos por vos', href: '/negociamos-por-vos' },
+  { type: 'link', label: 'Blog & Noticias', href: '/blog' },
   { type: 'link', label: 'Catálogo', href: '/catalogo', current: true },
 ];
 

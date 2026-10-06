@@ -108,6 +108,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---------------- blog_posts (artículos del blog) ----------------
+    match /blog_posts/{postId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------------- video_reviews (reseñas y reels IG) ----------------
+    match /video_reviews/{videoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ---------------- leads ----------------
     match /leads/{leadId} {
       allow create: if
