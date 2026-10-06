@@ -6,19 +6,16 @@ import { LeadProvider } from "./context/LeadContext"; // Inyección del contexto
 import { ToastProvider } from "./context/ToastContext";
 import WhatsAppButton from "./components/WhatsAppButton";
 
-// Configuración estricta según Manual de Marca.
-// `display: 'swap'` + `adjustFontFallback` (default) generan un fallback con
-// métricas ajustadas para minimizar el CLS mientras carga la webfont.
+// Configuración tipográfica con fuentes variables (Montserrat e Inter)
+// Soporta todo el rango de pesos (300 a 900) con display: 'swap'
 const montserrat = Montserrat({
   subsets: ["latin"],
-  weight: ['300', '900'],
   display: 'swap',
   variable: '--font-montserrat'
 });
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ['400', '500', '700'],
   display: 'swap',
   variable: '--font-inter'
 });
