@@ -193,12 +193,6 @@ export default function AdminDashboardPage() {
     order: 1,
   });
   
-  // Filtros Analítica
-  const [filterCompBrand, setFilterCompBrand] = useState('Todas');
-  const [filterCompModel, setFilterCompModel] = useState('Todos');
-  const [filterCompDateFrom, setFilterCompDateFrom] = useState('');
-  const [filterCompDateTo, setFilterCompDateTo] = useState('');
-
   // Estados para Accesos B2B y Admins
   const [usuariosSistemaList, setUsuariosSistemaList] = useState<any[]>([]);
   const [solicitudesList, setSolicitudesList] = useState<any[]>([]);
@@ -265,10 +259,9 @@ export default function AdminDashboardPage() {
   const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
-      // Sin limitación artificial en leads para disponer del historial completo según los filtros de fecha
+      // Sin limitación artificial en leads ni en comparaciones para disponer del 100% de datos
       const qLeads = query(collection(db, 'leads'), orderBy('createdAt', 'desc'));
       const qReqs = query(collection(db, 'dealership_requests'), orderBy('createdAt', 'desc'), limit(50));
-      const qComp = query(collection(db, 'comparison_stats'), limit(150));
       const qBlog = query(collection(db, 'blog_posts'), limit(50));
       const qVideos = query(collection(db, 'video_reviews'), limit(20));
 
@@ -281,7 +274,7 @@ export default function AdminDashboardPage() {
         getDocs(collection(db, 'concesionarias')),
         getDocs(collection(db, 'users')),
         getDocs(qReqs),
-        getDocs(qComp),
+        getDocs(collection(db, 'comparison_stats')),
         getDocs(qBlog),
         getDocs(qVideos),
       ]);
@@ -473,45 +466,24 @@ export default function AdminDashboardPage() {
   const leadsPorOrigen = useMemo(() => getTopItems(filteredLeads, l => l.origen, 5), [filteredLeads]);
   const leadsPorConcesionaria = useMemo(() => getTopItems(filteredLeads, l => l.concesionaria_destino, 5), [filteredLeads]);
 
-  // Analítica Comparaciones
-  const compModelosParaSelect = useMemo(() => {
-    if (filterCompBrand === 'Todas') return modelosList;
-    return modelosList.filter(m => m.brandId === filterCompBrand);
-  }, [modelosList, filterCompBrand]);
-
-  const filteredComparisons = useMemo(() => {
-    return comparisonStatsList.filter(comp => {
-      // Filtrar por marca
-      if (filterCompBrand !== 'Todas') {
-        const marcaObj = marcasList.find(m => m.id === filterCompBrand);
-        if (marcaObj && !comp.combo.toUpperCase().includes(marcaObj.name.toUpperCase())) return false;
-      }
-      // Filtrar por modelo
-      if (filterCompModel !== 'Todos') {
-        const modeloObj = modelosList.find(m => m.id === filterCompModel);
-        if (modeloObj && !comp.combo.toUpperCase().includes(modeloObj.name.toUpperCase())) return false;
-      }
-      // Filtrar por fecha
-      if (comp.timestamp) {
-        const compDate = comp.timestamp.toDate ? comp.timestamp.toDate().getTime() : new Date(comp.timestamp).getTime();
-        if (filterCompDateFrom && compDate < new Date(filterCompDateFrom).getTime()) return false;
-        if (filterCompDateTo) {
-          const toDate = new Date(filterCompDateTo);
-          toDate.setHours(23, 59, 59, 999);
-          if (compDate > toDate.getTime()) return false;
-        }
-      }
-      return true;
+  // Analítica Comparaciones - 100% de datos siempre
+  const sortedComparisons = useMemo(() => {
+    return [...comparisonStatsList].sort((a, b) => {
+      const timeA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+      const timeB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+      return timeB - timeA;
     });
-  }, [comparisonStatsList, filterCompBrand, filterCompModel, filterCompDateFrom, filterCompDateTo, marcasList, modelosList]);
+  }, [comparisonStatsList]);
 
   const topComparisons = useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredComparisons.forEach(c => {
-      counts[c.combo] = (counts[c.combo] || 0) + 1;
+    comparisonStatsList.forEach(c => {
+      if (c.combo) {
+        counts[c.combo] = (counts[c.combo] || 0) + 1;
+      }
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  }, [filteredComparisons]);
+  }, [comparisonStatsList]);
 
   const BarChart = ({ data, total }: { data: [string, number][], total: number }) => (
     <div className="flex flex-col gap-3">
@@ -1415,32 +1387,18 @@ export default function AdminDashboardPage() {
 
           {activeTab === 'analitica' && (
             <div className="flex flex-col gap-6 h-full">
-              {/* FILTROS */}
-              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-wrap gap-4 items-end shrink-0">
-                <div className="flex-1 min-w-[150px]">
-                  <label htmlFor="filterCompBrand" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Marca</label>
-                  <select id="filterCompBrand" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompBrand} onChange={e => { setFilterCompBrand(e.target.value); setFilterCompModel('Todos'); }}>
-                    <option value="Todas">Todas</option>
-                    {marcasList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                <div className="flex-1 min-w-[150px]">
-                  <label htmlFor="filterCompModel" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Modelo</label>
-                  <select id="filterCompModel" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompModel} onChange={e => setFilterCompModel(e.target.value)} disabled={filterCompBrand === 'Todas'}>
-                    <option value="Todos">Todos</option>
-                    {compModelosParaSelect.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
-                <div className="flex-1 min-w-[120px]">
-                  <label htmlFor="filterCompDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Desde</label>
-                  <input id="filterCompDateFrom" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompDateFrom} onChange={e => setFilterCompDateFrom(e.target.value)} />
-                </div>
-                <div className="flex-1 min-w-[120px]">
-                  <label htmlFor="filterCompDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Hasta</label>
-                  <input id="filterCompDateTo" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]" value={filterCompDateTo} onChange={e => setFilterCompDateTo(e.target.value)} />
-                </div>
+              {/* ENCABEZADO Y RESUMEN 100% */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-wrap justify-between items-center gap-4 shrink-0">
                 <div>
-                  <button onClick={() => { setFilterCompBrand('Todas'); setFilterCompModel('Todos'); setFilterCompDateFrom(''); setFilterCompDateTo(''); }} className="border border-[#C0C0C0] px-4 py-2 text-[10px] font-bold uppercase hover:bg-[#F5F5F5] transition-colors text-[#3A3A3C]">Limpiar</button>
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-[#0A1F33] block">
+                    Telemetría y Analítica de Comparaciones DATACAR
+                  </h2>
+                  <p className="text-[10px] text-[#3A3A3C] mt-0.5">
+                    Visualización completa al 100% de todas las comparativas realizadas por los usuarios (sin filtros ni limitaciones).
+                  </p>
+                </div>
+                <div className="bg-[#0A1F33] text-[#00BFFF] px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-[#00BFFF]/30">
+                  Total Registros: {comparisonStatsList.length}
                 </div>
               </div>
 
@@ -1448,11 +1406,12 @@ export default function AdminDashboardPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0">
                 <div className="lg:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col justify-center items-center h-48">
                   <span className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest text-center mb-2">Total de Comparaciones</span>
-                  <span className="text-5xl font-black text-[#00BFFF]">{filteredComparisons.length}</span>
+                  <span className="text-5xl font-black text-[#00BFFF]">{comparisonStatsList.length}</span>
+                  <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-wider mt-2">100% de la base de datos</span>
                 </div>
                 <div className="lg:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-48 overflow-y-auto custom-scrollbar">
                   <h3 className="text-xs font-bold text-[#0A1F33] uppercase tracking-widest mb-4">Top 10 Combos Más Comparados</h3>
-                  <BarChart data={topComparisons} total={filteredComparisons.length} />
+                  <BarChart data={topComparisons} total={comparisonStatsList.length} />
                 </div>
               </div>
 
@@ -1463,19 +1422,19 @@ export default function AdminDashboardPage() {
                     <tr className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-widest">
                       <th className="p-4 border-r border-[#C0C0C0]/50">Vehículos Comparados (Combo)</th>
                       <th className="p-4 border-r border-[#C0C0C0]/50 text-center">ID Vehículos</th>
-                      <th className="p-4 text-center">Fecha</th>
+                      <th className="p-4 text-center">Fecha y Hora</th>
                     </tr>
                   </thead>
                   <tbody className="text-[11px] text-[#3A3A3C]">
-                    {filteredComparisons.length === 0 ? (
-                      <tr><td colSpan={3} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No hay datos de comparaciones para estos filtros.</td></tr>
-                    ) : filteredComparisons.map((comp) => {
+                    {sortedComparisons.length === 0 ? (
+                      <tr><td colSpan={3} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No hay registros de comparaciones en la base de datos.</td></tr>
+                    ) : sortedComparisons.map((comp) => {
                       const compDate = comp.timestamp ? (comp.timestamp.toDate ? comp.timestamp.toDate() : new Date(comp.timestamp)) : null;
                       return (
                         <tr key={comp.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors">
                           <td className="p-4 border-r border-[#C0C0C0]/50 font-bold text-[#0A1F33] uppercase">{comp.combo}</td>
-                          <td className="p-4 border-r border-[#C0C0C0]/50 text-center text-[9px] text-[#C0C0C0] whitespace-normal max-w-xs">{comp.vehicles?.join(' vs ') || '-'}</td>
-                          <td className="p-4 text-center">{compDate ? `${compDate.toLocaleDateString()} ${compDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : '-'}</td>
+                          <td className="p-4 border-r border-[#C0C0C0]/50 text-center text-[9px] text-[#C0C0C0] whitespace-normal max-w-xs">{(comp.ids || comp.vehicles)?.join(' vs ') || '-'}</td>
+                          <td className="p-4 text-center font-mono text-[10px]">{compDate ? `${compDate.toLocaleDateString()} ${compDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}` : '-'}</td>
                         </tr>
                       );
                     })}
