@@ -143,6 +143,23 @@ function ImageUploadField({ label, folder, value, onChange, accentClass }: {
   );
 }
 
+const formatLastModified = (val: any) => {
+  if (!val) return 'Sin fecha';
+  try {
+    const d = val?.toDate ? val.toDate() : new Date(val);
+    if (isNaN(d.getTime())) return 'Sin fecha';
+    return d.toLocaleString('es-PY', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return 'Sin fecha';
+  }
+};
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -222,6 +239,27 @@ export default function AdminDashboardPage() {
     confort_conveniencia: '', seguridad_standard: ''
   });
   const [concesionariaForm, setConcesionariaForm] = useState({ id: '', name: '', email_gerencia: '', status: 'active', datacarCheck: false });
+
+  // Estados de Filtros para Cuadros ABM
+  const [abmVerFilterMarca, setAbmVerFilterMarca] = useState('Todas');
+  const [abmVerFilterModelo, setAbmVerFilterModelo] = useState('Todos');
+  const [abmVerFilterDealer, setAbmVerFilterDealer] = useState('Todas');
+  const [abmModelFilterMarca, setAbmModelFilterMarca] = useState('Todas');
+  const [abmModelFilterCarroceria, setAbmModelFilterCarroceria] = useState('Todas');
+  const [abmMarcaFilterOrigen, setAbmMarcaFilterOrigen] = useState('Todos');
+  const [abmConcFilterStatus, setAbmConcFilterStatus] = useState('Todos');
+  const [abmConcFilterCheck, setAbmConcFilterCheck] = useState('Todos');
+
+  // Modal ABM (Crear / Editar Completo)
+  const [abmModalType, setAbmModalType] = useState<'marcas' | 'modelos' | 'versiones' | 'concesionarias' | null>(null);
+
+  // Edición Inline por Columna con Lápiz (✏️)
+  const [adminInlineEdit, setAdminInlineEdit] = useState<{
+    type: 'version' | 'modelo' | 'marca' | 'concesionaria';
+    id: string;
+    field: string;
+    value: string;
+  } | null>(null);
 
   // FORMULARIO DE ACCESOS B2B
   const [userB2BForm, setUserB2BForm] = useState<{ uid: string, email: string, dealershipName: string, marcasPermitidas: string[] }>({
@@ -453,6 +491,83 @@ export default function AdminDashboardPage() {
       return `${brandA} ${a.name}`.localeCompare(`${brandB} ${b.name}`);
     });
   }, [modelosList, versionesList, marcasList, adModelFilterConcesionaria, adModelFilterMarca]);
+
+  // Marcas correspondientes a la concesionaria seleccionada en Accesos B2B (Regla E)
+  const marcasParaConcesionariaB2B = useMemo(() => {
+    if (!userB2BForm.dealershipName) return [];
+    const dealerNorm = userB2BForm.dealershipName.trim().toUpperCase();
+    
+    // 1. Marcas vinculadas por versiones en inventario
+    const modelIdsOfDealer = new Set(
+      versionesList
+        .filter(v => (v.concesionaria || '').trim().toUpperCase() === dealerNorm)
+        .map(v => v.modelId)
+    );
+    const brandIdsOfDealer = new Set(
+      modelosList.filter(m => modelIdsOfDealer.has(m.id)).map(m => m.brandId)
+    );
+
+    // 2. Marcas en usuarios existentes de esta concesionaria
+    const brandsFromUsers = new Set<string>();
+    usuariosSistemaList.filter((u: any) => (u.dealershipName || '').trim().toUpperCase() === dealerNorm).forEach((u: any) => {
+      let mList = u.marcasPermitidas;
+      if (typeof mList === 'string') {
+        try { mList = JSON.parse(mList); } catch { mList = mList.split(','); }
+      }
+      if (Array.isArray(mList)) mList.forEach((m: string) => brandsFromUsers.add(m.trim().toUpperCase()));
+    });
+
+    const filtered = marcasList.filter(b => {
+      const bNameUpper = (b.name || '').trim().toUpperCase();
+      return brandIdsOfDealer.has(b.id) || brandsFromUsers.has(bNameUpper);
+    });
+
+    if (filtered.length === 0) return marcasList;
+    return filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [userB2BForm.dealershipName, versionesList, modelosList, marcasList, usuariosSistemaList]);
+
+  // Modelos en cascada para filtro de versiones en ABM
+  const modelosParaFiltroVersiones = useMemo(() => {
+    if (abmVerFilterMarca === 'Todas') return modelosList;
+    return modelosList.filter(m => m.brandId === abmVerFilterMarca);
+  }, [modelosList, abmVerFilterMarca]);
+
+  // Orígenes únicos de marcas para filtro ABM Marcas
+  const origenesMarcasUnicos = useMemo(() => {
+    const s = new Set<string>();
+    marcasList.forEach(m => {
+      if (m.origen_marca && m.origen_marca.trim()) s.add(m.origen_marca.trim());
+    });
+    return Array.from(s).sort();
+  }, [marcasList]);
+
+  // Concesionarias únicas para filtro ABM Versiones
+  const concesionariasUnicasVersiones = useMemo(() => {
+    const s = new Set<string>();
+    versionesList.forEach(v => {
+      if (v.concesionaria && v.concesionaria.trim()) s.add(v.concesionaria.trim().toUpperCase());
+    });
+    concesionariasList.forEach(c => {
+      if (c.name && c.name.trim()) s.add(c.name.trim().toUpperCase());
+    });
+    return Array.from(s).sort();
+  }, [versionesList, concesionariasList]);
+
+  // Mapa de marcas asociadas a cada concesionaria por inventario
+  const concBrandsMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    versionesList.forEach(v => {
+      const conc = (v.concesionaria || '').trim().toUpperCase();
+      if (!conc) return;
+      const m = modelosList.find(mod => mod.id === v.modelId);
+      const b = m ? marcasList.find(br => br.id === m.brandId) : null;
+      if (b) {
+        if (!map.has(conc)) map.set(conc, new Set());
+        map.get(conc)!.add(b.name);
+      }
+    });
+    return map;
+  }, [versionesList, modelosList, marcasList]);
 
   const setDatePreset = (preset: '7d' | '30d' | '90d' | 'year' | 'all') => {
     const today = new Date();
@@ -1337,13 +1452,14 @@ export default function AdminDashboardPage() {
 
   const handleSaveUserB2B = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userB2BForm.uid || !userB2BForm.dealershipName || userB2BForm.marcasPermitidas.length === 0) {
+    const uidVal = userB2BForm.uid.trim();
+    if (!uidVal || !userB2BForm.dealershipName || userB2BForm.marcasPermitidas.length === 0) {
       return setFeedback({ type: 'error', message: 'Debes ingresar el UID, seleccionar Concesionaria y al menos 1 Marca.' });
     }
     setLoading(true);
     try {
-      await setDoc(doc(db, 'users', userB2BForm.uid), {
-        email: userB2BForm.email,
+      await setDoc(doc(db, 'users', uidVal), {
+        email: userB2BForm.email.trim(),
         role: 'concesionaria',
         dealershipName: userB2BForm.dealershipName,
         marcasPermitidas: userB2BForm.marcasPermitidas,
@@ -1514,7 +1630,7 @@ export default function AdminDashboardPage() {
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
-  // ABMs Restantes
+  // ABMs Restantes con soporte para Modales y Toggles en Cuadros
   const handleSaveMarca = async (e: React.FormEvent) => {
     e.preventDefault(); if (!marcaForm.name) return; setLoading(true);
     try {
@@ -1522,7 +1638,9 @@ export default function AdminDashboardPage() {
       await setDoc(doc(db, 'brands', id), { name: marcaForm.name.toUpperCase(), origen_marca: marcaForm.origen_marca, logoUrl: marcaForm.logoUrl, updatedAt: serverTimestamp() }, { merge: true });
       invalidateCatalogCache('brands');
       setFeedback({ type: 'success', message: 'Identidad de Marca guardada correctamente.' });
-      setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '' }); fetchAllData();
+      setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '' });
+      setAbmModalType(null);
+      fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
@@ -1533,7 +1651,9 @@ export default function AdminDashboardPage() {
       await setDoc(doc(db, 'models', id), { ...modeloForm, name: modeloForm.name.toUpperCase(), tipo_carroceria: normalizeCarroceria(modeloForm.tipo_carroceria), startingPrice: Number(modeloForm.startingPrice) || 0, isPopular: modeloForm.isPopular, updatedAt: serverTimestamp() }, { merge: true });
       invalidateCatalogCache('models');
       setFeedback({ type: 'success', message: 'Modelo guardado correctamente.' });
-      setModeloForm({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', subsegmento: '', origen: '', startingPrice: '', imgUrl: '', isPopular: false }); fetchAllData();
+      setModeloForm({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', subsegmento: '', origen: '', startingPrice: '', imgUrl: '', isPopular: false });
+      setAbmModalType(null);
+      fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
@@ -1553,6 +1673,7 @@ export default function AdminDashboardPage() {
       invalidateCatalogCache('versions');
       setFeedback({ type: 'success', message: 'Versión técnica guardada de forma integral.' });
       setVersionForm({ id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '', airbags: '', tamanho_pantalla: '', conectividad: '', camaras: '', garantia: '', adas: '', asiento_cuero: '', techo_panoramico: '', alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '', confort_conveniencia: '', seguridad_standard: '' });
+      setAbmModalType(null);
       fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
@@ -1564,24 +1685,32 @@ export default function AdminDashboardPage() {
       await setDoc(doc(db, 'concesionarias', id), { name: concesionariaForm.name.toUpperCase(), email_gerencia: concesionariaForm.email_gerencia, status: concesionariaForm.status, datacarCheck: concesionariaForm.datacarCheck, updatedAt: serverTimestamp() }, { merge: true });
       invalidateCatalogCache('concesionarias');
       setFeedback({ type: 'success', message: 'Concesionaria guardada y actualizada correctamente.' });
-      setConcesionariaForm({ id: '', name: '', status: 'active', email_gerencia: '', datacarCheck: false }); fetchAllData();
+      setConcesionariaForm({ id: '', name: '', status: 'active', email_gerencia: '', datacarCheck: false });
+      setAbmModalType(null);
+      fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
   const handleDelete = async (col: string, id: string) => {
-    if (!confirm('¿Confirmas la eliminación permanente de este registro individual?')) return;
+    if (!confirm('¿Confirmas la eliminación permanente de este registro individual? Esta acción no se puede deshacer.')) return;
     setLoading(true);
     try { 
       await deleteDoc(doc(db, col, id)); 
       invalidateCatalogCache(col);
-      setFeedback({ type: 'success', message: 'Registro eliminado.' }); 
+      setFeedback({ type: 'success', message: 'Registro eliminado permanentemente de la base de datos.' }); 
       fetchAllData(); 
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
-  const triggerEditMarca = (m: any) => { setMarcaForm({ id: m.id, name: m.name || '', origen_marca: m.origen_marca || '', logoUrl: m.logoUrl || '' }); window.scrollTo(0,0); };
-  const triggerEditModelo = (m: any) => { setModeloForm({ id: m.id, brandId: m.brandId || '', name: m.name || '', tipo_carroceria: normalizeCarroceria(m.tipo_carroceria), subsegmento: m.subsegmento || '', origen: m.origen || '', startingPrice: m.startingPrice?.toString() || '', imgUrl: m.imgUrl || '', isPopular: m.isPopular || false }); window.scrollTo(0,0); };
-  
+  // Triggers de Edición (Abren Modal)
+  const triggerEditMarca = (m: any) => { 
+    setMarcaForm({ id: m.id, name: m.name || '', origen_marca: m.origen_marca || '', logoUrl: m.logoUrl || '' }); 
+    setAbmModalType('marcas'); 
+  };
+  const triggerEditModelo = (m: any) => { 
+    setModeloForm({ id: m.id, brandId: m.brandId || '', name: m.name || '', tipo_carroceria: normalizeCarroceria(m.tipo_carroceria), subsegmento: m.subsegmento || '', origen: m.origen || '', startingPrice: m.startingPrice?.toString() || '', imgUrl: m.imgUrl || '', isPopular: m.isPopular || false }); 
+    setAbmModalType('modelos'); 
+  };
   const triggerEditVersion = (v: any) => { 
     setVersionForm({ 
       id: v.id, modelId: v.modelId || '', name: v.name || '', price: v.price?.toString() || '', concesionaria: v.concesionaria || '', promocion: v.promocion || '', url_auto: v.url_auto || '',
@@ -1592,7 +1721,153 @@ export default function AdminDashboardPage() {
       adas: Array.isArray(v.features?.adas) ? v.features.adas.join(' | ') : (v.features?.adas || ''), asiento_cuero: v.features?.asiento_cuero || '', techo_panoramico: v.features?.techo_panoramico || '',
       confort_conveniencia: Array.isArray(v.features?.confort_conveniencia) ? v.features.confort_conveniencia.join('; ') : (v.features?.confort_conveniencia || ''),
       seguridad_standard: Array.isArray(v.features?.seguridad_standard) ? v.features.seguridad_standard.join('; ') : (v.features?.seguridad_standard || '')
-    }); window.scrollTo(0,0); 
+    }); 
+    setAbmModalType('versiones'); 
+  };
+  const triggerEditConcesionaria = (c: any) => {
+    setConcesionariaForm({
+      id: c.id,
+      name: c.name || '',
+      email_gerencia: c.email_gerencia || '',
+      status: c.status || 'active',
+      datacarCheck: c.datacarCheck || false
+    });
+    setAbmModalType('concesionarias');
+  };
+
+  // Triggers de Alta Nueva (Abren Modal Vacío)
+  const openNewMarcaModal = () => {
+    setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '' });
+    setAbmModalType('marcas');
+  };
+  const openNewModeloModal = () => {
+    setModeloForm({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', subsegmento: '', origen: '', startingPrice: '', imgUrl: '', isPopular: false });
+    setAbmModalType('modelos');
+  };
+  const openNewVersionModal = () => {
+    setVersionForm({
+      id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '',
+      motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '5',
+      airbags: '6', tamanho_pantalla: '10', conectividad: 'Apple CarPlay / Android Auto', camaras: 'Reversa', garantia: '5 años', adas: '', asiento_cuero: '', techo_panoramico: '',
+      alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '',
+      confort_conveniencia: '', seguridad_standard: ''
+    });
+    setAbmModalType('versiones');
+  };
+  const openNewConcesionariaModal = () => {
+    setConcesionariaForm({ id: '', name: '', email_gerencia: '', status: 'active', datacarCheck: false });
+    setAbmModalType('concesionarias');
+  };
+
+  // Toggle Directo en Cuadro: Modelos Destacados (K)
+  const handleTogglePopularModel = async (modelId: string, currentVal: boolean) => {
+    const newVal = !currentVal;
+    try {
+      await updateDoc(doc(db, 'models', modelId), {
+        isPopular: newVal,
+        updatedAt: serverTimestamp()
+      });
+      setModelosList(prev => prev.map(m => m.id === modelId ? { ...m, isPopular: newVal, updatedAt: new Date() } : m));
+      invalidateCatalogCache('models');
+      showToast(newVal ? 'Modelo destacado en Home' : 'Modelo quitado de destacados');
+    } catch (error: any) {
+      showToast('Error al actualizar: ' + error.message);
+    }
+  };
+
+  // Toggle Directo en Cuadro: DATACAR CHECK en Concesionarias (L)
+  const handleToggleDatacarCheck = async (concesionariaId: string, currentVal: boolean) => {
+    const newVal = !currentVal;
+    try {
+      await updateDoc(doc(db, 'concesionarias', concesionariaId), {
+        datacarCheck: newVal,
+        updatedAt: serverTimestamp()
+      });
+      setConcesionariasList(prev => prev.map(c => c.id === concesionariaId ? { ...c, datacarCheck: newVal, updatedAt: new Date() } : c));
+      invalidateCatalogCache('concesionarias');
+      showToast(newVal ? 'Sello DATACAR CHECK activado' : 'Sello DATACAR CHECK desactivado');
+    } catch (error: any) {
+      showToast('Error al actualizar: ' + error.message);
+    }
+  };
+
+  // Edición Inline por Columna con Lápiz (✏️) en el Cuadro ABM (H)
+  const handleAdminInlineSave = async () => {
+    if (!adminInlineEdit) return;
+    const { type, id, field, value } = adminInlineEdit;
+    try {
+      const now = new Date();
+      const updatePayload: any = { updatedAt: serverTimestamp() };
+
+      if (type === 'version') {
+        if (field === 'price') updatePayload.price = Number(value) || 0;
+        else if (field === 'promocion') updatePayload.promocion = value;
+        else if (field === 'name') updatePayload.name = value;
+        else if (field === 'concesionaria') updatePayload.concesionaria = value.toUpperCase();
+        else if (field === 'url_auto') updatePayload.url_auto = value;
+        else if (['motor', 'transmision', 'combustible'].includes(field)) {
+          updatePayload[`specs.${field}`] = value;
+        }
+        await updateDoc(doc(db, 'versions', id), updatePayload);
+        setVersionesList(prev => prev.map(v => {
+          if (v.id !== id) return v;
+          if (field === 'price') return { ...v, price: Number(value) || 0, updatedAt: now };
+          if (field === 'promocion') return { ...v, promocion: value, updatedAt: now };
+          if (field === 'name') return { ...v, name: value, updatedAt: now };
+          if (field === 'concesionaria') return { ...v, concesionaria: value.toUpperCase(), updatedAt: now };
+          if (field === 'url_auto') return { ...v, url_auto: value, updatedAt: now };
+          if (['motor', 'transmision', 'combustible'].includes(field)) {
+            return { ...v, specs: { ...(v.specs || {}), [field]: value }, updatedAt: now };
+          }
+          return v;
+        }));
+        invalidateCatalogCache('versions');
+      } else if (type === 'modelo') {
+        if (field === 'name') updatePayload.name = value.toUpperCase();
+        else if (field === 'tipo_carroceria') updatePayload.tipo_carroceria = normalizeCarroceria(value);
+        else if (field === 'origen') updatePayload.origen = value;
+        else if (field === 'startingPrice') updatePayload.startingPrice = Number(value) || 0;
+        await updateDoc(doc(db, 'models', id), updatePayload);
+        setModelosList(prev => prev.map(m => {
+          if (m.id !== id) return m;
+          if (field === 'name') return { ...m, name: value.toUpperCase(), updatedAt: now };
+          if (field === 'tipo_carroceria') return { ...m, tipo_carroceria: normalizeCarroceria(value), updatedAt: now };
+          if (field === 'origen') return { ...m, origen: value, updatedAt: now };
+          if (field === 'startingPrice') return { ...m, startingPrice: Number(value) || 0, updatedAt: now };
+          return m;
+        }));
+        invalidateCatalogCache('models');
+      } else if (type === 'marca') {
+        if (field === 'name') updatePayload.name = value.toUpperCase();
+        else if (field === 'origen_marca') updatePayload.origen_marca = value;
+        await updateDoc(doc(db, 'brands', id), updatePayload);
+        setMarcasList(prev => prev.map(b => {
+          if (b.id !== id) return b;
+          if (field === 'name') return { ...b, name: value.toUpperCase(), updatedAt: now };
+          if (field === 'origen_marca') return { ...b, origen_marca: value, updatedAt: now };
+          return b;
+        }));
+        invalidateCatalogCache('brands');
+      } else if (type === 'concesionaria') {
+        if (field === 'name') updatePayload.name = value.toUpperCase();
+        else if (field === 'email_gerencia') updatePayload.email_gerencia = value;
+        else if (field === 'status') updatePayload.status = value;
+        await updateDoc(doc(db, 'concesionarias', id), updatePayload);
+        setConcesionariasList(prev => prev.map(c => {
+          if (c.id !== id) return c;
+          if (field === 'name') return { ...c, name: value.toUpperCase(), updatedAt: now };
+          if (field === 'email_gerencia') return { ...c, email_gerencia: value, updatedAt: now };
+          if (field === 'status') return { ...c, status: value, updatedAt: now };
+          return c;
+        }));
+        invalidateCatalogCache('concesionarias');
+      }
+
+      setAdminInlineEdit(null);
+      showToast('Actualizado correctamente');
+    } catch (error: any) {
+      showToast('Error al actualizar: ' + error.message);
+    }
   };
 
   const handleCreateAd = async (e: React.FormEvent) => {
@@ -1861,10 +2136,65 @@ export default function AdminDashboardPage() {
     });
   };
 
-  const filteredMarcas = useMemo(() => marcasList.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.id.includes(searchTerm)), [marcasList, searchTerm]);
-  const filteredModelos = useMemo(() => modelosList.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.id.includes(searchTerm)), [modelosList, searchTerm]);
-  const filteredVersiones = useMemo(() => versionesList.filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.id.includes(searchTerm)), [versionesList, searchTerm]);
-  const filteredConcesionarias = useMemo(() => concesionariasList.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.id.includes(searchTerm)), [concesionariasList, searchTerm]);
+  const filteredMarcas = useMemo(() => {
+    return marcasList.filter(m => {
+      if (abmMarcaFilterOrigen !== 'Todos' && (m.origen_marca || '').trim().toUpperCase() !== abmMarcaFilterOrigen.toUpperCase()) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        if (!m.name.toLowerCase().includes(term) && !m.id.toLowerCase().includes(term) && !(m.origen_marca || '').toLowerCase().includes(term)) return false;
+      }
+      return true;
+    });
+  }, [marcasList, abmMarcaFilterOrigen, searchTerm]);
+
+  const filteredModelos = useMemo(() => {
+    return modelosList.filter(m => {
+      if (abmModelFilterMarca !== 'Todas' && m.brandId !== abmModelFilterMarca) return false;
+      if (abmModelFilterCarroceria !== 'Todas' && normalizeCarroceria(m.tipo_carroceria) !== abmModelFilterCarroceria) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const brandObj = marcasList.find(b => b.id === m.brandId);
+        const matchName = m.name.toLowerCase().includes(term);
+        const matchBrand = brandObj?.name?.toLowerCase().includes(term);
+        const matchId = m.id.toLowerCase().includes(term);
+        if (!matchName && !matchBrand && !matchId) return false;
+      }
+      return true;
+    });
+  }, [modelosList, abmModelFilterMarca, abmModelFilterCarroceria, searchTerm, marcasList]);
+
+  const filteredVersiones = useMemo(() => {
+    return versionesList.filter(v => {
+      const modelObj = modelosList.find(m => m.id === v.modelId);
+      if (abmVerFilterMarca !== 'Todas' && modelObj?.brandId !== abmVerFilterMarca) return false;
+      if (abmVerFilterModelo !== 'Todos' && v.modelId !== abmVerFilterModelo) return false;
+      if (abmVerFilterDealer !== 'Todas' && (v.concesionaria || '').trim().toUpperCase() !== abmVerFilterDealer.toUpperCase()) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const brandObj = modelObj ? marcasList.find(b => b.id === modelObj.brandId) : null;
+        const matchName = v.name?.toLowerCase().includes(term);
+        const matchModel = modelObj?.name?.toLowerCase().includes(term);
+        const matchBrand = brandObj?.name?.toLowerCase().includes(term);
+        const matchDealer = (v.concesionaria || '').toLowerCase().includes(term);
+        const matchMotor = (v.specs?.motor || '').toLowerCase().includes(term);
+        if (!matchName && !matchModel && !matchBrand && !matchDealer && !matchMotor) return false;
+      }
+      return true;
+    });
+  }, [versionesList, modelosList, marcasList, abmVerFilterMarca, abmVerFilterModelo, abmVerFilterDealer, searchTerm]);
+
+  const filteredConcesionarias = useMemo(() => {
+    return concesionariasList.filter(c => {
+      if (abmConcFilterStatus !== 'Todos' && (c.status || 'active') !== abmConcFilterStatus) return false;
+      if (abmConcFilterCheck === 'con_check' && !c.datacarCheck) return false;
+      if (abmConcFilterCheck === 'sin_check' && c.datacarCheck) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        if (!c.name.toLowerCase().includes(term) && !c.id.toLowerCase().includes(term) && !(c.email_gerencia || '').toLowerCase().includes(term)) return false;
+      }
+      return true;
+    });
+  }, [concesionariasList, abmConcFilterStatus, abmConcFilterCheck, searchTerm]);
   const checkedDealershipSet = useMemo(() => buildCheckedDealershipSet(concesionariasList), [concesionariasList]);
   const filteredSolicitudes = useMemo(() => solicitudesList.filter(r => r.concesionaria.toLowerCase().includes(searchTerm.toLowerCase())), [solicitudesList, searchTerm]);
 
@@ -1954,25 +2284,69 @@ export default function AdminDashboardPage() {
                     </div>
                     <div>
                       <label htmlFor="userB2BForm-dealership" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Concesionaria Asignada</label>
-                      <select id="userB2BForm-dealership" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.dealershipName} onChange={e => setUserB2BForm({...userB2BForm, dealershipName: e.target.value})} required>
+                      <select 
+                        id="userB2BForm-dealership" 
+                        className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none font-bold" 
+                        value={userB2BForm.dealershipName} 
+                        onChange={e => {
+                          const newDealer = e.target.value;
+                          setUserB2BForm(prev => {
+                            const dealerNorm = newDealer.trim().toUpperCase();
+                            const modelIdsOfNewDealer = new Set(
+                              versionesList.filter(v => (v.concesionaria || '').trim().toUpperCase() === dealerNorm).map(v => v.modelId)
+                            );
+                            const brandIdsOfNewDealer = new Set(
+                              modelosList.filter(m => modelIdsOfNewDealer.has(m.id)).map(m => m.brandId)
+                            );
+                            const allowedNames = new Set(
+                              marcasList.filter(b => brandIdsOfNewDealer.has(b.id)).map(b => b.name.toUpperCase().trim())
+                            );
+                            const safeMarcas = allowedNames.size > 0 
+                              ? prev.marcasPermitidas.filter(m => allowedNames.has(m.toUpperCase().trim()))
+                              : [];
+                            return { ...prev, dealershipName: newDealer, marcasPermitidas: safeMarcas };
+                          });
+                        }} 
+                        required
+                      >
                         <option value="">Seleccionar concesionaria...</option>
                         {concesionariasList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>
 
                     <div className="border border-[#C0C0C0] p-3 bg-[#F8F9FA] mt-1">
-                      <span className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-2 border-b border-[#C0C0C0]/50 pb-2">Marcas Permitidas (Scope)</span>
-                      <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar pr-2">
-                        {marcasList.map(m => (
-                          <label key={m.id} className="flex items-center gap-2 cursor-pointer group">
-                            <div className={`w-3 h-3 border flex items-center justify-center shrink-0 transition-colors ${userB2BForm.marcasPermitidas.includes(m.name) ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
-                              {userB2BForm.marcasPermitidas.includes(m.name) && <svg className="w-2 h-2 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
-                            </div>
-                            <input type="checkbox" className="hidden" checked={userB2BForm.marcasPermitidas.includes(m.name)} onChange={() => handleMarcaToggle(m.name)} />
-                            <span className={`text-[9px] uppercase tracking-widest ${userB2BForm.marcasPermitidas.includes(m.name) ? 'font-bold text-[#0A1F33]' : 'text-[#3A3A3C]'}`}>{m.name}</span>
-                          </label>
-                        ))}
+                      <div className="flex justify-between items-center mb-2 border-b border-[#C0C0C0]/50 pb-2">
+                        <span className="text-[10px] font-bold text-[#0A1F33] uppercase">
+                          Marcas Permitidas (Scope B2B)
+                        </span>
+                        {userB2BForm.dealershipName && (
+                          <span className="text-[8px] font-bold text-[#00BFFF] uppercase tracking-wider">
+                            {marcasParaConcesionariaB2B.length} de {userB2BForm.dealershipName}
+                          </span>
+                        )}
                       </div>
+                      
+                      {!userB2BForm.dealershipName ? (
+                        <p className="text-[9px] text-[#C0C0C0] uppercase tracking-wider py-4 text-center">
+                          ⚠️ Primero seleccioná una concesionaria para habilitar sus marcas.
+                        </p>
+                      ) : marcasParaConcesionariaB2B.length === 0 ? (
+                        <p className="text-[9px] text-[#C0C0C0] uppercase tracking-wider py-4 text-center">
+                          Esta concesionaria aún no tiene marcas con inventario cargado.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto custom-scrollbar pr-2">
+                          {marcasParaConcesionariaB2B.map(m => (
+                            <label key={m.id} className="flex items-center gap-2 cursor-pointer group p-1 hover:bg-white transition-colors">
+                              <div className={`w-3.5 h-3.5 border flex items-center justify-center shrink-0 transition-colors ${userB2BForm.marcasPermitidas.includes(m.name) ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
+                                {userB2BForm.marcasPermitidas.includes(m.name) && <svg className="w-2.5 h-2.5 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                              </div>
+                              <input type="checkbox" className="hidden" checked={userB2BForm.marcasPermitidas.includes(m.name)} onChange={() => handleMarcaToggle(m.name)} />
+                              <span className={`text-[9px] uppercase tracking-wider truncate ${userB2BForm.marcasPermitidas.includes(m.name) ? 'font-black text-[#0A1F33]' : 'text-[#3A3A3C]'}`}>{m.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex gap-2 mt-2">
@@ -2856,234 +3230,946 @@ export default function AdminDashboardPage() {
           )}
 
           {/* ======================================= */}
-          {/* VISTAS ABM (MARCAS, MODELOS, VERSIONES, CONCESIONARIAS) */}
+          {/* VISTAS ABM EN FORMATO CUADRO (MARCAS, MODELOS, VERSIONES, CONCESIONARIAS) */}
           {/* ======================================= */}
           {['marcas', 'modelos', 'versiones', 'concesionarias'].includes(activeTab) && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 h-full">
-              
-              <div className="xl:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-fit max-h-full overflow-y-auto custom-scrollbar">
-                <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-6 border-b border-[#C0C0C0] pb-2">
-                  {((activeTab === 'marcas' && marcaForm.id) || (activeTab === 'modelos' && modeloForm.id) || (activeTab === 'versiones' && versionForm.id) || (activeTab === 'concesionarias' && concesionariaForm.id)) ? 'Modificar Registro' : 'Crear Nuevo'}
-                </h2>
+            <div className="flex flex-col gap-6 h-full">
 
-                {activeTab === 'concesionarias' && (
-                  <form onSubmit={handleSaveConcesionaria} className="flex flex-col gap-4">
-                    <div><label htmlFor="concesionariaForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Comercial</label><input id="concesionariaForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.name} onChange={e => setConcesionariaForm({...concesionariaForm, name: e.target.value})} required /></div>
-                    <div><label htmlFor="concesionariaForm-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email Gerencia (Recepción Leads)</label><input id="concesionariaForm-email" type="email" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.email_gerencia} onChange={e => setConcesionariaForm({...concesionariaForm, email_gerencia: e.target.value})} placeholder="gerente@concesionaria.com" /></div>
-                    <div><label htmlFor="concesionariaForm-status" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Estado</label>
-                      <select id="concesionariaForm-status" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.status} onChange={e => setConcesionariaForm({...concesionariaForm, status: e.target.value})}>
-                        <option value="active">Activa</option>
-                        <option value="inactive">Inactiva</option>
-                      </select>
+              {/* ------------------------------------------------------------------ */}
+              {/* CUADRO: ABM VERSIONES (H, I, J) */}
+              {/* ------------------------------------------------------------------ */}
+              {activeTab === 'versiones' && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col min-h-[550px] shadow-none">
+                  {/* BARRA SUPERIOR DE CONTROL Y FILTROS */}
+                  <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col lg:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Cuadro Maestro de Versiones</span>
+                      <span className="text-[10px] bg-[#0A1F33] text-[#00BFFF] px-2.5 py-0.5 font-bold uppercase tracking-wider">{filteredVersiones.length} de {versionesList.length}</span>
                     </div>
 
-                    {/* DATACAR CHECK: se asigna a la concesionaria y se propaga automáticamente a todos los productos que gestione (match por nombre en versions.concesionaria) */}
-                    <div className="flex items-start gap-2 mt-2 bg-[#E6F4EA] p-3 border border-[#1E8E3E]/30">
-                      <input type="checkbox" id="concesionariaForm-datacarCheck" checked={concesionariaForm.datacarCheck} onChange={e => setConcesionariaForm({...concesionariaForm, datacarCheck: e.target.checked})} className="w-4 h-4 mt-0.5 accent-[#1E8E3E]" />
-                      <label htmlFor="concesionariaForm-datacarCheck" className="cursor-pointer">
-                        <span className="text-[10px] font-black text-[#1E8E3E] uppercase tracking-widest block">Sello DATACAR CHECK</span>
-                        <span className="text-[9px] text-[#3A3A3C] block mt-1 leading-relaxed">Marca a esta concesionaria como socia oficial responsable de sus propios precios y datos. El sello se muestra automáticamente en la concesionaria y en todos los productos que tengan esta concesionaria asignada.</span>
-                      </label>
-                    </div>
-
-                    <div className="flex gap-2 mt-4">
-                      {concesionariaForm.id && <button type="button" onClick={() => setConcesionariaForm({id:'', name:'', status:'active', email_gerencia:'', datacarCheck: false})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
-                      <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Guardar</button>
-                    </div>
-                  </form>
-                )}
-
-                {activeTab === 'marcas' && (
-                  <form onSubmit={handleSaveMarca} className="flex flex-col gap-4">
-                    <div><label htmlFor="marcaForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Marca</label><input id="marcaForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.name} onChange={e => setMarcaForm({...marcaForm, name: e.target.value})} required /></div>
-                    <div><label htmlFor="marcaForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen de la Marca</label><input id="marcaForm-origen" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.origen_marca} onChange={e => setMarcaForm({...marcaForm, origen_marca: e.target.value})} /></div>
-                    <ImageUploadField label="Logotipo" folder="brands" value={marcaForm.logoUrl} onChange={url => setMarcaForm({...marcaForm, logoUrl: url})} accentClass="text-[#00BFFF]" />
-                    <div className="flex gap-2 mt-4">
-                       {marcaForm.id && <button type="button" onClick={() => setMarcaForm({id:'', name:'', origen_marca:'', logoUrl:''})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
-                       <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Guardar</button>
-                    </div>
-                  </form>
-                )}
-
-                {activeTab === 'modelos' && (
-                  <form onSubmit={handleSaveModelo} className="flex flex-col gap-4">
-                    <div><label htmlFor="modeloForm-brandId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Marca</label>
-                      <select id="modeloForm-brandId" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.brandId} onChange={e => setModeloForm({...modeloForm, brandId: e.target.value})} required>
-                        <option value="">Seleccionar...</option>
-                        {marcasList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    </div>
-                    <div><label htmlFor="modeloForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Modelo</label><input id="modeloForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.name} onChange={e => setModeloForm({...modeloForm, name: e.target.value})} required /></div>
-
-                    {/* Checkbox para Lo más Buscado */}
-                    <div className="flex items-center gap-2 mt-2 bg-[#F8F9FA] p-3 border border-[#C0C0C0]/50">
-                      <input type="checkbox" id="isPopular" checked={modeloForm.isPopular} onChange={e => setModeloForm({...modeloForm, isPopular: e.target.checked})} className="w-4 h-4 accent-[#00BFFF]" />
-                      <label htmlFor="isPopular" className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest cursor-pointer">Destacar en "Lo más buscado" (Home)</label>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><label htmlFor="modeloForm-tipo" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Categoría</label><input id="modeloForm-tipo" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.tipo_carroceria} onChange={e => setModeloForm({...modeloForm, tipo_carroceria: e.target.value})} /></div>
-                      <div><label htmlFor="modeloForm-subsegmento" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Subsegmento</label><input id="modeloForm-subsegmento" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.subsegmento} onChange={e => setModeloForm({...modeloForm, subsegmento: e.target.value})} /></div>
-                      <div><label htmlFor="modeloForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen (Fábrica)</label><input id="modeloForm-origen" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.origen} onChange={e => setModeloForm({...modeloForm, origen: e.target.value})} /></div>
-                      <div><label htmlFor="modeloForm-precio" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio Inicial</label><input id="modeloForm-precio" type="number" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.startingPrice} onChange={e => setModeloForm({...modeloForm, startingPrice: e.target.value})} required /></div>
-                    </div>
-                    <ImageUploadField label="Imagen Catálogo" folder="models" value={modeloForm.imgUrl} onChange={url => setModeloForm({...modeloForm, imgUrl: url})} />
-                    <div className="flex gap-2 mt-4">
-                       {modeloForm.id && <button type="button" onClick={() => setModeloForm({id:'', brandId:'', name:'', tipo_carroceria:'SUV', subsegmento:'', origen:'', startingPrice:'', imgUrl:'', isPopular: false})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
-                       <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Guardar</button>
-                    </div>
-                  </form>
-                )}
-
-                {activeTab === 'versiones' && (
-                  <form onSubmit={handleSaveVersion} className="flex flex-col gap-6">
-                    <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
-                      <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Datos Principales</legend>
-                      <div className="flex flex-col gap-3">
-                        <div>
-                          <label htmlFor="versionForm-modelId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Modelo Vinculado</label>
-                          <select id="versionForm-modelId" className="w-full border p-2 text-xs bg-[#FFFFFF] focus:outline-none focus:border-[#0A1F33]" value={versionForm.modelId} onChange={e => setVersionForm({...versionForm, modelId: e.target.value})} required>
-                            <option value="">Seleccionar...</option>
-                            {modelosList.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                          </select>
-                        </div>
-                        <div><label htmlFor="versionForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre de Versión</label><input id="versionForm-name" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.name} onChange={e => setVersionForm({...versionForm, name: e.target.value})} required /></div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div><label htmlFor="versionForm-price" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio (USD)</label><input id="versionForm-price" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.price} onChange={e => setVersionForm({...versionForm, price: e.target.value})} required /></div>
-                          <div><label htmlFor="versionForm-promocion" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Promoción</label><input id="versionForm-promocion" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.promocion} onChange={e => setVersionForm({...versionForm, promocion: e.target.value})} /></div>
-                        </div>
-                        <div><label htmlFor="versionForm-url_auto" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Oficial (Ficha Técnica)</label><input id="versionForm-url_auto" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.url_auto} onChange={e => setVersionForm({...versionForm, url_auto: e.target.value})} /></div>
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
-                      <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Motor y Transmisión</legend>
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div><label htmlFor="versionForm-combustible" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Combustible Base</label><input id="versionForm-combustible" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.combustible} onChange={e => setVersionForm({...versionForm, combustible: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-motor" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Motor</label><input id="versionForm-motor" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.motor} onChange={e => setVersionForm({...versionForm, motor: e.target.value})} /></div>
-                        <div className="col-span-2"><label htmlFor="versionForm-alimentacion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Alimentación Detallada</label><input id="versionForm-alimentacion" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.alimentacion} onChange={e => setVersionForm({...versionForm, alimentacion: e.target.value})} placeholder="Ej: Inyección Directa Turbo" /></div>
-                        <div><label htmlFor="versionForm-autonomia" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Autonomía EV (km)</label><input id="versionForm-autonomia" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.autonomi_electrica} onChange={e => setVersionForm({...versionForm, autonomi_electrica: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-transmision" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Caja / Transmisión</label><input id="versionForm-transmision" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.transmision} onChange={e => setVersionForm({...versionForm, transmision: e.target.value})} /></div>
-                        <div className="col-span-2"><label htmlFor="versionForm-traccion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tracción</label><input id="versionForm-traccion" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.traccion} onChange={e => setVersionForm({...versionForm, traccion: e.target.value})} /></div>
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
-                      <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Chasis y Dinámica</legend>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div><label htmlFor="versionForm-suspension" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Suspensión Detalle</label><input id="versionForm-suspension" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.detalle_suspension} onChange={e => setVersionForm({...versionForm, detalle_suspension: e.target.value})} placeholder="Ej: MacPherson / Multi-link" /></div>
-                        <div><label htmlFor="versionForm-frenos" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Frenos Detalle</label><input id="versionForm-frenos" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.detalles_freno} onChange={e => setVersionForm({...versionForm, detalles_freno: e.target.value})} placeholder="Ej: Discos ventilados" /></div>
-                        <div><label htmlFor="versionForm-neumaticos" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Neumáticos</label><input id="versionForm-neumaticos" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.medida_neumatico} onChange={e => setVersionForm({...versionForm, medida_neumatico: e.target.value})} placeholder="Ej: 225/60 R18" /></div>
-                        <div><label htmlFor="versionForm-llanta" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tipo de Llanta</label><input id="versionForm-llanta" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.tipo_llanta} onChange={e => setVersionForm({...versionForm, tipo_llanta: e.target.value})} placeholder="Ej: Aleación 18''" /></div>
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
-                      <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Arquitectura (mm)</legend>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div><label htmlFor="versionForm-largo" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Largo</label><input id="versionForm-largo" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.largo} onChange={e => setVersionForm({...versionForm, largo: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-ancho" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Ancho</label><input id="versionForm-ancho" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.ancho} onChange={e => setVersionForm({...versionForm, ancho: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-alto" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Alto</label><input id="versionForm-alto" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.alto} onChange={e => setVersionForm({...versionForm, alto: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-despeje" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Despeje</label><input id="versionForm-despeje" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.despeje_suelo} onChange={e => setVersionForm({...versionForm, despeje_suelo: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-baulera" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Baulera (L)</label><input id="versionForm-baulera" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.baulera_litros} onChange={e => setVersionForm({...versionForm, baulera_litros: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-plazas" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nº Plazas</label><input id="versionForm-plazas" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.plazas} onChange={e => setVersionForm({...versionForm, plazas: e.target.value})} /></div>
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
-                      <legend className="text-[10px] font-bold text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">Equipamiento y Seguridad</legend>
-                      <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div><label htmlFor="versionForm-airbags" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Airbags Totales</label><input id="versionForm-airbags" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.airbags} onChange={e => setVersionForm({...versionForm, airbags: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-camaras" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Cámaras</label><input id="versionForm-camaras" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.camaras} onChange={e => setVersionForm({...versionForm, camaras: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-pantalla" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Pantalla (")</label><input id="versionForm-pantalla" type="number" step="0.1" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.tamanho_pantalla} onChange={e => setVersionForm({...versionForm, tamanho_pantalla: e.target.value})} /></div>
-                        <div><label htmlFor="versionForm-conectividad" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Conectividad</label><input id="versionForm-conectividad" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.conectividad} onChange={e => setVersionForm({...versionForm, conectividad: e.target.value})} /></div>
+                    <div className="flex flex-wrap gap-2 w-full lg:w-auto items-center">
+                      {/* Filtro Marca */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Marca:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmVerFilterMarca} 
+                          onChange={e => { setAbmVerFilterMarca(e.target.value); setAbmVerFilterModelo('Todos'); }}
+                        >
+                          <option value="Todas">Todas las marcas ({marcasList.length})</option>
+                          {marcasList.map(b => <option key={b.id} value={b.id}>{b.name.toUpperCase()}</option>)}
+                        </select>
                       </div>
 
-                      <div className="flex flex-col gap-4">
-                        <div>
-                          <label htmlFor="versionForm-seguridad" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Seguridad Standard (Separa con ; )</label>
-                          <textarea id="versionForm-seguridad" rows={3} className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] resize-none" value={versionForm.seguridad_standard} onChange={e => setVersionForm({...versionForm, seguridad_standard: e.target.value})} placeholder="6 Airbags; Frenos ABS + EBD; Control de estabilidad..."></textarea>
-                        </div>
-                        <div>
-                          <label htmlFor="versionForm-confort" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Confort y Conveniencia (Separa con ; )</label>
-                          <textarea id="versionForm-confort" rows={3} className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] resize-none" value={versionForm.confort_conveniencia} onChange={e => setVersionForm({...versionForm, confort_conveniencia: e.target.value})} placeholder="Climatizador automático; Asiento de cuero; Cargador inalámbrico..."></textarea>
-                        </div>
-                        <div>
-                          <label htmlFor="versionForm-adas" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Sistemas Avanzados ADAS (Separa con | )</label>
-                          <input id="versionForm-adas" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.adas} onChange={e => setVersionForm({...versionForm, adas: e.target.value})} placeholder="Alerta colisión | Mantenimiento carril" />
-                        </div>
+                      {/* Filtro Modelo en Cascada */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Modelo:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer disabled:opacity-50"
+                          value={abmVerFilterModelo} 
+                          onChange={e => setAbmVerFilterModelo(e.target.value)}
+                        >
+                          <option value="Todos">Todos los modelos ({modelosParaFiltroVersiones.length})</option>
+                          {modelosParaFiltroVersiones.map(m => <option key={m.id} value={m.id}>{m.name.toUpperCase()}</option>)}
+                        </select>
                       </div>
-                    </fieldset>
-                    
-                    <div className="flex gap-2 mt-4">
-                       {versionForm.id && <button type="button" onClick={() => setVersionForm({id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '', airbags: '', tamanho_pantalla: '', conectividad: '', camaras: '', garantia: '', adas: '', asiento_cuero: '', techo_panoramico: '', alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '', confort_conveniencia: '', seguridad_standard: ''})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5]">Cancelar</button>}
-                       <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Guardar Versión Matriz 5</button>
+
+                      {/* Filtro Concesionaria */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Concesionaria:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmVerFilterDealer} 
+                          onChange={e => setAbmVerFilterDealer(e.target.value)}
+                        >
+                          <option value="Todas">Todas ({concesionariasUnicasVersiones.length})</option>
+                          {concesionariasUnicasVersiones.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Buscador */}
+                      <input 
+                        type="text" 
+                        placeholder="Buscar versión, motor..." 
+                        className="border border-[#C0C0C0] px-3 py-1 text-xs w-full lg:w-44 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" 
+                        value={searchTerm} 
+                        onChange={e => setSearchTerm(e.target.value)} 
+                      />
+
+                      <button 
+                        onClick={openNewVersionModal}
+                        className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors shrink-0 shadow-sm"
+                      >
+                        + Agregar Versión
+                      </button>
                     </div>
-                  </form>
-                )}
+                  </div>
+
+                  {/* TABLA / CUADRO VERSIONES */}
+                  <div className="overflow-x-auto flex-grow custom-scrollbar">
+                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1100px]">
+                      <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b-2 border-[#0A1F33]">
+                        <tr className="text-[9px] font-black text-[#0A1F33] uppercase tracking-widest">
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Marca / Modelo</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Versión ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Precio USD ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Promoción ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Concesionaria ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Motor / Combustible ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Ficha URL ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación (J)</th>
+                          <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[11px] text-[#3A3A3C]">
+                        {filteredVersiones.length === 0 ? (
+                          <tr><td colSpan={9} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron versiones con los filtros aplicados.</td></tr>
+                        ) : filteredVersiones.map(v => {
+                          const modObj = modelosList.find(m => m.id === v.modelId);
+                          const brandObj = modObj ? marcasList.find(b => b.id === modObj.brandId) : null;
+                          const brandName = brandObj?.name || 'N/A';
+                          const modelName = modObj?.name || 'N/A';
+                          const hasCheck = isDatacarCheck(v.concesionaria, checkedDealershipSet);
+
+                          return (
+                            <tr key={v.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group">
+                              <td className="p-3.5 font-bold uppercase border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40">
+                                <span className="bg-[#0A1F33] text-[#FFFFFF] text-[9px] px-2 py-0.5 font-black uppercase tracking-wider block w-fit mb-1">{brandName}</span>
+                                <span className="text-[#0A1F33] text-[11px] font-black">{modelName}</span>
+                              </td>
+
+                              {/* Versión inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 font-semibold text-[#0A1F33]">
+                                {adminInlineEdit?.id === v.id && adminInlineEdit?.field === 'name' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-36 uppercase focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>{v.name}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'name', value: v.name || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar nombre">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Precio inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33]">
+                                {adminInlineEdit?.id === v.id && adminInlineEdit?.field === 'price' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="number" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 focus:outline-none font-bold" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>US$ {Number(v.price).toLocaleString()}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'price', value: String(v.price || '') })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar precio">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Promoción inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                                {adminInlineEdit?.id === v.id && adminInlineEdit?.field === 'promocion' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-36 focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className={`text-[10px] font-bold uppercase ${v.promocion ? 'text-[#00BFFF]' : 'text-[#C0C0C0]'}`}>{v.promocion || 'Sin Promo'}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'promocion', value: v.promocion || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar promo">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Concesionaria inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                                {adminInlineEdit?.id === v.id && adminInlineEdit?.field === 'concesionaria' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-32 uppercase focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div>
+                                      <span className="font-bold text-[#0A1F33] block text-[10px] uppercase">{v.concesionaria || 'Sin Asignar'}</span>
+                                      {hasCheck && <span className="inline-block bg-[#E6F4EA] border border-[#1E8E3E] text-[#1E8E3E] text-[7.5px] font-black uppercase px-1 py-0.2 tracking-wider mt-0.5">✓ CHECK</span>}
+                                    </div>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'concesionaria', value: v.concesionaria || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar concesionaria">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Motor specs inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                                {adminInlineEdit?.id === v.id && adminInlineEdit?.field === 'motor' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-32 focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div>
+                                      <span className="font-bold text-[#0A1F33] block text-[10px]">{v.specs?.motor || 'Sin motor'}</span>
+                                      <span className="text-[9px] text-[#C0C0C0] uppercase">{v.specs?.combustible || ''} {v.specs?.transmision ? `• ${v.specs.transmision}` : ''}</span>
+                                    </div>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'motor', value: v.specs?.motor || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar motor">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* URL Ficha Técnica inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 max-w-[120px] truncate">
+                                {adminInlineEdit?.id === v.id && adminInlineEdit?.field === 'url_auto' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-32 focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    {v.url_auto ? <a href={v.url_auto} target="_blank" rel="noopener noreferrer" className="text-[#00BFFF] hover:underline text-[10px] truncate max-w-[90px] inline-block">Ver Ficha ↗</a> : <span className="text-[#C0C0C0] text-[10px]">Sin URL</span>}
+                                    <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'url_auto', value: v.url_auto || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar URL">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Última Modificación (J) */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 text-[10px] text-[#C0C0C0]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#00BFFF] shrink-0"></span>
+                                  <span>{formatLastModified(v.updatedAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* Acciones (H) */}
+                              <td className="p-3.5 text-right bg-[#F8F9FA]/40 sticky right-0">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={() => triggerEditVersion(v)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Editar todas las matrices">
+                                    Ficha Completa ✏️
+                                  </button>
+                                  <button onClick={() => handleDelete('versions', v.id)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Borrar registro completo">
+                                    🗑️ Borrar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ------------------------------------------------------------------ */}
+              {/* CUADRO: ABM MODELOS (H, I, J, K) */}
+              {/* ------------------------------------------------------------------ */}
+              {activeTab === 'modelos' && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col min-h-[550px] shadow-none">
+                  <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col lg:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Cuadro Maestro de Modelos</span>
+                      <span className="text-[10px] bg-[#0A1F33] text-[#00BFFF] px-2.5 py-0.5 font-bold uppercase tracking-wider">{filteredModelos.length} de {modelosList.length}</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 w-full lg:w-auto items-center">
+                      {/* Filtro Marca */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Marca:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmModelFilterMarca} 
+                          onChange={e => setAbmModelFilterMarca(e.target.value)}
+                        >
+                          <option value="Todas">Todas ({marcasList.length})</option>
+                          {marcasList.map(b => <option key={b.id} value={b.id}>{b.name.toUpperCase()}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Filtro Carrocería */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Carrocería:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmModelFilterCarroceria} 
+                          onChange={e => setAbmModelFilterCarroceria(e.target.value)}
+                        >
+                          <option value="Todas">Todas ({categoriasUnicas.length})</option>
+                          {categoriasUnicas.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Buscador */}
+                      <input 
+                        type="text" 
+                        placeholder="Buscar modelo..." 
+                        className="border border-[#C0C0C0] px-3 py-1 text-xs w-full lg:w-44 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" 
+                        value={searchTerm} 
+                        onChange={e => setSearchTerm(e.target.value)} 
+                      />
+
+                      <button 
+                        onClick={openNewModeloModal}
+                        className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors shrink-0 shadow-sm"
+                      >
+                        + Agregar Modelo
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* TABLA / CUADRO MODELOS */}
+                  <div className="overflow-x-auto flex-grow custom-scrollbar">
+                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1050px]">
+                      <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b-2 border-[#0A1F33]">
+                        <tr className="text-[9px] font-black text-[#0A1F33] uppercase tracking-widest">
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Foto</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Marca</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Nombre Modelo ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Categoría ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Origen Fábrica ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Precio Inicial USD ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center">Destacado (Home) (K)</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación (J)</th>
+                          <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[11px] text-[#3A3A3C]">
+                        {filteredModelos.length === 0 ? (
+                          <tr><td colSpan={9} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron modelos.</td></tr>
+                        ) : filteredModelos.map(m => {
+                          const brandObj = marcasList.find(b => b.id === m.brandId);
+                          const brandName = brandObj?.name || 'N/A';
+
+                          return (
+                            <tr key={m.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group">
+                              <td className="p-3 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 w-16">
+                                {isValidImageSrc(m.imgUrl) ? (
+                                  <Image src={m.imgUrl} alt={m.name} width={56} height={32} className="h-8 w-14 object-cover border border-[#C0C0C0]/50" unoptimized={!isOptimizableImageSrc(m.imgUrl)} />
+                                ) : (
+                                  <div className="h-8 w-14 bg-[#F5F5F5] border border-[#C0C0C0]/50 flex items-center justify-center text-[8px] text-[#C0C0C0] uppercase font-bold">Sin Foto</div>
+                                )}
+                              </td>
+
+                              <td className="p-3.5 font-bold uppercase border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40">
+                                <span className="bg-[#0A1F33] text-[#FFFFFF] text-[9px] px-2 py-0.5 font-black uppercase tracking-wider">{brandName}</span>
+                              </td>
+
+                              {/* Nombre Modelo inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33] text-xs">
+                                {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'name' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-36 uppercase focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>{m.name}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'modelo', id: m.id, field: 'name', value: m.name || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar modelo">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Categoría inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                                {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'tipo_carroceria' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 uppercase focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-bold uppercase text-[10px] text-[#0A1F33]">{normalizeCarroceria(m.tipo_carroceria)}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'modelo', id: m.id, field: 'tipo_carroceria', value: m.tipo_carroceria || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar categoría">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Origen inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                                {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'origen' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[10px] font-medium">{m.origen || 'No definido'}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'modelo', id: m.id, field: 'origen', value: m.origen || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar origen">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Starting Price inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33]">
+                                {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'startingPrice' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="number" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 focus:outline-none font-bold" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>US$ {Number(m.startingPrice || 0).toLocaleString()}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'modelo', id: m.id, field: 'startingPrice', value: String(m.startingPrice || '') })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar precio base">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Toggle Destacado ("Lo más buscado") (K) */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
+                                <button 
+                                  onClick={() => handleTogglePopularModel(m.id, !!m.isPopular)}
+                                  className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider border transition-all ${
+                                    m.isPopular 
+                                      ? 'bg-[#00BFFF] text-[#0A1F33] border-[#00BFFF] shadow-sm' 
+                                      : 'bg-[#F8F9FA] text-[#C0C0C0] border-[#C0C0C0] hover:border-[#0A1F33] hover:text-[#0A1F33]'
+                                  }`}
+                                  title={m.isPopular ? 'Quitar de Lo Más Buscado en Home' : 'Marcar como Destacado en Home'}
+                                >
+                                  {m.isPopular ? '★ DESTACADO' : '☆ Normal'}
+                                </button>
+                              </td>
+
+                              {/* Última Modificación (J) */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 text-[10px] text-[#C0C0C0]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#00BFFF] shrink-0"></span>
+                                  <span>{formatLastModified(m.updatedAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* Acciones */}
+                              <td className="p-3.5 text-right bg-[#F8F9FA]/40 sticky right-0">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={() => triggerEditModelo(m)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors">
+                                    Editar ✏️
+                                  </button>
+                                  <button onClick={() => handleDelete('models', m.id)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors">
+                                    🗑️ Borrar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ------------------------------------------------------------------ */}
+              {/* CUADRO: ABM MARCAS (H, I, J) */}
+              {/* ------------------------------------------------------------------ */}
+              {activeTab === 'marcas' && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col min-h-[550px] shadow-none">
+                  <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col lg:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Cuadro Maestro de Marcas</span>
+                      <span className="text-[10px] bg-[#0A1F33] text-[#00BFFF] px-2.5 py-0.5 font-bold uppercase tracking-wider">{filteredMarcas.length} de {marcasList.length}</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 w-full lg:w-auto items-center">
+                      {/* Filtro Origen */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Origen:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmMarcaFilterOrigen} 
+                          onChange={e => setAbmMarcaFilterOrigen(e.target.value)}
+                        >
+                          <option value="Todos">Todos ({origenesMarcasUnicos.length})</option>
+                          {origenesMarcasUnicos.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Buscador */}
+                      <input 
+                        type="text" 
+                        placeholder="Buscar marca..." 
+                        className="border border-[#C0C0C0] px-3 py-1 text-xs w-full lg:w-44 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" 
+                        value={searchTerm} 
+                        onChange={e => setSearchTerm(e.target.value)} 
+                      />
+
+                      <button 
+                        onClick={openNewMarcaModal}
+                        className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors shrink-0 shadow-sm"
+                      >
+                        + Agregar Marca
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* TABLA / CUADRO MARCAS */}
+                  <div className="overflow-x-auto flex-grow custom-scrollbar">
+                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[850px]">
+                      <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b-2 border-[#0A1F33]">
+                        <tr className="text-[9px] font-black text-[#0A1F33] uppercase tracking-widest">
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Logotipo</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Nombre Marca ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Origen de la Marca ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center">Modelos en Catálogo</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación (J)</th>
+                          <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[11px] text-[#3A3A3C]">
+                        {filteredMarcas.length === 0 ? (
+                          <tr><td colSpan={6} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron marcas.</td></tr>
+                        ) : filteredMarcas.map(m => {
+                          const modelsCount = modelosList.filter(mod => mod.brandId === m.id).length;
+
+                          return (
+                            <tr key={m.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group">
+                              <td className="p-3 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 w-16">
+                                {isValidImageSrc(m.logoUrl) ? (
+                                  <Image src={m.logoUrl} alt={m.name} width={48} height={28} className="h-7 w-12 object-contain" unoptimized={!isOptimizableImageSrc(m.logoUrl)} />
+                                ) : (
+                                  <div className="h-7 w-12 bg-[#F5F5F5] flex items-center justify-center text-[9px] font-black text-[#C0C0C0] uppercase">{m.name.substring(0, 2)}</div>
+                                )}
+                              </td>
+
+                              {/* Nombre Marca inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33] text-sm">
+                                {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'name' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-36 uppercase focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>{m.name}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'marca', id: m.id, field: 'name', value: m.name || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar marca">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Origen Marca inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                                {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'origen_marca' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-32 focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-bold text-[11px] text-[#0A1F33]">{m.origen_marca || 'No definido'}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'marca', id: m.id, field: 'origen_marca', value: m.origen_marca || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar origen">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Q Modelos */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
+                                <span className="bg-[#F8F9FA] border border-[#C0C0C0] text-[#0A1F33] text-[10px] font-black px-2.5 py-0.5">{modelsCount} modelos</span>
+                              </td>
+
+                              {/* Última Modificación (J) */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 text-[10px] text-[#C0C0C0]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#00BFFF] shrink-0"></span>
+                                  <span>{formatLastModified(m.updatedAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* Acciones */}
+                              <td className="p-3.5 text-right bg-[#F8F9FA]/40 sticky right-0">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={() => triggerEditMarca(m)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors">
+                                    Editar ✏️
+                                  </button>
+                                  <button onClick={() => handleDelete('brands', m.id)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors">
+                                    🗑️ Borrar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ------------------------------------------------------------------ */}
+              {/* CUADRO: ABM CONCESIONARIAS (H, J, L) */}
+              {/* ------------------------------------------------------------------ */}
+              {activeTab === 'concesionarias' && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col min-h-[550px] shadow-none">
+                  <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col lg:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Cuadro Maestro de Concesionarias</span>
+                      <span className="text-[10px] bg-[#0A1F33] text-[#00BFFF] px-2.5 py-0.5 font-bold uppercase tracking-wider">{filteredConcesionarias.length} de {concesionariasList.length}</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 w-full lg:w-auto items-center">
+                      {/* Filtro Estado */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Estado:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmConcFilterStatus} 
+                          onChange={e => setAbmConcFilterStatus(e.target.value)}
+                        >
+                          <option value="Todos">Todos</option>
+                          <option value="active">Activas</option>
+                          <option value="inactive">Inactivas</option>
+                        </select>
+                      </div>
+
+                      {/* Filtro DATACAR CHECK */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Check:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmConcFilterCheck} 
+                          onChange={e => setAbmConcFilterCheck(e.target.value)}
+                        >
+                          <option value="Todos">Todos</option>
+                          <option value="con_check">Con Datacar Check</option>
+                          <option value="sin_check">Sin Check</option>
+                        </select>
+                      </div>
+
+                      {/* Buscador */}
+                      <input 
+                        type="text" 
+                        placeholder="Buscar concesionaria..." 
+                        className="border border-[#C0C0C0] px-3 py-1 text-xs w-full lg:w-44 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" 
+                        value={searchTerm} 
+                        onChange={e => setSearchTerm(e.target.value)} 
+                      />
+
+                      <button 
+                        onClick={openNewConcesionariaModal}
+                        className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors shrink-0 shadow-sm"
+                      >
+                        + Agregar Concesionaria
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* TABLA / CUADRO CONCESIONARIAS */}
+                  <div className="overflow-x-auto flex-grow custom-scrollbar">
+                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
+                      <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b-2 border-[#0A1F33]">
+                        <tr className="text-[9px] font-black text-[#0A1F33] uppercase tracking-widest">
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Nombre Comercial ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Email Gerencia (Leads) ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center">Estado ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center">Sello DATACAR CHECK (L)</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Marcas Gestionadas</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación (J)</th>
+                          <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[11px] text-[#3A3A3C]">
+                        {filteredConcesionarias.length === 0 ? (
+                          <tr><td colSpan={7} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron concesionarias.</td></tr>
+                        ) : filteredConcesionarias.map(c => {
+                          const dealerNorm = (c.name || '').trim().toUpperCase();
+                          const associatedBrandsSet = concBrandsMap.get(dealerNorm);
+                          const associatedBrands = associatedBrandsSet ? Array.from(associatedBrandsSet) : [];
+
+                          return (
+                            <tr key={c.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group">
+                              {/* Nombre Comercial inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33] text-xs">
+                                {adminInlineEdit?.id === c.id && adminInlineEdit?.field === 'name' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-40 uppercase focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>{c.name}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'concesionaria', id: c.id, field: 'name', value: c.name || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar nombre">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Email Gerencia inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                                {adminInlineEdit?.id === c.id && adminInlineEdit?.field === 'email_gerencia' ? (
+                                  <div className="flex items-center gap-1">
+                                    <input type="email" className="border border-[#00BFFF] p-1 text-xs bg-white w-48 focus:outline-none" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[10px] text-[#0A1F33] font-medium">{c.email_gerencia || 'No asignado'}</span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'concesionaria', id: c.id, field: 'email_gerencia', value: c.email_gerencia || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar email">✏️</button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Estado inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
+                                <span className={`text-[8.5px] font-black uppercase px-2 py-0.5 ${c.status === 'active' ? 'bg-[#E6F4EA] text-[#1E8E3E] border border-[#1E8E3E]/30' : 'bg-[#FFE6E6] text-[#D93025] border border-[#D93025]/30'}`}>
+                                  {c.status === 'active' ? 'Activa' : 'Inactiva'}
+                                </span>
+                              </td>
+
+                              {/* Toggle Directo DATACAR CHECK (L) */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
+                                <button 
+                                  onClick={() => handleToggleDatacarCheck(c.id, !!c.datacarCheck)}
+                                  className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider border transition-all ${
+                                    c.datacarCheck 
+                                      ? 'bg-[#E6F4EA] text-[#1E8E3E] border-[#1E8E3E] shadow-sm' 
+                                      : 'bg-[#F8F9FA] text-[#C0C0C0] border-[#C0C0C0] hover:border-[#1E8E3E] hover:text-[#1E8E3E]'
+                                  }`}
+                                  title={c.datacarCheck ? 'Desactivar Sello Oficial DATACAR CHECK' : 'Activar Sello Oficial DATACAR CHECK'}
+                                >
+                                  {c.datacarCheck ? '✓ CHECK ACTIVO' : '○ Sin Check'}
+                                </button>
+                              </td>
+
+                              {/* Marcas Gestionadas */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 whitespace-normal max-w-xs">
+                                {associatedBrands.length === 0 ? (
+                                  <span className="text-[9px] text-[#C0C0C0] uppercase">Sin vehículos en catálogo</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1">
+                                    {associatedBrands.map(bName => (
+                                      <span key={bName} className="bg-[#F8F9FA] border border-[#C0C0C0] text-[#0A1F33] text-[8px] font-bold uppercase px-1.5 py-0.5">
+                                        {bName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Última Modificación (J) */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 text-[10px] text-[#C0C0C0]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#00BFFF] shrink-0"></span>
+                                  <span>{formatLastModified(c.updatedAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* Acciones */}
+                              <td className="p-3.5 text-right bg-[#F8F9FA]/40 sticky right-0">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={() => triggerEditConcesionaria(c)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors">
+                                    Editar ✏️
+                                  </button>
+                                  <button onClick={() => handleDelete('concesionarias', c.id)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors">
+                                    🗑️ Borrar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* ======================================= */}
+          {/* MODALES COMPLETOS PARA ABM (CREAR / EDITAR) */}
+          {/* ======================================= */}
+
+          {/* Modal ABM Marcas */}
+          {abmModalType === 'marcas' && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-[#FFFFFF] border-t-4 border-[#0A1F33] border-l border-r border-b border-[#C0C0C0] w-full max-w-lg p-6 shadow-2xl">
+                <div className="flex justify-between items-center mb-4 border-b border-[#C0C0C0] pb-3">
+                  <h3 className="font-black text-[#0A1F33] text-sm uppercase">{marcaForm.id ? 'Modificar Identidad de Marca' : 'Crear Nueva Marca'}</h3>
+                  <button onClick={() => setAbmModalType(null)} className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold">✕</button>
+                </div>
+                <form onSubmit={handleSaveMarca} className="flex flex-col gap-4">
+                  <div><label htmlFor="marcaForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Marca</label><input id="marcaForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] uppercase font-bold" value={marcaForm.name} onChange={e => setMarcaForm({...marcaForm, name: e.target.value})} required /></div>
+                  <div><label htmlFor="marcaForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen de la Marca</label><input id="marcaForm-origen" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.origen_marca} onChange={e => setMarcaForm({...marcaForm, origen_marca: e.target.value})} placeholder="Ej: Alemania, Japón, China..." /></div>
+                  <ImageUploadField label="Logotipo" folder="brands" value={marcaForm.logoUrl} onChange={url => setMarcaForm({...marcaForm, logoUrl: url})} accentClass="text-[#00BFFF]" />
+                  <div className="flex gap-3 mt-4">
+                    <button type="button" onClick={() => setAbmModalType(null)} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5]">Cancelar</button>
+                    <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">{marcaForm.id ? 'Guardar Cambios' : 'Crear Marca'}</button>
+                  </div>
+                </form>
               </div>
+            </div>
+          )}
 
-              {/* Visor de Registros */}
-              <div className="xl:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-full min-h-[600px]">
-                <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col md:flex-row gap-4 justify-between items-center shrink-0">
-                  <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Tabla de Registros: {activeTab}</span>
-                  <input type="text" placeholder="Búsqueda rápida en RAM..." className="border border-[#C0C0C0] px-3 py-2 text-xs w-full md:w-64 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          {/* Modal ABM Modelos */}
+          {abmModalType === 'modelos' && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-[#FFFFFF] border-t-4 border-[#0A1F33] border-l border-r border-b border-[#C0C0C0] w-full max-w-lg p-6 shadow-2xl">
+                <div className="flex justify-between items-center mb-4 border-b border-[#C0C0C0] pb-3">
+                  <h3 className="font-black text-[#0A1F33] text-sm uppercase">{modeloForm.id ? 'Modificar Ficha de Modelo' : 'Crear Nuevo Modelo'}</h3>
+                  <button onClick={() => setAbmModalType(null)} className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold">✕</button>
                 </div>
-                <div className="overflow-auto flex-grow custom-scrollbar">
-                  <table className="w-full text-left border-collapse whitespace-nowrap min-w-[600px]">
-                    <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b border-[#C0C0C0]">
-                      <tr className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">
-                        <th className="p-4">Identidad Visual</th>
-                        <th className="p-4">ID / Nombre</th>
-                        <th className="p-4 text-right">Manejo B2B</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[11px] text-[#3A3A3C]">
-                      {activeTab === 'concesionarias' && filteredConcesionarias.map(c => (
-                        <tr key={c.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
-                          <td className="p-4"><div className="h-8 w-8 bg-[#00BFFF] flex items-center justify-center text-[10px] font-bold text-[#0A1F33] uppercase rounded-full">{c.name.substring(0,2)}</div></td>
-                          <td className="p-4 font-bold">
-                            {c.name}{' '}
-                            {c.datacarCheck && <span className="inline-block bg-[#E6F4EA] border border-[#1E8E3E] text-[#1E8E3E] text-[8px] font-black uppercase px-1.5 py-0.5 tracking-widest align-middle">✓ DATACAR CHECK</span>}
-                            <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Email: {c.email_gerencia || 'No asignado'} • Estado: {c.status}</span>
-                          </td>
-                          <td className="p-4 text-right flex gap-3 justify-end items-center mt-2">
-                              <button onClick={() => { setConcesionariaForm({ id: c.id, name: c.name || '', email_gerencia: c.email_gerencia || '', status: c.status || 'active', datacarCheck: c.datacarCheck || false }); window.scrollTo(0,0); }} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button>
-                              <button onClick={() => handleDelete('concesionarias', c.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button>
-                          </td>
-                        </tr>
-                      ))}
-                      {activeTab === 'marcas' && filteredMarcas.map(m => (
-                        <tr key={m.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
-                          <td className="p-4">{isValidImageSrc(m.logoUrl) ? <Image src={m.logoUrl} alt={m.name} width={64} height={32} className="h-8 w-auto object-contain" unoptimized={!isOptimizableImageSrc(m.logoUrl)} /> : <div className="h-8 w-8 bg-[#F5F5F5] flex items-center justify-center text-[10px] font-bold text-[#C0C0C0] uppercase rounded-full">{m.name.substring(0,2)}</div>}</td>
-                          <td className="p-4 font-bold">{m.name} <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Origen: {m.origen_marca || 'N/A'}</span></td>
-                          <td className="p-4 text-right flex gap-3 justify-end items-center mt-2"><button onClick={() => triggerEditMarca(m)} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button><button onClick={() => handleDelete('brands', m.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button></td>
-                        </tr>
-                      ))}
-                      {activeTab === 'modelos' && filteredModelos.map(m => (
-                        <tr key={m.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
-                          <td className="p-4">{isValidImageSrc(m.imgUrl) ? <Image src={m.imgUrl} alt={m.name} width={64} height={32} className="h-8 w-auto object-contain" unoptimized={!isOptimizableImageSrc(m.imgUrl)} /> : <span className="text-[#C0C0C0] text-[9px] uppercase">Sin Foto</span>}</td>
-                          <td className="p-4 font-bold">
-                            {m.name} {m.isPopular && <span className="ml-2 text-[8px] bg-[#00BFFF] text-[#0A1F33] px-2 py-0.5 uppercase tracking-widest">Destacado</span>}
-                            <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Marca ID: {m.brandId} • {normalizeCarroceria(m.tipo_carroceria)}</span>
-                          </td>
-                          <td className="p-4 text-right flex gap-3 justify-end items-center mt-2"><button onClick={() => triggerEditModelo(m)} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button><button onClick={() => handleDelete('models', m.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button></td>
-                        </tr>
-                      ))}
-                      {activeTab === 'versiones' && filteredVersiones.map(v => (
-                        <tr key={v.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA]">
-                          <td className="p-4 font-mono text-[10px] text-[#C0C0C0]">{v.id}</td>
-                          <td className="p-4 font-bold">
-                            {v.name}{' '}
-                            {isDatacarCheck(v.concesionaria, checkedDealershipSet) && <span className="inline-block bg-[#E6F4EA] border border-[#1E8E3E] text-[#1E8E3E] text-[8px] font-black uppercase px-1.5 py-0.5 tracking-widest align-middle">✓ DATACAR CHECK</span>}
-                            <span className="text-[#C0C0C0] block font-normal text-[9px] mt-1">Modelo ID: {v.modelId} • US$ {v.price} • Concesionaria: {v.concesionaria || 'Sin asignar'}</span>
-                          </td>
-                          <td className="p-4 text-right flex gap-3 justify-end items-center mt-1"><button onClick={() => triggerEditVersion(v)} className="text-[#00BFFF] font-bold uppercase hover:underline">Editar</button><button onClick={() => handleDelete('versions', v.id)} className="text-[#D93025] font-bold uppercase hover:underline">Eliminar</button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <form onSubmit={handleSaveModelo} className="flex flex-col gap-4">
+                  <div>
+                    <label htmlFor="modeloForm-brandId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Marca</label>
+                    <select id="modeloForm-brandId" className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] font-bold bg-white" value={modeloForm.brandId} onChange={e => setModeloForm({...modeloForm, brandId: e.target.value})} required>
+                      <option value="">Seleccionar marca...</option>
+                      {marcasList.map(m => <option key={m.id} value={m.id}>{m.name.toUpperCase()}</option>)}
+                    </select>
+                  </div>
+                  <div><label htmlFor="modeloForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Modelo</label><input id="modeloForm-name" type="text" className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] uppercase font-bold" value={modeloForm.name} onChange={e => setModeloForm({...modeloForm, name: e.target.value})} required /></div>
+
+                  <div className="flex items-center gap-2 bg-[#F8F9FA] p-3 border border-[#C0C0C0]/50">
+                    <input type="checkbox" id="isPopular" checked={modeloForm.isPopular} onChange={e => setModeloForm({...modeloForm, isPopular: e.target.checked})} className="w-4 h-4 accent-[#00BFFF]" />
+                    <label htmlFor="isPopular" className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest cursor-pointer">Destacar en "Lo más buscado" (Home)</label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label htmlFor="modeloForm-tipo" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Categoría</label><input id="modeloForm-tipo" type="text" className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] uppercase" value={modeloForm.tipo_carroceria} onChange={e => setModeloForm({...modeloForm, tipo_carroceria: e.target.value})} placeholder="Ej: SUV" /></div>
+                    <div><label htmlFor="modeloForm-subsegmento" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Subsegmento</label><input id="modeloForm-subsegmento" type="text" className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.subsegmento} onChange={e => setModeloForm({...modeloForm, subsegmento: e.target.value})} placeholder="Ej: C-SUV" /></div>
+                    <div><label htmlFor="modeloForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen (Fábrica)</label><input id="modeloForm-origen" type="text" className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#0A1F33]" value={modeloForm.origen} onChange={e => setModeloForm({...modeloForm, origen: e.target.value})} placeholder="Ej: Brasil" /></div>
+                    <div><label htmlFor="modeloForm-precio" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio Inicial (USD)</label><input id="modeloForm-precio" type="number" className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] font-bold" value={modeloForm.startingPrice} onChange={e => setModeloForm({...modeloForm, startingPrice: e.target.value})} required /></div>
+                  </div>
+                  <ImageUploadField label="Imagen Catálogo" folder="models" value={modeloForm.imgUrl} onChange={url => setModeloForm({...modeloForm, imgUrl: url})} />
+                  <div className="flex gap-3 mt-4">
+                    <button type="button" onClick={() => setAbmModalType(null)} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5]">Cancelar</button>
+                    <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">{modeloForm.id ? 'Guardar Cambios' : 'Crear Modelo'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal ABM Versiones (Matriz Completa de 5 Bloques) */}
+          {abmModalType === 'versiones' && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-[#FFFFFF] border-t-4 border-[#00BFFF] border-l border-r border-b border-[#C0C0C0] w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl custom-scrollbar">
+                <div className="flex justify-between items-center mb-4 border-b border-[#C0C0C0] pb-3">
+                  <div>
+                    <h3 className="font-black text-[#0A1F33] text-sm uppercase">{versionForm.id ? 'Modificar Ficha Técnica de Versión' : 'Añadir Nueva Versión Técnica'}</h3>
+                    <span className="text-[10px] text-[#00BFFF] font-bold uppercase tracking-wider">Matriz Integral de 5 Dimensiones</span>
+                  </div>
+                  <button onClick={() => setAbmModalType(null)} className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold">✕</button>
                 </div>
+
+                <form onSubmit={handleSaveVersion} className="flex flex-col gap-6">
+                  {/* Bloque 1: Datos Principales */}
+                  <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
+                    <legend className="text-[10px] font-black text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">1. Datos Comerciales</legend>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label htmlFor="versionForm-modelId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Modelo Vinculado</label>
+                        <select id="versionForm-modelId" className="w-full border p-2 text-xs bg-[#FFFFFF] focus:outline-none focus:border-[#0A1F33] font-bold" value={versionForm.modelId} onChange={e => setVersionForm({...versionForm, modelId: e.target.value})} required>
+                          <option value="">Seleccionar modelo...</option>
+                          {modelosList.map(m => {
+                            const b = marcasList.find(br => br.id === m.brandId);
+                            return <option key={m.id} value={m.id}>{b ? `${b.name} - ` : ''}{m.name}</option>;
+                          })}
+                        </select>
+                      </div>
+                      <div><label htmlFor="versionForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre de Versión</label><input id="versionForm-name" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] font-bold" value={versionForm.name} onChange={e => setVersionForm({...versionForm, name: e.target.value})} placeholder="Ej: 2.0 EX AT 4X4" required /></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div><label htmlFor="versionForm-price" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio (USD)</label><input id="versionForm-price" type="number" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] font-bold" value={versionForm.price} onChange={e => setVersionForm({...versionForm, price: e.target.value})} required /></div>
+                      <div><label htmlFor="versionForm-promocion" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Promoción</label><input id="versionForm-promocion" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.promocion} onChange={e => setVersionForm({...versionForm, promocion: e.target.value})} placeholder="Ej: Bono US$ 1.500" /></div>
+                      <div><label htmlFor="versionForm-concesionaria" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Concesionaria</label><input id="versionForm-concesionaria" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] uppercase" value={versionForm.concesionaria} onChange={e => setVersionForm({...versionForm, concesionaria: e.target.value})} placeholder="Ej: GARDEN" /></div>
+                    </div>
+                    <div className="mt-3"><label htmlFor="versionForm-url_auto" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Oficial (Ficha Técnica)</label><input id="versionForm-url_auto" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.url_auto} onChange={e => setVersionForm({...versionForm, url_auto: e.target.value})} placeholder="https://..." /></div>
+                  </fieldset>
+
+                  {/* Bloque 2: Motor y Transmisión */}
+                  <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
+                    <legend className="text-[10px] font-black text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">2. Motor y Transmisión</legend>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                      <div><label htmlFor="versionForm-combustible" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Combustible Base</label><input id="versionForm-combustible" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.combustible} onChange={e => setVersionForm({...versionForm, combustible: e.target.value})} placeholder="Nafta / HEV / EV" /></div>
+                      <div><label htmlFor="versionForm-motor" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Motor</label><input id="versionForm-motor" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.motor} onChange={e => setVersionForm({...versionForm, motor: e.target.value})} placeholder="Ej: 2.0L Turbo 240 CV" /></div>
+                      <div><label htmlFor="versionForm-transmision" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Caja / Transmisión</label><input id="versionForm-transmision" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.transmision} onChange={e => setVersionForm({...versionForm, transmision: e.target.value})} placeholder="Ej: AT 8 Vel" /></div>
+                      <div><label htmlFor="versionForm-traccion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tracción</label><input id="versionForm-traccion" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.traccion} onChange={e => setVersionForm({...versionForm, traccion: e.target.value})} placeholder="Ej: FWD / 4WD" /></div>
+                    </div>
+                  </fieldset>
+
+                  {/* Bloque 3: Arquitectura y Dimensiones */}
+                  <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
+                    <legend className="text-[10px] font-black text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">3. Arquitectura y Dimensiones (mm)</legend>
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Largo</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.largo} onChange={e => setVersionForm({...versionForm, largo: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Ancho</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.ancho} onChange={e => setVersionForm({...versionForm, ancho: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Alto</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.alto} onChange={e => setVersionForm({...versionForm, alto: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Despeje</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.despeje_suelo} onChange={e => setVersionForm({...versionForm, despeje_suelo: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Baulera (L)</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.baulera_litros} onChange={e => setVersionForm({...versionForm, baulera_litros: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Plazas</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.plazas} onChange={e => setVersionForm({...versionForm, plazas: e.target.value})} /></div>
+                    </div>
+                  </fieldset>
+
+                  {/* Bloque 4: Seguridad y Equipamiento */}
+                  <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
+                    <legend className="text-[10px] font-black text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">4. Seguridad, Confort y ADAS</legend>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Airbags</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.airbags} onChange={e => setVersionForm({...versionForm, airbags: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Pantalla (")</label><input type="number" step="0.1" className="w-full border p-2 text-xs bg-white" value={versionForm.tamanho_pantalla} onChange={e => setVersionForm({...versionForm, tamanho_pantalla: e.target.value})} /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Cámaras</label><input type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.camaras} onChange={e => setVersionForm({...versionForm, camaras: e.target.value})} placeholder="360 / Reversa" /></div>
+                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Garantía</label><input type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.garantia} onChange={e => setVersionForm({...versionForm, garantia: e.target.value})} placeholder="5 años" /></div>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Sistemas ADAS (Separar con | )</label><input type="text" className="w-full border border-[#00BFFF]/40 p-2 text-xs bg-white" value={versionForm.adas} onChange={e => setVersionForm({...versionForm, adas: e.target.value})} placeholder="Frenado autónomo | Alerta punto ciego | Mantenimiento carril" /></div>
+                      <div><label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Seguridad Standard (Separar con ; )</label><textarea rows={2} className="w-full border p-2 text-xs bg-white resize-none" value={versionForm.seguridad_standard} onChange={e => setVersionForm({...versionForm, seguridad_standard: e.target.value})} placeholder="6 Airbags; Frenos ABS + EBD; Control de estabilidad"></textarea></div>
+                      <div><label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Confort y Conveniencia (Separar con ; )</label><textarea rows={2} className="w-full border p-2 text-xs bg-white resize-none" value={versionForm.confort_conveniencia} onChange={e => setVersionForm({...versionForm, confort_conveniencia: e.target.value})} placeholder="Asientos de cuero; Climatizador bizona; Techo panorámico"></textarea></div>
+                    </div>
+                  </fieldset>
+
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setAbmModalType(null)} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5]">Cancelar</button>
+                    <button type="submit" disabled={loading} className="flex-1 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 transition-colors">{versionForm.id ? 'Guardar Cambios' : 'Crear Versión Técnica'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal ABM Concesionarias */}
+          {abmModalType === 'concesionarias' && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-[#FFFFFF] border-t-4 border-[#0A1F33] border-l border-r border-b border-[#C0C0C0] w-full max-w-lg p-6 shadow-2xl">
+                <div className="flex justify-between items-center mb-4 border-b border-[#C0C0C0] pb-3">
+                  <h3 className="font-black text-[#0A1F33] text-sm uppercase">{concesionariaForm.id ? 'Modificar Concesionaria' : 'Crear Nueva Concesionaria'}</h3>
+                  <button onClick={() => setAbmModalType(null)} className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold">✕</button>
+                </div>
+                <form onSubmit={handleSaveConcesionaria} className="flex flex-col gap-4">
+                  <div><label htmlFor="concesionariaForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Comercial</label><input id="concesionariaForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] uppercase font-bold" value={concesionariaForm.name} onChange={e => setConcesionariaForm({...concesionariaForm, name: e.target.value})} required /></div>
+                  <div><label htmlFor="concesionariaForm-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email Gerencia (Recepción Leads)</label><input id="concesionariaForm-email" type="email" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={concesionariaForm.email_gerencia} onChange={e => setConcesionariaForm({...concesionariaForm, email_gerencia: e.target.value})} placeholder="gerente@concesionaria.com" /></div>
+                  <div>
+                    <label htmlFor="concesionariaForm-status" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Estado</label>
+                    <select id="concesionariaForm-status" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-white font-bold" value={concesionariaForm.status} onChange={e => setConcesionariaForm({...concesionariaForm, status: e.target.value})}>
+                      <option value="active">Activa</option>
+                      <option value="inactive">Inactiva</option>
+                    </select>
+                  </div>
+
+                  {/* DATACAR CHECK (L) */}
+                  <div className="flex items-start gap-2 bg-[#E6F4EA] p-3 border border-[#1E8E3E]/30">
+                    <input type="checkbox" id="concesionariaForm-datacarCheck" checked={concesionariaForm.datacarCheck} onChange={e => setConcesionariaForm({...concesionariaForm, datacarCheck: e.target.checked})} className="w-4 h-4 mt-0.5 accent-[#1E8E3E]" />
+                    <label htmlFor="concesionariaForm-datacarCheck" className="cursor-pointer">
+                      <span className="text-[10px] font-black text-[#1E8E3E] uppercase tracking-widest block">Sello Oficial DATACAR CHECK (L)</span>
+                      <span className="text-[9px] text-[#3A3A3C] block mt-1 leading-relaxed">Marca a esta concesionaria como socia oficial responsable de sus propios precios y datos. El sello se propaga automáticamente a todos sus productos.</span>
+                    </label>
+                  </div>
+
+                  <div className="flex gap-3 mt-4">
+                    <button type="button" onClick={() => setAbmModalType(null)} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5]">Cancelar</button>
+                    <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">{concesionariaForm.id ? 'Guardar Cambios' : 'Crear Concesionaria'}</button>
+                  </div>
+                </form>
               </div>
             </div>
           )}
