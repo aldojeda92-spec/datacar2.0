@@ -181,6 +181,12 @@ service cloud.firestore {
       allow get, list, update, delete: if isAdmin();
     }
 
+    // ---------------- preference_telemetry (telemetría de preferencias del comparador dinámico) ----------------
+    match /preference_telemetry/{prefId} {
+      allow create: if true;
+      allow get, list, update, delete: if isAdmin();
+    }
+
     // Todo lo no listado explícitamente: denegado por defecto.
   }
 }

@@ -10,6 +10,7 @@ import { db, auth, storage } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
 import { normalizeCarroceria } from '../../lib/carroceria';
+import { normalizeCombustible, combustibleLabel } from '../../lib/combustible';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
@@ -193,11 +194,18 @@ export default function AdminDashboardPage() {
     order: 1,
   });
   
-  // Filtros Analítica de Comparaciones (por defecto 'Todas', 'Todos', vacíos para ver el 100%)
+  // Filtros Analítica de Comparaciones y Telemetría de Preferencias (por defecto 'Todas'/'Todos' para ver el 100%)
   const [filterCompBrand, setFilterCompBrand] = useState('Todas');
   const [filterCompModel, setFilterCompModel] = useState('Todos');
+  const [filterCompCarroceria, setFilterCompCarroceria] = useState('Todas');
+  const [filterCompCombustible, setFilterCompCombustible] = useState('Todos');
+  const [filterCompOrigen, setFilterCompOrigen] = useState('Todos');
   const [filterCompDateFrom, setFilterCompDateFrom] = useState('');
   const [filterCompDateTo, setFilterCompDateTo] = useState('');
+  // Filtros adicionales específicos dentro de Telemetría de Preferencias (sincronizados o refinables)
+  const [filterPrefCarroceria, setFilterPrefCarroceria] = useState('Todas');
+  const [filterPrefCombustible, setFilterPrefCombustible] = useState('Todos');
+  const [filterPrefOrigen, setFilterPrefOrigen] = useState('Todos');
 
   // Estados para Accesos B2B y Admins
   const [usuariosSistemaList, setUsuariosSistemaList] = useState<any[]>([]);
@@ -223,12 +231,16 @@ export default function AdminDashboardPage() {
   // FORMULARIO DE ACCESOS ADMIN (Staff Interno / Socios)
   const [adminAccessForm, setAdminAccessForm] = useState({ uid: '', email: '' });
 
-  // FORMULARIO DE ADS
+  // FORMULARIO DE ADS (5 Espacios Publicitarios)
   const [adForm, setAdForm] = useState({ 
+    id: '',
     sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', 
-    location: 'ambos', targetCategory: 'Todas', startDate: '', endDate: '',
+    location: 'home', targetCategory: 'Todas', targetCombustible: 'Todas', modelId: '', startDate: '', endDate: '',
     ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF'
   });
+  const [adModelFilterConcesionaria, setAdModelFilterConcesionaria] = useState('Todas');
+  const [adModelFilterMarca, setAdModelFilterMarca] = useState('Todas');
+  const [adVaultFilterLocation, setAdVaultFilterLocation] = useState('todos');
   
   const [finForm, setFinForm] = useState({ tasa_anual: 0.09, gastos_admin: 0.022, seguro_vida: 0.005 });
 
@@ -392,6 +404,56 @@ export default function AdminDashboardPage() {
     return Array.from(new Set(cats.map((c: string) => normalizeCarroceria(c)))).sort();
   }, [modelosList]);
 
+  // Tipos de movilidad (combustible) para el espacio 3: Catálogo Filtros
+  const combustiblesUnicos = useMemo(() => {
+    const base = ['EV', 'PHEV', 'HEV', 'MHEV', 'NAFTA', 'DIESEL', 'FLEX', 'REEV'];
+    const fromVersions = versionesList
+      .map(v => normalizeCombustible(v.specs?.combustible))
+      .filter(Boolean);
+    return Array.from(new Set([...base, ...fromVersions]));
+  }, [versionesList]);
+
+  // Filtros en cascada para el espacio 5: Comparador (Concesionaria -> Marca -> Modelo)
+  const concesionariasParaAds = useMemo(() => {
+    const fromCol = concesionariasList.map(c => (c.name || '').trim().toUpperCase()).filter(Boolean);
+    const fromVers = versionesList.map(v => (v.concesionaria || '').trim().toUpperCase()).filter(Boolean);
+    return Array.from(new Set([...fromCol, ...fromVers])).sort();
+  }, [concesionariasList, versionesList]);
+
+  const marcasParaAds = useMemo(() => {
+    const sortedMarcas = [...marcasList].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (adModelFilterConcesionaria === 'Todas') return sortedMarcas;
+    const modelIdsOfDealer = new Set(
+      versionesList
+        .filter(v => (v.concesionaria || '').trim().toUpperCase() === adModelFilterConcesionaria.toUpperCase())
+        .map(v => v.modelId)
+    );
+    const brandIdsOfDealer = new Set(
+      modelosList.filter(m => modelIdsOfDealer.has(m.id)).map(m => m.brandId)
+    );
+    return sortedMarcas.filter(b => brandIdsOfDealer.has(b.id));
+  }, [marcasList, modelosList, versionesList, adModelFilterConcesionaria]);
+
+  const modelosParaAds = useMemo(() => {
+    let list = [...modelosList];
+    if (adModelFilterConcesionaria !== 'Todas') {
+      const modelIdsOfDealer = new Set(
+        versionesList
+          .filter(v => (v.concesionaria || '').trim().toUpperCase() === adModelFilterConcesionaria.toUpperCase())
+          .map(v => v.modelId)
+      );
+      list = list.filter(m => modelIdsOfDealer.has(m.id));
+    }
+    if (adModelFilterMarca !== 'Todas') {
+      list = list.filter(m => m.brandId === adModelFilterMarca);
+    }
+    return list.sort((a, b) => {
+      const brandA = marcasList.find(br => br.id === a.brandId)?.name || '';
+      const brandB = marcasList.find(br => br.id === b.brandId)?.name || '';
+      return `${brandA} ${a.name}`.localeCompare(`${brandB} ${b.name}`);
+    });
+  }, [modelosList, versionesList, marcasList, adModelFilterConcesionaria, adModelFilterMarca]);
+
   const setDatePreset = (preset: '7d' | '30d' | '90d' | 'year' | 'all') => {
     const today = new Date();
     const formatYMD = (d: Date) => {
@@ -472,36 +534,230 @@ export default function AdminDashboardPage() {
   const leadsPorOrigen = useMemo(() => getTopItems(filteredLeads, l => l.origen, 5), [filteredLeads]);
   const leadsPorConcesionaria = useMemo(() => getTopItems(filteredLeads, l => l.concesionaria_destino, 5), [filteredLeads]);
 
+  // Normalizador de Origen (país/región de marca o modelo)
+  const normalizeOrigen = useCallback((raw: string | undefined | null): string => {
+    const clean = (raw || '').trim().toUpperCase();
+    if (!clean || clean === 'N/A' || clean === 'NO DEFINIDO') return 'NO ESPECIFICADO';
+    if (clean.includes('CHIN')) return 'CHINA';
+    if (clean.includes('JAP')) return 'JAPÓN';
+    if (clean.includes('CORE') || clean.includes('KORE')) return 'COREA';
+    if (clean.includes('BRAS') || clean.includes('BRAZ')) return 'BRASIL';
+    if (clean.includes('ARGEN')) return 'ARGENTINA';
+    if (clean.includes('EE.UU') || clean.includes('EEUU') || clean.includes('USA') || clean.includes('ESTADOS UNIDOS') || clean.includes('AMERIC')) return 'EE.UU.';
+    if (clean.includes('ALEMAN') || clean.includes('GERMAN')) return 'ALEMANIA';
+    if (clean.includes('MEX') || clean.includes('MÉX')) return 'MÉXICO';
+    if (clean.includes('FRANC')) return 'FRANCIA';
+    if (clean.includes('INDI')) return 'INDIA';
+    if (clean.includes('REINO UNIDO') || clean.includes('INGL') || clean.includes('UK') || clean.includes('BRIT')) return 'REINO UNIDO';
+    if (clean.includes('ITAL')) return 'ITALIA';
+    if (clean.includes('SUEC')) return 'SUECIA';
+    if (clean.includes('ESPAN') || clean.includes('ESPAÑ')) return 'ESPAÑA';
+    if (clean.includes('TAILAND') || clean.includes('THAI')) return 'TAILANDIA';
+    return clean;
+  }, []);
+
+  // Lista única de orígenes presentes en el catálogo
+  const origenesAutosUnicos = useMemo(() => {
+    const set = new Set<string>();
+    modelosList.forEach(m => {
+      if (m.origen) set.add(normalizeOrigen(m.origen));
+    });
+    marcasList.forEach(b => {
+      if (b.origen_marca) set.add(normalizeOrigen(b.origen_marca));
+    });
+    set.delete('NO ESPECIFICADO');
+    return Array.from(set).sort();
+  }, [modelosList, marcasList, normalizeOrigen]);
+
   // Analítica Comparaciones: Modelos según marca seleccionada
   const compModelosParaSelect = useMemo(() => {
     if (filterCompBrand === 'Todas') return modelosList;
     return modelosList.filter(m => m.brandId === filterCompBrand);
   }, [modelosList, filterCompBrand]);
 
-  // Filtrado reactivo de comparaciones (por Marca, Modelo y Fecha)
+  // Enriquecimiento de cada registro de comparison_stats con metadatos completos y orden exacto de slots (Slot #1 = 1ra Elección)
+  const enrichedComparisons = useMemo(() => {
+    const brandsById = new Map<string, any>();
+    marcasList.forEach(b => brandsById.set(b.id, b));
+
+    const modelsById = new Map<string, any>();
+    modelosList.forEach(m => modelsById.set(m.id, m));
+
+    const versionsById = new Map<string, any>();
+    const versionsByModelId = new Map<string, any[]>();
+    versionesList.forEach(v => {
+      versionsById.set(v.id, v);
+      const arr = versionsByModelId.get(v.modelId) || [];
+      arr.push(v);
+      versionsByModelId.set(v.modelId, arr);
+    });
+
+    // Índice de modelos con nombre completo "MARCA MODELO" ordenado de más largo a más corto para matching exacto
+    const modelCatalogEntries = modelosList.map(m => {
+      const b = brandsById.get(m.brandId);
+      const brandName = (b?.name || '').trim();
+      const modelName = (m.name || '').trim();
+      const fullName = `${brandName} ${modelName}`.trim();
+      return {
+        model: m,
+        brand: b,
+        brandName,
+        modelName,
+        fullUpper: fullName.toUpperCase(),
+        modelUpper: modelName.toUpperCase(),
+      };
+    }).sort((a, b) => b.fullUpper.length - a.fullUpper.length);
+
+    const buildVehicleMeta = (mod: any, brand: any, ver: any, slotIndex: number, fallbackLabel = '') => {
+      const modelVersions = mod ? (versionsByModelId.get(mod.id) || []) : [];
+      const primaryVer = ver || modelVersions.find(v => v.concesionaria || v.specs?.combustible) || modelVersions[0] || null;
+      const brandName = (brand?.name || '').trim().toUpperCase();
+      const modelName = (mod?.name || fallbackLabel || '').trim().toUpperCase();
+      const carroceria = mod?.tipo_carroceria ? normalizeCarroceria(mod.tipo_carroceria) : 'SIN CLASIFICAR';
+      const origen = normalizeOrigen(mod?.origen || brand?.origen_marca);
+      const combustible = normalizeCombustible(primaryVer?.specs?.combustible) || 'NAFTA';
+      const isNewEnergy = ['EV', 'PHEV', 'HEV', 'MHEV', 'REEV'].includes(combustible);
+      const concesionaria = (primaryVer?.concesionaria || mod?.concesionaria || '').trim().toUpperCase() || 'SIN ASIGNAR';
+
+      return {
+        slotIndex, // 0 = Primer lugar (1ra elección en el comparador)
+        versionId: primaryVer?.id || '',
+        modelId: mod?.id || fallbackLabel,
+        modelName: modelName || fallbackLabel,
+        brandId: brand?.id || '',
+        brandName: brandName || 'MARCA',
+        fullName: brandName && modelName ? `${brandName} ${modelName}` : (fallbackLabel || modelName),
+        carroceria,
+        origen,
+        combustible,
+        isNewEnergy,
+        concesionaria,
+      };
+    };
+
+    return comparisonStatsList.map(comp => {
+      const comboParts = (comp.combo || '')
+        .split(/\s+vs\s+/i)
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+
+      const rawIds: string[] = Array.isArray(comp.slotIds)
+        ? comp.slotIds
+        : Array.isArray(comp.ids)
+          ? comp.ids
+          : typeof comp.ids === 'string'
+            ? comp.ids.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : [];
+
+      // Resolver los vehículos desde IDs
+      const resolvedFromIds = rawIds.map(id => {
+        const ver = versionsById.get(id);
+        const mod = ver ? modelsById.get(ver.modelId) : modelsById.get(id);
+        const brand = mod ? brandsById.get(mod.brandId) : null;
+        return { id, ver, mod, brand };
+      }).filter(item => item.mod);
+
+      const usedIdIndices = new Set<number>();
+      const orderedVehicles: ReturnType<typeof buildVehicleMeta>[] = [];
+
+      if (comboParts.length > 0) {
+        // comboParts SIEMPRE conserva el orden original de los slots ([Slot #1, Slot #2, Slot #3])
+        comboParts.forEach((part: string, slotIdx: number) => {
+          const partUpper = part.toUpperCase();
+
+          // 1. Buscar primero entre los IDs de esta misma comparativa
+          let matchedFromId: { ver: any; mod: any; brand: any } | null = null;
+          for (let i = 0; i < resolvedFromIds.length; i++) {
+            if (usedIdIndices.has(i)) continue;
+            const candidate = resolvedFromIds[i];
+            const candFull = `${candidate.brand?.name || ''} ${candidate.mod?.name || ''}`.trim().toUpperCase();
+            const candMod = (candidate.mod?.name || '').trim().toUpperCase();
+            if (candFull === partUpper || partUpper.includes(candFull) || candFull.includes(partUpper) || (candMod && partUpper.includes(candMod))) {
+              matchedFromId = candidate;
+              usedIdIndices.add(i);
+              break;
+            }
+          }
+
+          if (matchedFromId) {
+            orderedVehicles.push(buildVehicleMeta(matchedFromId.mod, matchedFromId.brand, matchedFromId.ver, slotIdx, part));
+            return;
+          }
+
+          // 2. Si no hubo match por ID, buscar en el catálogo de modelos por nombre
+          const catalogMatch = modelCatalogEntries.find(
+            entry =>
+              entry.fullUpper === partUpper ||
+              partUpper.includes(entry.fullUpper) ||
+              entry.fullUpper.includes(partUpper) ||
+              (entry.modelUpper.length >= 3 && partUpper.endsWith(entry.modelUpper))
+          );
+
+          if (catalogMatch) {
+            orderedVehicles.push(buildVehicleMeta(catalogMatch.model, catalogMatch.brand, null, slotIdx, part));
+          } else {
+            orderedVehicles.push(buildVehicleMeta(null, null, null, slotIdx, part));
+          }
+        });
+      } else if (resolvedFromIds.length > 0) {
+        resolvedFromIds.forEach((item, slotIdx) => {
+          orderedVehicles.push(buildVehicleMeta(item.mod, item.brand, item.ver, slotIdx));
+        });
+      }
+
+      return {
+        ...comp,
+        vehicles: orderedVehicles,
+      };
+    });
+  }, [comparisonStatsList, marcasList, modelosList, versionesList, normalizeOrigen]);
+
+  // Filtrado reactivo de comparaciones (por Marca, Modelo, Carrocería, Motor, Origen y Fecha)
   const filteredComparisons = useMemo(() => {
-    return comparisonStatsList.filter(comp => {
+    return enrichedComparisons.filter(comp => {
       const comboText = (comp.combo || '').toLowerCase();
+      const vehs: any[] = comp.vehicles || [];
 
       // Filtro por marca
       if (filterCompBrand !== 'Todas') {
         const marcaObj = marcasList.find(m => m.id === filterCompBrand);
-        if (marcaObj) {
-          const brandName = marcaObj.name.trim().toLowerCase();
-          if (!comboText.includes(brandName)) return false;
-        }
+        const brandName = marcaObj?.name?.trim().toLowerCase() || '';
+        const matchByVeh = vehs.some(v => v.brandId === filterCompBrand);
+        const matchByText = brandName ? comboText.includes(brandName) : false;
+        if (!matchByVeh && !matchByText) return false;
       }
 
       // Filtro por modelo
       if (filterCompModel !== 'Todos') {
         const modeloObj = modelosList.find(m => m.id === filterCompModel);
-        if (modeloObj) {
-          const modelName = modeloObj.name.trim().toLowerCase();
-          if (!comboText.includes(modelName)) return false;
+        const modelName = modeloObj?.name?.trim().toLowerCase() || '';
+        const matchByVeh = vehs.some(v => v.modelId === filterCompModel);
+        const matchByText = modelName ? comboText.includes(modelName) : false;
+        if (!matchByVeh && !matchByText) return false;
+      }
+
+      // Filtro por carrocería
+      if (filterCompCarroceria !== 'Todas') {
+        if (!vehs.some(v => v.carroceria === filterCompCarroceria)) return false;
+      }
+
+      // Filtro por tipo de motor / energía
+      if (filterCompCombustible !== 'Todos') {
+        if (filterCompCombustible === 'NUEVAS_ENERGIAS') {
+          if (!vehs.some(v => v.isNewEnergy)) return false;
+        } else if (filterCompCombustible === 'COMBUSTION') {
+          if (!vehs.some(v => !v.isNewEnergy)) return false;
+        } else {
+          if (!vehs.some(v => v.combustible === filterCompCombustible)) return false;
         }
       }
 
-      // Filtro por fecha (en horario local para evitar desfases de zona horaria)
+      // Filtro por origen
+      if (filterCompOrigen !== 'Todos') {
+        if (!vehs.some(v => v.origen === filterCompOrigen)) return false;
+      }
+
+      // Filtro por fecha (en horario local)
       if (filterCompDateFrom || filterCompDateTo) {
         let compTime: number | null = null;
         if (comp.timestamp?.toDate) {
@@ -528,15 +784,18 @@ export default function AdminDashboardPage() {
 
       return true;
     });
-  }, [comparisonStatsList, filterCompBrand, filterCompModel, filterCompDateFrom, filterCompDateTo, marcasList, modelosList]);
-
-  const sortedComparisons = useMemo(() => {
-    return [...filteredComparisons].sort((a, b) => {
-      const timeA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
-      const timeB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
-      return timeB - timeA;
-    });
-  }, [filteredComparisons]);
+  }, [
+    enrichedComparisons,
+    filterCompBrand,
+    filterCompModel,
+    filterCompCarroceria,
+    filterCompCombustible,
+    filterCompOrigen,
+    filterCompDateFrom,
+    filterCompDateTo,
+    marcasList,
+    modelosList,
+  ]);
 
   const topComparisons = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -548,7 +807,375 @@ export default function AdminDashboardPage() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
   }, [filteredComparisons]);
 
-  const isCompFiltered = filterCompBrand !== 'Todas' || filterCompModel !== 'Todos' || filterCompDateFrom !== '' || filterCompDateTo !== '';
+  const isCompFiltered =
+    filterCompBrand !== 'Todas' ||
+    filterCompModel !== 'Todos' ||
+    filterCompCarroceria !== 'Todas' ||
+    filterCompCombustible !== 'Todos' ||
+    filterCompOrigen !== 'Todos' ||
+    filterCompDateFrom !== '' ||
+    filterCompDateTo !== '';
+
+  // ==========================================
+  // MÉTRICA DE "CONSIDERACIÓN" (SLOT #1 = PRIMERA ELECCIÓN)
+  // ==========================================
+  const considerationStats = useMemo(() => {
+    const totalComps = filteredComparisons.length;
+    const selectedModelObj = filterCompModel !== 'Todos' ? modelosList.find(m => m.id === filterCompModel) : null;
+    const selectedBrandObj = filterCompBrand !== 'Todas' ? marcasList.find(b => b.id === filterCompBrand) : null;
+
+    // Contabilizar por modelo cuántas veces aparece en total y cuántas veces fue elegido en el Slot #1 (índice 0)
+    const modelStatsMap = new Map<string, { modelId: string; fullName: string; brandId: string; firstSlot: number; total: number }>();
+
+    let focalFirstSlotCount = 0;
+    let focalTotalCount = 0;
+
+    filteredComparisons.forEach(comp => {
+      const vehs: any[] = comp.vehicles || [];
+      if (vehs.length === 0) return;
+
+      // Evaluar si el modelo o marca focal ocupó el Slot #1 en esta comparativa
+      if (selectedModelObj) {
+        const modelNameUpper = (selectedModelObj.name || '').trim().toUpperCase();
+        const isPresent = vehs.some(v => v.modelId === selectedModelObj.id || v.fullName.includes(modelNameUpper));
+        if (isPresent) {
+          focalTotalCount++;
+          const firstV = vehs[0];
+          if (firstV && (firstV.modelId === selectedModelObj.id || firstV.fullName.includes(modelNameUpper))) {
+            focalFirstSlotCount++;
+          }
+        }
+      } else if (selectedBrandObj) {
+        const brandNameUpper = (selectedBrandObj.name || '').trim().toUpperCase();
+        const isPresent = vehs.some(v => v.brandId === selectedBrandObj.id || v.brandName === brandNameUpper);
+        if (isPresent) {
+          focalTotalCount++;
+          const firstV = vehs[0];
+          if (firstV && (firstV.brandId === selectedBrandObj.id || firstV.brandName === brandNameUpper)) {
+            focalFirstSlotCount++;
+          }
+        }
+      }
+
+      // Acumular ranking por modelo (filtrando por marca si hay una seleccionada)
+      const seenInThisComp = new Set<string>();
+      vehs.forEach((v, idx) => {
+        if (!v.fullName) return;
+        if (selectedBrandObj && v.brandId !== selectedBrandObj.id && v.brandName !== (selectedBrandObj.name || '').trim().toUpperCase()) {
+          return;
+        }
+        const key = v.modelId || v.fullName;
+        const curr = modelStatsMap.get(key) || {
+          modelId: v.modelId,
+          fullName: v.fullName,
+          brandId: v.brandId,
+          firstSlot: 0,
+          total: 0,
+        };
+        if (!seenInThisComp.has(key)) {
+          curr.total += 1;
+          seenInThisComp.add(key);
+        }
+        if (idx === 0) {
+          curr.firstSlot += 1;
+        }
+        modelStatsMap.set(key, curr);
+      });
+    });
+
+    const ranking = Array.from(modelStatsMap.values())
+      .sort((a, b) => b.firstSlot - a.firstSlot || b.total - a.total)
+      .slice(0, 8)
+      .map(item => ({
+        ...item,
+        pct: item.total > 0 ? Math.round((item.firstSlot / item.total) * 100) : 0,
+      }));
+
+    const focalPct = focalTotalCount > 0 ? Math.round((focalFirstSlotCount / focalTotalCount) * 100) : 0;
+    const focalChallengerCount = Math.max(0, focalTotalCount - focalFirstSlotCount);
+
+    return {
+      hasFocalModel: Boolean(selectedModelObj),
+      hasFocalBrand: Boolean(selectedBrandObj),
+      focalLabel: selectedModelObj
+        ? `${selectedBrandObj?.name || marcasList.find(b => b.id === selectedModelObj.brandId)?.name || ''} ${selectedModelObj.name}`.trim()
+        : selectedBrandObj
+          ? selectedBrandObj.name
+          : 'Global (Todos los Modelos)',
+      focalFirstSlotCount,
+      focalChallengerCount,
+      focalTotalCount: focalTotalCount || totalComps,
+      focalPct,
+      ranking,
+    };
+  }, [filteredComparisons, filterCompModel, filterCompBrand, modelosList, marcasList]);
+
+  // ==========================================
+  // ANALÍTICA GLOBAL Y COMPETITIVA (4 GRÁFICOS CIRCULARES)
+  // 1. % vs Otros Orígenes
+  // 2. % vs Otras Carrocerías
+  // 3. % vs Otros Tipos de Motor / Nuevas Energías
+  // 4. % vs Marcas de Otra Concesionaria
+  // ==========================================
+  const globalCircularAnalytics = useMemo(() => {
+    const hasFocal = filterCompBrand !== 'Todas' || filterCompModel !== 'Todos';
+    const selectedModelObj = filterCompModel !== 'Todos' ? modelosList.find(m => m.id === filterCompModel) : null;
+    const selectedBrandObj = filterCompBrand !== 'Todas'
+      ? marcasList.find(b => b.id === filterCompBrand)
+      : selectedModelObj
+        ? marcasList.find(b => b.id === selectedModelObj.brandId)
+        : null;
+
+    // Determinar concesionaria(s) oficial(es) donde pertenece la marca/modelo seleccionado
+    const focalConcesionarias = new Set<string>();
+    if (selectedModelObj) {
+      versionesList
+        .filter(v => v.modelId === selectedModelObj.id && v.concesionaria)
+        .forEach(v => focalConcesionarias.add(v.concesionaria.trim().toUpperCase()));
+    } else if (selectedBrandObj) {
+      const brandModelIds = new Set(modelosList.filter(m => m.brandId === selectedBrandObj.id).map(m => m.id));
+      versionesList
+        .filter(v => brandModelIds.has(v.modelId) && v.concesionaria)
+        .forEach(v => focalConcesionarias.add(v.concesionaria.trim().toUpperCase()));
+    }
+
+    const origenCounts: Record<string, number> = {};
+    const carroceriaCounts: Record<string, number> = {};
+    const motorCounts: Record<string, number> = {};
+    const dealerRivalCounts: Record<string, number> = {};
+
+    let totalDuels = 0;
+    let vsOtherOrigenCount = 0;
+    let vsOtherCarroceriaCount = 0;
+    let vsOtherMotorCount = 0;
+    let vsNewEnergyCount = 0;
+    let vsOtherDealerCount = 0;
+    let sameDealerCount = 0;
+
+    filteredComparisons.forEach(comp => {
+      const vehs: any[] = comp.vehicles || [];
+      if (vehs.length < 2) return;
+
+      if (hasFocal) {
+        // Identificar el/los vehículo(s) focal(es) y los rivales dentro de la comparativa
+        const isFocalVeh = (v: any) => {
+          if (selectedModelObj) {
+            return v.modelId === selectedModelObj.id || v.fullName.includes((selectedModelObj.name || '').trim().toUpperCase());
+          }
+          if (selectedBrandObj) {
+            return v.brandId === selectedBrandObj.id || v.brandName === (selectedBrandObj.name || '').trim().toUpperCase();
+          }
+          return false;
+        };
+
+        const focals = vehs.filter(isFocalVeh);
+        const rivals = vehs.filter(v => !isFocalVeh(v));
+
+        // Si el usuario comparó 2 versiones/modelos de la misma marca seleccionada, tomamos el primero como base y el resto como contrincantes
+        const effectiveFocals = focals.length > 0 ? [focals[0]] : [vehs[0]];
+        const effectiveRivals = rivals.length > 0 ? rivals : vehs.slice(1);
+
+        effectiveFocals.forEach(focal => {
+          if (focal.concesionaria && focal.concesionaria !== 'SIN ASIGNAR') {
+            focalConcesionarias.add(focal.concesionaria);
+          }
+
+          effectiveRivals.forEach(rival => {
+            totalDuels++;
+
+            // 1. Origen
+            const rOrigen = rival.origen || 'NO ESPECIFICADO';
+            const isDiffOrigen = rOrigen !== focal.origen;
+            if (isDiffOrigen) vsOtherOrigenCount++;
+            const origenKey = isDiffOrigen ? `vs. ${rOrigen}` : `Mismo (${rOrigen})`;
+            origenCounts[origenKey] = (origenCounts[origenKey] || 0) + 1;
+
+            // 2. Carrocería
+            const rCarr = rival.carroceria || 'OTRA';
+            const isDiffCarr = rCarr !== focal.carroceria;
+            if (isDiffCarr) vsOtherCarroceriaCount++;
+            const carrKey = isDiffCarr ? `vs. ${rCarr}` : `Misma (${rCarr})`;
+            carroceriaCounts[carrKey] = (carroceriaCounts[carrKey] || 0) + 1;
+
+            // 3. Motor / Nuevas Energías
+            const rComb = rival.combustible || 'NAFTA';
+            const isDiffMotor = rComb !== focal.combustible;
+            if (isDiffMotor) vsOtherMotorCount++;
+            if (rival.isNewEnergy) vsNewEnergyCount++;
+            const motorKey = isDiffMotor ? `vs. ${rComb}` : `Mismo (${rComb})`;
+            motorCounts[motorKey] = (motorCounts[motorKey] || 0) + 1;
+
+            // 4. Concesionaria (Otra concesionaria vs Misma concesionaria)
+            const rDealer = rival.concesionaria || 'SIN ASIGNAR';
+            const isSameDealer =
+              (focalConcesionarias.size > 0 && focalConcesionarias.has(rDealer)) ||
+              (rDealer !== 'SIN ASIGNAR' && rDealer === focal.concesionaria) ||
+              (rival.brandId && rival.brandId === focal.brandId);
+
+            if (isSameDealer) {
+              sameDealerCount++;
+              const dKey = `Misma Concesionaria (${rDealer !== 'SIN ASIGNAR' ? rDealer : focal.brandName})`;
+              dealerRivalCounts[dKey] = (dealerRivalCounts[dKey] || 0) + 1;
+            } else {
+              vsOtherDealerCount++;
+              const dKey = rDealer !== 'SIN ASIGNAR' ? `Otra: ${rDealer}` : `Otra: ${rival.brandName}`;
+              dealerRivalCounts[dKey] = (dealerRivalCounts[dKey] || 0) + 1;
+            }
+          });
+        });
+      } else {
+        // MODO GLOBAL (Todas las Marcas): Analizar cruces entre los vehículos de cada comparativa
+        totalDuels++;
+        const uniqueOrigenes = new Set(vehs.map(v => v.origen));
+        const uniqueCarrocerias = new Set(vehs.map(v => v.carroceria));
+        const uniqueMotores = new Set(vehs.map(v => v.combustible));
+        const uniqueDealers = new Set(vehs.map(v => v.concesionaria !== 'SIN ASIGNAR' ? v.concesionaria : v.brandName));
+
+        if (uniqueOrigenes.size > 1) vsOtherOrigenCount++;
+        if (uniqueCarrocerias.size > 1) vsOtherCarroceriaCount++;
+        if (uniqueMotores.size > 1) vsOtherMotorCount++;
+        if (vehs.some(v => v.isNewEnergy)) vsNewEnergyCount++;
+
+        if (uniqueDealers.size > 1) {
+          vsOtherDealerCount++;
+        } else {
+          sameDealerCount++;
+        }
+
+        vehs.forEach(v => {
+          origenCounts[v.origen] = (origenCounts[v.origen] || 0) + 1;
+          carroceriaCounts[v.carroceria] = (carroceriaCounts[v.carroceria] || 0) + 1;
+          motorCounts[v.combustible] = (motorCounts[v.combustible] || 0) + 1;
+        });
+
+        // Para el gráfico de concesionarias en modo global, mostramos la proporción Entre Distintas Concesionarias vs Misma Concesionaria
+        dealerRivalCounts['Marcas de Otra Concesionaria'] = vsOtherDealerCount;
+        dealerRivalCounts['Misma Concesionaria'] = sameDealerCount;
+      }
+    });
+
+    const buildSlices = (countsObj: Record<string, number>, maxSlices = 6) => {
+      const entries = Object.entries(countsObj).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
+      const sum = entries.reduce((acc, [, c]) => acc + c, 0);
+      if (sum === 0) return [];
+      const top = entries.slice(0, maxSlices);
+      const rest = entries.slice(maxSlices);
+      if (rest.length > 0) {
+        const restCount = rest.reduce((acc, [, c]) => acc + c, 0);
+        top.push(['Otros', restCount]);
+      }
+      const palette = ['#00BFFF', '#0A1F33', '#1E8E3E', '#F59E0B', '#DC2626', '#6366F1', '#8B5CF6'];
+      return top.map(([label, count], idx) => ({
+        label,
+        count,
+        pct: Math.round((count / sum) * 100),
+        color: palette[idx % palette.length],
+      }));
+    };
+
+    const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : 0);
+
+    return {
+      hasFocal,
+      totalDuels,
+      focalConcesionariasLabel: focalConcesionarias.size > 0 ? Array.from(focalConcesionarias).join(' / ') : 'Todas las Concesionarias',
+      origen: {
+        vsOtherPct: pct(vsOtherOrigenCount, totalDuels),
+        samePct: 100 - pct(vsOtherOrigenCount, totalDuels),
+        vsOtherCount: vsOtherOrigenCount,
+        slices: buildSlices(origenCounts),
+      },
+      carroceria: {
+        vsOtherPct: pct(vsOtherCarroceriaCount, totalDuels),
+        samePct: 100 - pct(vsOtherCarroceriaCount, totalDuels),
+        vsOtherCount: vsOtherCarroceriaCount,
+        slices: buildSlices(carroceriaCounts),
+      },
+      motor: {
+        vsOtherPct: pct(vsOtherMotorCount, totalDuels),
+        newEnergyPct: pct(vsNewEnergyCount, totalDuels),
+        vsOtherCount: vsOtherMotorCount,
+        slices: buildSlices(motorCounts),
+      },
+      concesionaria: {
+        vsOtherPct: pct(vsOtherDealerCount, totalDuels),
+        samePct: pct(sameDealerCount, totalDuels),
+        vsOtherCount: vsOtherDealerCount,
+        sameCount: sameDealerCount,
+        slices: buildSlices(dealerRivalCounts),
+      },
+    };
+  }, [filteredComparisons, filterCompBrand, filterCompModel, modelosList, marcasList, versionesList]);
+
+  // ==========================================
+  // SUBMÓDULO: TELEMETRÍA DE PREFERENCIAS (CON FILTROS POR MODELO, MOTOR, CARROCERÍA, ORIGEN)
+  // ==========================================
+  const preferenceStats = useMemo(() => {
+    const docsWithWeights = filteredComparisons.filter(c => {
+      if (!c.weights || typeof c.weights.motor !== 'number') return false;
+      const vehs: any[] = c.vehicles || [];
+
+      if (filterPrefCarroceria !== 'Todas') {
+        if (!vehs.some(v => v.carroceria === filterPrefCarroceria)) return false;
+      }
+      if (filterPrefCombustible !== 'Todos') {
+        if (filterPrefCombustible === 'NUEVAS_ENERGIAS') {
+          if (!vehs.some(v => v.isNewEnergy)) return false;
+        } else if (filterPrefCombustible === 'COMBUSTION') {
+          if (!vehs.some(v => !v.isNewEnergy)) return false;
+        } else {
+          if (!vehs.some(v => v.combustible === filterPrefCombustible)) return false;
+        }
+      }
+      if (filterPrefOrigen !== 'Todos') {
+        if (!vehs.some(v => v.origen === filterPrefOrigen)) return false;
+      }
+      return true;
+    });
+
+    const count = docsWithWeights.length;
+    if (count === 0) {
+      return {
+        hasData: false,
+        count: 0,
+        avgMotor: 0,
+        avgSeguridad: 0,
+        avgConfort: 0,
+        avgEconomia: 0,
+        topAttribute: 'Aún sin muestras suficientes',
+        ranked: [] as { id: string; name: string; avg: number; sharePct: number; icon: string; color: string }[],
+      };
+    }
+
+    const sumMotor = docsWithWeights.reduce((acc, c) => acc + (Number(c.weights.motor) || 0), 0);
+    const sumSeguridad = docsWithWeights.reduce((acc, c) => acc + (Number(c.weights.seguridad) || 0), 0);
+    const sumConfort = docsWithWeights.reduce((acc, c) => acc + (Number(c.weights.confort) || 0), 0);
+    const sumEconomia = docsWithWeights.reduce((acc, c) => acc + (Number(c.weights.economia) || 0), 0);
+
+    const avgMotor = Math.round(sumMotor / count);
+    const avgSeguridad = Math.round(sumSeguridad / count);
+    const avgConfort = Math.round(sumConfort / count);
+    const avgEconomia = Math.round(sumEconomia / count);
+    const totalAvgSum = avgMotor + avgSeguridad + avgConfort + avgEconomia || 1;
+
+    const ranked = [
+      { id: 'seguridad', name: 'Seguridad y ADAS', avg: avgSeguridad, sharePct: Math.round((avgSeguridad / totalAvgSum) * 100), icon: '🛡️', color: '#1E8E3E' },
+      { id: 'economia', name: 'Economía y Eficiencia', avg: avgEconomia, sharePct: Math.round((avgEconomia / totalAvgSum) * 100), icon: '💰', color: '#00BFFF' },
+      { id: 'confort', name: 'Tecnología y Confort', avg: avgConfort, sharePct: Math.round((avgConfort / totalAvgSum) * 100), icon: '📱', color: '#0A1F33' },
+      { id: 'motor', name: 'Motor y Potencia', avg: avgMotor, sharePct: Math.round((avgMotor / totalAvgSum) * 100), icon: '⚡', color: '#dc2743' },
+    ].sort((a, b) => b.avg - a.avg);
+
+    return {
+      hasData: true,
+      count,
+      avgMotor,
+      avgSeguridad,
+      avgConfort,
+      avgEconomia,
+      topAttribute: `${ranked[0].icon} ${ranked[0].name} (${ranked[0].avg}% prioridad)`,
+      ranked,
+    };
+  }, [filteredComparisons, filterPrefCarroceria, filterPrefCombustible, filterPrefOrigen]);
 
   const BarChart = ({ data, total }: { data: [string, number][], total: number }) => (
     <div className="flex flex-col gap-3">
@@ -568,6 +1195,110 @@ export default function AdminDashboardPage() {
       })}
     </div>
   );
+
+  // Componente Gráfico Circular (Donut SVG) para Analítica Global Competitiva
+  const DonutChartCard = ({
+    title,
+    subtitle,
+    centerValue,
+    centerLabel,
+    badgeText,
+    slices,
+  }: {
+    title: string;
+    subtitle: string;
+    centerValue: string;
+    centerLabel: string;
+    badgeText: string;
+    slices: { label: string; count: number; pct: number; color: string }[];
+  }) => {
+    const radius = 44;
+    const circumference = 2 * Math.PI * radius;
+    const totalCount = slices.reduce((acc, s) => acc + s.count, 0);
+    let accumulatedFraction = 0;
+
+    return (
+      <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between h-full">
+        <div>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <h4 className="text-[11px] font-black text-[#0A1F33] uppercase tracking-wider leading-tight">
+              {title}
+            </h4>
+            <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest shrink-0">
+              {badgeText}
+            </span>
+          </div>
+          <p className="text-[9px] text-[#3A3A3C] mb-3 leading-snug">{subtitle}</p>
+        </div>
+
+        {slices.length === 0 || totalCount === 0 ? (
+          <div className="py-10 text-center text-[10px] text-[#C0C0C0] font-bold uppercase tracking-widest">
+            Sin muestras en este filtro
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row xl:flex-col 2xl:flex-row items-center gap-4 my-auto">
+            {/* SVG Donut */}
+            <div className="relative w-32 h-32 shrink-0 flex items-center justify-center">
+              <svg className="w-32 h-32 -rotate-90" viewBox="0 0 112 112">
+                <circle
+                  cx="56"
+                  cy="56"
+                  r={radius}
+                  fill="transparent"
+                  stroke="#F1F5F9"
+                  strokeWidth="14"
+                />
+                {slices.map((slice, i) => {
+                  const fraction = totalCount > 0 ? slice.count / totalCount : 0;
+                  const strokeDasharray = `${fraction * circumference} ${circumference}`;
+                  const strokeDashoffset = -accumulatedFraction * circumference;
+                  accumulatedFraction += fraction;
+                  return (
+                    <circle
+                      key={i}
+                      cx="56"
+                      cy="56"
+                      r={radius}
+                      fill="transparent"
+                      stroke={slice.color}
+                      strokeWidth="14"
+                      strokeDasharray={strokeDasharray}
+                      strokeDashoffset={strokeDashoffset}
+                    />
+                  );
+                })}
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
+                <span className="text-lg font-black text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  {centerValue}
+                </span>
+                <span className="text-[7px] font-bold text-[#3A3A3C] uppercase tracking-wider mt-0.5 leading-tight">
+                  {centerLabel}
+                </span>
+              </div>
+            </div>
+
+            {/* Leyenda detallada */}
+            <div className="w-full flex-1 flex flex-col gap-1.5 min-w-0">
+              {slices.map((s, idx) => (
+                <div key={idx} className="flex items-center justify-between gap-2 text-[9px] border-b border-[#F1F5F9] pb-1 last:border-none">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2.5 h-2.5 shrink-0" style={{ backgroundColor: s.color }} />
+                    <span className="font-bold text-[#0A1F33] uppercase truncate" title={s.label}>
+                      {s.label}
+                    </span>
+                  </div>
+                  <span className="font-black text-[#3A3A3C] shrink-0">
+                    {s.pct}% <span className="font-normal text-[#C0C0C0]">({s.count})</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const handleUpdateLeadStatus = async (id: string, newStatus: string) => {
     try {
@@ -865,14 +1596,139 @@ export default function AdminDashboardPage() {
   };
 
   const handleCreateAd = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!adForm.sponsor || !adForm.headline || !adForm.img || !adForm.startDate || !adForm.endDate) return; setLoading(true);
+    e.preventDefault();
+    if (!adForm.sponsor.trim() || !adForm.startDate || !adForm.endDate) {
+      setFeedback({ type: 'error', message: 'Completá Anunciante, Fecha de Inicio y Fecha de Fin de la campaña.' });
+      return;
+    }
+
+    const isComparador = adForm.location === 'comparador';
+    const isCatalogoFiltros = adForm.location === 'catalogo_filtros';
+
+    if (isComparador) {
+      if (!adForm.modelId) {
+        setFeedback({ type: 'error', message: 'Para el espacio Comparador, debés elegir un modelo del listado.' });
+        return;
+      }
+    } else {
+      if (!adForm.img.trim()) {
+        setFeedback({ type: 'error', message: 'Subí una imagen 1200x400 o ingresá un enlace de imagen para el banner.' });
+        return;
+      }
+      if (!adForm.link.trim()) {
+        setFeedback({ type: 'error', message: 'Ingresá un enlace web para redireccionar el banner.' });
+        return;
+      }
+      if (isCatalogoFiltros && adForm.targetCategory === 'Todas' && adForm.targetCombustible === 'Todas') {
+        setFeedback({ type: 'error', message: 'Para Catálogo Filtros, elegí al menos un filtro de Carrocería y/o de Movilidad.' });
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
-      const newId = `ad_${generarId()}`;
-      await setDoc(doc(db, 'campaigns', newId), { ...adForm, isActive: false, createdAt: serverTimestamp() });
+      let finalHeadline = adForm.headline.trim();
+      let finalImg = adForm.img.trim();
+      let finalLink = isComparador ? '' : adForm.link.trim();
+      let finalModelId = isComparador ? adForm.modelId : '';
+      let finalTargetCategory = isCatalogoFiltros ? adForm.targetCategory : 'Todas';
+      let finalTargetCombustible = isCatalogoFiltros ? adForm.targetCombustible : 'Todas';
+      let modelName = '';
+      let brandName = '';
+
+      if (isComparador && finalModelId) {
+        const selectedModel = modelosList.find(m => m.id === finalModelId);
+        if (selectedModel) {
+          const brand = marcasList.find(b => b.id === selectedModel.brandId);
+          brandName = brand?.name || '';
+          modelName = selectedModel.name || '';
+          finalHeadline = `Opción Patrocinada: ${brandName} ${modelName}`.trim();
+          finalImg = selectedModel.imgUrl || '';
+        }
+      } else if (!finalHeadline) {
+        finalHeadline = adForm.sponsor.trim();
+      }
+
+      const targetId = adForm.id || `ad_${generarId()}`;
+      const isExisting = !!adForm.id;
+      const existingAd = isExisting ? campaignsList.find(c => c.id === adForm.id) : null;
+
+      await setDoc(doc(db, 'campaigns', targetId), { 
+        ...adForm, 
+        id: targetId,
+        sponsor: adForm.sponsor.trim(),
+        headline: finalHeadline,
+        img: finalImg,
+        link: finalLink,
+        modelId: finalModelId,
+        targetCategory: finalTargetCategory,
+        targetCombustible: finalTargetCombustible,
+        modelName,
+        brandName,
+        isActive: existingAd ? (existingAd.isActive ?? true) : true,
+        updatedAt: serverTimestamp(),
+        createdAt: existingAd?.createdAt || serverTimestamp() 
+      }, { merge: true });
+
       invalidateCatalogCache('campaigns');
-      setFeedback({ type: 'success', message: 'Anuncio inyectado en la bóveda publicitaria.' });
-      setAdForm({ sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', location: 'ambos', targetCategory: 'Todas', startDate: '', endDate: '', ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF' }); fetchAllData();
-    } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
+      setFeedback({ type: 'success', message: isExisting ? 'Pauta publicitaria actualizada con éxito.' : 'Pauta inyectada en la bóveda publicitaria.' });
+      setAdForm({ 
+        id: '',
+        sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', 
+        location: adForm.location, targetCategory: 'Todas', targetCombustible: 'Todas', modelId: '', startDate: '', endDate: '', 
+        ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF' 
+      });
+      setAdModelFilterConcesionaria('Todas');
+      setAdModelFilterMarca('Todas');
+      fetchAllData();
+    } catch (err: any) { 
+      setFeedback({ type: 'error', message: err.message }); 
+    } finally { 
+      setLoading(false); 
+    }
+  };
+
+  const handleEditAd = (camp: any) => {
+    // Inferir ubicación exacta si viene de un registro anterior
+    let loc = camp.location || 'home';
+    if (loc === 'catalogo' && ((camp.targetCategory && camp.targetCategory !== 'Todas') || (camp.targetCombustible && camp.targetCombustible !== 'Todas'))) {
+      loc = 'catalogo_filtros';
+    } else if (camp.modelId && (loc === 'ambos' || loc === 'comparador')) {
+      loc = 'comparador';
+    }
+    setAdForm({
+      id: camp.id || '',
+      sponsor: camp.sponsor || '',
+      headline: camp.headline || '',
+      highlight: camp.highlight || '',
+      price: camp.price || '',
+      link: camp.link || '',
+      img: camp.img || '',
+      location: loc,
+      targetCategory: camp.targetCategory || 'Todas',
+      targetCombustible: camp.targetCombustible || 'Todas',
+      modelId: camp.modelId || '',
+      startDate: camp.startDate || '',
+      endDate: camp.endDate || '',
+      ctaEnabled: camp.ctaEnabled || false,
+      ctaText: camp.ctaText || '',
+      ctaUrl: camp.ctaUrl || '',
+      ctaColor: camp.ctaColor || '#00BFFF'
+    });
+    setAdModelFilterConcesionaria('Todas');
+    setAdModelFilterMarca('Todas');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleResetAdForm = () => {
+    setAdForm({
+      id: '',
+      sponsor: '', headline: '', highlight: '', price: '', link: '', img: '',
+      location: 'home', targetCategory: 'Todas', targetCombustible: 'Todas', modelId: '', startDate: '', endDate: '',
+      ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF'
+    });
+    setAdModelFilterConcesionaria('Todas');
+    setAdModelFilterMarca('Todas');
   };
 
   const handleToggleAd = async (id: string, currentStatus: boolean) => {
@@ -1451,157 +2307,533 @@ export default function AdminDashboardPage() {
           )}
 
           {activeTab === 'analitica' && (
-            <div className="flex flex-col gap-6 h-full">
-              {/* FILTROS POR MARCA, MODELO Y FECHA */}
-              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-wrap gap-4 items-end shrink-0 shadow-none">
-                <div className="flex-1 min-w-[150px]">
-                  <label htmlFor="filterCompBrand" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
-                    Marca
-                  </label>
-                  <select 
-                    id="filterCompBrand" 
-                    className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-medium" 
-                    value={filterCompBrand} 
-                    onChange={e => { 
-                      setFilterCompBrand(e.target.value); 
-                      setFilterCompModel('Todos'); 
-                    }}
-                  >
-                    <option value="Todas">Todas las Marcas</option>
-                    {[...marcasList].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex-1 min-w-[150px]">
-                  <label htmlFor="filterCompModel" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
-                    Modelo
-                  </label>
-                  <select 
-                    id="filterCompModel" 
-                    className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-medium" 
-                    value={filterCompModel} 
-                    onChange={e => setFilterCompModel(e.target.value)}
-                  >
-                    <option value="Todos">Todos los Modelos</option>
-                    {[...compModelosParaSelect].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex-1 min-w-[130px]">
-                  <label htmlFor="filterCompDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
-                    Desde
-                  </label>
-                  <input 
-                    id="filterCompDateFrom" 
-                    type="date" 
-                    className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33]" 
-                    value={filterCompDateFrom} 
-                    onChange={e => setFilterCompDateFrom(e.target.value)} 
-                  />
-                </div>
-
-                <div className="flex-1 min-w-[130px]">
-                  <label htmlFor="filterCompDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
-                    Hasta
-                  </label>
-                  <input 
-                    id="filterCompDateTo" 
-                    type="date" 
-                    className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33]" 
-                    value={filterCompDateTo} 
-                    onChange={e => setFilterCompDateTo(e.target.value)} 
-                  />
-                </div>
-
-                {isCompFiltered && (
-                  <div>
-                    <button 
-                      onClick={() => { 
-                        setFilterCompBrand('Todas'); 
-                        setFilterCompModel('Todos'); 
-                        setFilterCompDateFrom(''); 
-                        setFilterCompDateTo(''); 
-                      }} 
-                      className="border border-[#D93025] text-[#D93025] px-4 py-2 text-[10px] font-bold uppercase hover:bg-[#D93025] hover:text-white transition-colors"
-                      title="Restablecer filtros para ver el 100% de datos"
-                    >
-                      ✕ Limpiar Filtros
-                    </button>
+            <div className="flex flex-col gap-6 pb-8">
+              {/* 1. BARRA PRINCIPAL DE FILTROS (MARCA, MODELO, RANGO DE FECHA + SEGMENTACIÓN GLOBAL) */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col gap-4 shrink-0 shadow-none">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#C0C0C0]/50 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-[#00BFFF] inline-block" />
+                    <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-widest">
+                      Filtros de Inteligencia Competitiva & Comparaciones
+                    </span>
                   </div>
-                )}
+                  {(isCompFiltered || filterPrefCarroceria !== 'Todas' || filterPrefCombustible !== 'Todos' || filterPrefOrigen !== 'Todos') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterCompBrand('Todas');
+                        setFilterCompModel('Todos');
+                        setFilterCompCarroceria('Todas');
+                        setFilterCompCombustible('Todos');
+                        setFilterCompOrigen('Todos');
+                        setFilterCompDateFrom('');
+                        setFilterCompDateTo('');
+                        setFilterPrefCarroceria('Todas');
+                        setFilterPrefCombustible('Todos');
+                        setFilterPrefOrigen('Todos');
+                      }}
+                      className="border border-[#D93025] text-[#D93025] px-3 py-1 text-[9px] font-bold uppercase hover:bg-[#D93025] hover:text-white transition-colors"
+                    >
+                      ✕ Restablecer Todos los Filtros
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 items-end">
+                  <div>
+                    <label htmlFor="filterCompBrand" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Marca
+                    </label>
+                    <select
+                      id="filterCompBrand"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-semibold"
+                      value={filterCompBrand}
+                      onChange={e => {
+                        setFilterCompBrand(e.target.value);
+                        setFilterCompModel('Todos');
+                      }}
+                    >
+                      <option value="Todas">Todas las Marcas</option>
+                      {[...marcasList].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterCompModel" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Modelo
+                    </label>
+                    <select
+                      id="filterCompModel"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-semibold"
+                      value={filterCompModel}
+                      onChange={e => setFilterCompModel(e.target.value)}
+                    >
+                      <option value="Todos">Todos los Modelos</option>
+                      {[...compModelosParaSelect].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterCompCarroceria" className="text-[9px] font-bold text-[#00BFFF] uppercase block mb-1">
+                      Tipo de Carrocería
+                    </label>
+                    <select
+                      id="filterCompCarroceria"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-medium"
+                      value={filterCompCarroceria}
+                      onChange={e => setFilterCompCarroceria(e.target.value)}
+                    >
+                      <option value="Todas">Todas las Carrocerías</option>
+                      {categoriasUnicas.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterCompCombustible" className="text-[9px] font-bold text-[#00BFFF] uppercase block mb-1">
+                      Motor / Energía
+                    </label>
+                    <select
+                      id="filterCompCombustible"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-medium"
+                      value={filterCompCombustible}
+                      onChange={e => setFilterCompCombustible(e.target.value)}
+                    >
+                      <option value="Todos">Todos los Motores</option>
+                      <option value="NUEVAS_ENERGIAS">⚡ Nuevas Energías (EV / PHEV / HEV / MHEV)</option>
+                      <option value="COMBUSTION">⛽ Combustión (Nafta / Diésel / Flex)</option>
+                      {combustiblesUnicos.map(comb => (
+                        <option key={comb} value={comb}>{comb} — {combustibleLabel(comb)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterCompOrigen" className="text-[9px] font-bold text-[#00BFFF] uppercase block mb-1">
+                      Origen
+                    </label>
+                    <select
+                      id="filterCompOrigen"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-medium"
+                      value={filterCompOrigen}
+                      onChange={e => setFilterCompOrigen(e.target.value)}
+                    >
+                      <option value="Todos">Todos los Orígenes</option>
+                      {origenesAutosUnicos.map(orig => (
+                        <option key={orig} value={orig}>{orig}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterCompDateFrom" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Desde
+                    </label>
+                    <input
+                      id="filterCompDateFrom"
+                      type="date"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33]"
+                      value={filterCompDateFrom}
+                      onChange={e => setFilterCompDateFrom(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterCompDateTo" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Hasta
+                    </label>
+                    <input
+                      id="filterCompDateTo"
+                      type="date"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33]"
+                      value={filterCompDateTo}
+                      onChange={e => setFilterCompDateTo(e.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* ENCABEZADO Y RESUMEN DE TELEMETRÍA */}
+              {/* 2. ENCABEZADO Y RESUMEN DE MUESTRA */}
               <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-wrap justify-between items-center gap-4 shrink-0">
                 <div>
                   <h2 className="text-xs font-bold uppercase tracking-widest text-[#0A1F33] block">
-                    Telemetría y Analítica de Comparaciones DATACAR
+                    Inteligencia Competitiva y Analítica de Comparaciones DATACAR
                   </h2>
                   <p className="text-[10px] text-[#3A3A3C] mt-0.5">
-                    {isCompFiltered 
-                      ? `Filtro aplicado: mostrando ${filteredComparisons.length} de ${comparisonStatsList.length} comparaciones registradas.`
-                      : `Mostrando el 100% del historial de comparativas en tiempo real (${comparisonStatsList.length} registros).`
+                    {isCompFiltered
+                      ? `Segmento activo (${considerationStats.focalLabel}): analizando ${filteredComparisons.length} de ${comparisonStatsList.length} comparaciones registradas.`
+                      : `Vista global: analizando el 100% del historial de comparativas (${comparisonStatsList.length} registros).`
                     }
                   </p>
                 </div>
-                <div className="bg-[#0A1F33] text-[#00BFFF] px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-[#00BFFF]/30">
-                  Registros: {filteredComparisons.length} {isCompFiltered && `/ ${comparisonStatsList.length}`}
+                <div className="flex items-center gap-2">
+                  {globalCircularAnalytics.hasFocal && (
+                    <span className="bg-[#F5FBFF] text-[#0A1F33] border border-[#00BFFF] px-3 py-2 text-[9px] font-bold uppercase tracking-wider">
+                      Concesionaria Base: {globalCircularAnalytics.focalConcesionariasLabel}
+                    </span>
+                  )}
+                  <div className="bg-[#0A1F33] text-[#00BFFF] px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-[#00BFFF]/30">
+                    Comparativas: {filteredComparisons.length} {isCompFiltered && `/ ${comparisonStatsList.length}`}
+                  </div>
                 </div>
               </div>
 
-              {/* GRÁFICOS Y MÉTRICAS */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0">
-                <div className="lg:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col justify-center items-center h-48">
-                  <span className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest text-center mb-2">Total de Comparaciones</span>
-                  <span className="text-5xl font-black text-[#00BFFF]">{filteredComparisons.length}</span>
-                  <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-wider mt-2">
-                    {isCompFiltered ? `de ${comparisonStatsList.length} en la base de datos` : '100% de la base de datos'}
-                  </span>
+              {/* 3. BLOQUE SUPERIOR: TOTAL + MEDICIÓN DE "CONSIDERACIÓN" (SLOT #1) + TOP 10 DE COMPARATIVAS */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 shrink-0">
+                {/* Tarjeta A: Total de Comparaciones & Índice de Primera Elección (Slot #1) */}
+                <div className="lg:col-span-5 bg-[#FFFFFF] border border-[#C0C0C0] p-5 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-[#C0C0C0]/60 pb-2.5 mb-4">
+                      <div>
+                        <span className="bg-[#00BFFF] text-[#0A1F33] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                          Slot #1 del Comparador
+                        </span>
+                        <h3 className="text-xs font-black text-[#0A1F33] uppercase tracking-wider mt-1">
+                          Medición de Consideración (1ra Elección)
+                        </h3>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[8px] font-bold text-[#C0C0C0] uppercase block">Total Muestra</span>
+                        <span className="text-2xl font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                          {filteredComparisons.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Destaque de Q de veces elegido primero cuando hay Modelo o Marca seleccionada */}
+                    {(considerationStats.hasFocalModel || considerationStats.hasFocalBrand) ? (
+                      <div className="bg-[#F5FBFF] border border-[#00BFFF] p-3.5 mb-4">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="text-[10px] font-black text-[#0A1F33] uppercase truncate">
+                            🎯 {considerationStats.focalLabel}
+                          </span>
+                          <span className="bg-[#0A1F33] text-[#00BFFF] text-[9px] font-black px-2 py-0.5 uppercase shrink-0">
+                            {considerationStats.focalPct}% Consideración 1ra Opción
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 my-2.5 text-center">
+                          <div className="bg-white border border-[#C0C0C0]/60 p-2">
+                            <span className="text-lg font-black text-[#00BFFF] block leading-none">
+                              {considerationStats.focalFirstSlotCount}
+                            </span>
+                            <span className="text-[8px] font-bold text-[#0A1F33] uppercase block mt-1">
+                              Q Elegido 1º (Slot 1)
+                            </span>
+                          </div>
+                          <div className="bg-white border border-[#C0C0C0]/60 p-2">
+                            <span className="text-lg font-black text-[#3A3A3C] block leading-none">
+                              {considerationStats.focalChallengerCount}
+                            </span>
+                            <span className="text-[8px] font-bold text-[#3A3A3C] uppercase block mt-1">
+                              Q en Slot 2º / 3º
+                            </span>
+                          </div>
+                          <div className="bg-white border border-[#C0C0C0]/60 p-2">
+                            <span className="text-lg font-black text-[#0A1F33] block leading-none">
+                              {considerationStats.focalTotalCount}
+                            </span>
+                            <span className="text-[8px] font-bold text-[#0A1F33] uppercase block mt-1">
+                              Total Apariciones
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="w-full bg-[#E2E8F0] h-2 overflow-hidden">
+                          <div
+                            className="bg-[#00BFFF] h-full transition-all duration-500"
+                            style={{ width: `${considerationStats.focalPct}%` }}
+                          />
+                        </div>
+                        <p className="text-[9px] text-[#3A3A3C] mt-1.5 leading-snug">
+                          Fue elegido como <strong>primera opción (Slot #1)</strong> en <strong>{considerationStats.focalFirstSlotCount}</strong> de las <strong>{considerationStats.focalTotalCount}</strong> comparativas donde participó ({considerationStats.focalPct}%).
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-[#3A3A3C] mb-3 leading-snug bg-[#F8F9FA] border border-[#C0C0C0]/60 p-2.5">
+                        El <strong>Slot #1</strong> representa el primer vehículo que el usuario elige como referencia principal. Seleccioná una <strong>Marca</strong> o <strong>Modelo</strong> arriba para auditar su índice exacto, o revisá el ranking general abajo:
+                      </p>
+                    )}
+
+                    {/* Tabla compacta de Ranking de Consideración (Q de veces en Slot #1) */}
+                    <div>
+                      <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-widest block mb-2">
+                        {considerationStats.hasFocalBrand && !considerationStats.hasFocalModel
+                          ? 'Modelos de la Marca por Q de 1ra Elección (Slot #1)'
+                          : 'Top Modelos Elegidos en 1er Lugar (Slot #1)'}
+                      </span>
+                      <div className="max-h-44 overflow-y-auto custom-scrollbar border border-[#C0C0C0]/50">
+                        {considerationStats.ranking.length === 0 ? (
+                          <p className="p-4 text-[10px] text-[#C0C0C0] uppercase text-center">Sin datos para este filtro</p>
+                        ) : (
+                          <table className="w-full text-left border-collapse text-[10px]">
+                            <thead className="bg-[#F8F9FA] sticky top-0 border-b border-[#C0C0C0]/50 text-[8px] font-bold uppercase text-[#3A3A3C]">
+                              <tr>
+                                <th className="p-2">Modelo</th>
+                                <th className="p-2 text-center">Q 1º (Slot 1)</th>
+                                <th className="p-2 text-center">Total Comp.</th>
+                                <th className="p-2 text-right">% Consid.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {considerationStats.ranking.map((r, i) => (
+                                <tr key={i} className="border-b border-[#F1F5F9] hover:bg-[#F5FBFF]">
+                                  <td className="p-2 font-bold text-[#0A1F33] uppercase truncate max-w-[160px]" title={r.fullName}>
+                                    {r.fullName}
+                                  </td>
+                                  <td className="p-2 text-center font-black text-[#00BFFF]">
+                                    {r.firstSlot}
+                                  </td>
+                                  <td className="p-2 text-center text-[#3A3A3C] font-semibold">
+                                    {r.total}
+                                  </td>
+                                  <td className="p-2 text-right font-black text-[#0A1F33]">
+                                    {r.pct}%
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="lg:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-48 overflow-y-auto custom-scrollbar">
-                  <h3 className="text-xs font-bold text-[#0A1F33] uppercase tracking-widest mb-4">
-                    Top 10 Combos Más Comparados {isCompFiltered ? '(Segmento Filtrado)' : '(100% de la Muestra)'}
-                  </h3>
-                  <BarChart data={topComparisons} total={filteredComparisons.length} />
+
+                {/* Tarjeta B: Top 10 Combos Más Comparados */}
+                <div className="lg:col-span-7 bg-[#FFFFFF] border border-[#C0C0C0] p-5 flex flex-col h-full">
+                  <div className="flex items-center justify-between border-b border-[#C0C0C0]/60 pb-2.5 mb-4">
+                    <div>
+                      <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                        Ranking de Enfrentamientos
+                      </span>
+                      <h3 className="text-xs font-black text-[#0A1F33] uppercase tracking-wider mt-1">
+                        Top 10 de Comparativas {isCompFiltered ? '(Segmento Filtrado)' : '(100% de la Muestra)'}
+                      </h3>
+                    </div>
+                    <span className="text-[9px] font-bold text-[#3A3A3C] uppercase">
+                      Top {topComparisons.length} combos
+                    </span>
+                  </div>
+                  <div className="overflow-y-auto custom-scrollbar flex-grow pr-1 max-h-[310px]">
+                    <BarChart data={topComparisons} total={filteredComparisons.length} />
+                  </div>
                 </div>
               </div>
 
-              {/* TABLA DE DETALLE */}
-              <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex-grow overflow-auto custom-scrollbar">
-                <table className="w-full text-left border-collapse whitespace-nowrap min-w-[700px]">
-                  <thead className="bg-[#F8F9FA] sticky top-0 z-10 border-b border-[#C0C0C0]">
-                    <tr className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-widest">
-                      <th className="p-4 border-r border-[#C0C0C0]/50">Vehículos Comparados (Combo)</th>
-                      <th className="p-4 border-r border-[#C0C0C0]/50 text-center">ID Vehículos</th>
-                      <th className="p-4 text-center">Fecha y Hora</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-[11px] text-[#3A3A3C]">
-                    {sortedComparisons.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">
-                          {isCompFiltered 
-                            ? 'No se encontraron comparaciones para los filtros seleccionados.' 
-                            : 'No hay registros de comparaciones en la base de datos.'
-                          }
-                        </td>
-                      </tr>
-                    ) : sortedComparisons.map((comp) => {
-                      const compDate = comp.timestamp ? (comp.timestamp.toDate ? comp.timestamp.toDate() : new Date(comp.timestamp)) : null;
-                      return (
-                        <tr key={comp.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors">
-                          <td className="p-4 border-r border-[#C0C0C0]/50 font-bold text-[#0A1F33] uppercase">{comp.combo}</td>
-                          <td className="p-4 border-r border-[#C0C0C0]/50 text-center text-[9px] text-[#C0C0C0] whitespace-normal max-w-xs">{(comp.ids || comp.vehicles)?.join(' vs ') || '-'}</td>
-                          <td className="p-4 text-center font-mono text-[10px]">{compDate ? `${compDate.toLocaleDateString()} ${compDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}` : '-'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              {/* 4. ANALÍTICA GLOBAL Y COMPETITIVA: 4 GRÁFICOS CIRCULARES */}
+              <div className="flex flex-col gap-3 shrink-0">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-black text-[#0A1F33] uppercase tracking-widest">
+                      Analítica Competitiva Global (Cruces por Origen, Carrocería, Motorización y Concesionaria)
+                    </h3>
+                    <p className="text-[10px] text-[#3A3A3C]">
+                      {globalCircularAnalytics.hasFocal
+                        ? `Mostrando contra qué orígenes, carrocerías, motorizaciones y concesionarias compite ${considerationStats.focalLabel}.`
+                        : 'Distribución global de cruces competitivos en el comparador. Filtrá por Marca o Modelo arriba para ver sus enfrentamientos directos.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {/* Gráfico Circular 1: Vs Otros Orígenes */}
+                  <DonutChartCard
+                    title="1. Vs. Otros Orígenes"
+                    subtitle={
+                      globalCircularAnalytics.hasFocal
+                        ? `% de duelos contra vehículos de otro origen vs. mismo origen.`
+                        : `% de comparativas que enfrentan vehículos de distinto país de origen.`
+                    }
+                    centerValue={`${globalCircularAnalytics.origen.vsOtherPct}%`}
+                    centerLabel="Vs. Otro Origen"
+                    badgeText={`${globalCircularAnalytics.origen.vsOtherPct}% Otro Origen`}
+                    slices={globalCircularAnalytics.origen.slices}
+                  />
+
+                  {/* Gráfico Circular 2: Vs Otras Carrocerías */}
+                  <DonutChartCard
+                    title="2. Vs. Otras Carrocerías"
+                    subtitle={
+                      globalCircularAnalytics.hasFocal
+                        ? `% de comparaciones frente a otras siluetas/carrocerías.`
+                        : `% de comparativas cruzadas entre distintos tipos de carrocería.`
+                    }
+                    centerValue={`${globalCircularAnalytics.carroceria.vsOtherPct}%`}
+                    centerLabel="Vs. Otra Carrocería"
+                    badgeText={`${globalCircularAnalytics.carroceria.vsOtherPct}% Otra Silueta`}
+                    slices={globalCircularAnalytics.carroceria.slices}
+                  />
+
+                  {/* Gráfico Circular 3: Vs Otros Tipos de Motor y/o Nuevas Energías */}
+                  <DonutChartCard
+                    title="3. Vs. Motores / Nuevas Energías"
+                    subtitle={
+                      globalCircularAnalytics.hasFocal
+                        ? `Cruce contra otros motores • Presencia Nuevas Energías: ${globalCircularAnalytics.motor.newEnergyPct}%.`
+                        : `Distribución de motorizaciones • Cruce con Nuevas Energías: ${globalCircularAnalytics.motor.newEnergyPct}%.`
+                    }
+                    centerValue={`${globalCircularAnalytics.motor.vsOtherPct}%`}
+                    centerLabel="Vs. Otro Motor"
+                    badgeText={`${globalCircularAnalytics.motor.newEnergyPct}% Nuevas Energías`}
+                    slices={globalCircularAnalytics.motor.slices}
+                  />
+
+                  {/* Gráfico Circular 4: Vs Marcas de Otra Concesionaria */}
+                  <DonutChartCard
+                    title="4. Vs. Otra Concesionaria"
+                    subtitle={
+                      globalCircularAnalytics.hasFocal
+                        ? `Comparaciones contra marcas fuera de ${globalCircularAnalytics.focalConcesionariasLabel}.`
+                        : `% de comparativas entre marcas de distintas concesionarias.`
+                    }
+                    centerValue={`${globalCircularAnalytics.concesionaria.vsOtherPct}%`}
+                    centerLabel="Otra Concesionaria"
+                    badgeText={`${globalCircularAnalytics.concesionaria.vsOtherPct}% Externa`}
+                    slices={globalCircularAnalytics.concesionaria.slices}
+                  />
+                </div>
+              </div>
+
+              {/* 5. SUBMÓDULO: TELEMETRÍA DE PREFERENCIAS (CON FILTROS POR MODELO, MOTOR, CARROCERÍA, ORIGEN) */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 sm:p-5 shrink-0 shadow-none">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4 pb-3 border-b border-[#C0C0C0]/60">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase px-2 py-0.5 tracking-wider">
+                        Telemetría de Preferencias
+                      </span>
+                      <span className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest">
+                        ¿Qué valora el público comprador?
+                      </span>
+                    </div>
+                    <h3
+                      className="text-sm font-black text-[#0A1F33] uppercase tracking-wider"
+                      style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}
+                    >
+                      Distribución de Intereses de los Usuarios (Motor, Seguridad, Confort y Economía)
+                    </h3>
+                    <p className="text-[10px] text-[#3A3A3C] mt-0.5">
+                      Combiná los filtros de abajo (o los de Marca y Modelo arriba) para descubrir qué atributo prioriza cada perfil de comprador.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-right self-start lg:self-center">
+                    <div>
+                      <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest block">
+                        Prioridad #1 del Segmento
+                      </span>
+                      <span className="text-xs font-black text-[#0A1F33] uppercase">
+                        {preferenceStats.topAttribute}
+                      </span>
+                    </div>
+                    <div className="bg-[#0A1F33] text-[#00BFFF] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[#00BFFF]/30 shrink-0">
+                      Muestras: {preferenceStats.count}
+                    </div>
+                  </div>
+                </div>
+
+                {/* FILTROS ESPECÍFICOS DE TELEMETRÍA DE PREFERENCIAS (MOTOR, CARROCERÍA, ORIGEN) */}
+                <div className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-3 mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                  <div>
+                    <label htmlFor="filterPrefCombustible" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Filtrar Preferencias por Tipo de Motor / Energía
+                    </label>
+                    <select
+                      id="filterPrefCombustible"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-semibold"
+                      value={filterPrefCombustible}
+                      onChange={e => setFilterPrefCombustible(e.target.value)}
+                    >
+                      <option value="Todos">Todos los Tipos de Motor</option>
+                      <option value="NUEVAS_ENERGIAS">⚡ Solo Nuevas Energías (EV / PHEV / HEV / MHEV)</option>
+                      <option value="COMBUSTION">⛽ Solo Combustión (Nafta / Diésel / Flex)</option>
+                      {combustiblesUnicos.map(comb => (
+                        <option key={comb} value={comb}>{comb} — {combustibleLabel(comb)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterPrefCarroceria" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Filtrar Preferencias por Tipo de Carrocería
+                    </label>
+                    <select
+                      id="filterPrefCarroceria"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-semibold"
+                      value={filterPrefCarroceria}
+                      onChange={e => setFilterPrefCarroceria(e.target.value)}
+                    >
+                      <option value="Todas">Todas las Carrocerías</option>
+                      {categoriasUnicas.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filterPrefOrigen" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Filtrar Preferencias por Origen
+                    </label>
+                    <select
+                      id="filterPrefOrigen"
+                      className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-semibold"
+                      value={filterPrefOrigen}
+                      onChange={e => setFilterPrefOrigen(e.target.value)}
+                    >
+                      <option value="Todos">Todos los Orígenes</option>
+                      {origenesAutosUnicos.map(orig => (
+                        <option key={orig} value={orig}>{orig}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {preferenceStats.hasData ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {preferenceStats.ranked.map(item => (
+                      <div
+                        key={item.id}
+                        className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-4 flex flex-col justify-between"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold uppercase text-[#0A1F33] flex items-center gap-1.5">
+                            <span>{item.icon}</span> <span>{item.name}</span>
+                          </span>
+                          <span className="text-base font-black text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                            {item.avg}%
+                          </span>
+                        </div>
+
+                        <div className="w-full bg-[#E0E0E0] h-2 mb-2 overflow-hidden">
+                          <div
+                            className="h-full transition-all duration-500 bg-[#00BFFF]"
+                            style={{ width: `${item.avg}%` }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-[9px] text-[#3A3A3C] font-semibold uppercase tracking-wider">
+                          <span>Intensidad de slider</span>
+                          <span className="text-[#0A1F33] font-bold">Peso relativo: {item.sharePct}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-[#F8F9FA] border border-dashed border-[#C0C0C0] p-6 text-center">
+                    <p className="text-xs font-bold text-[#0A1F33] uppercase tracking-wider mb-1">
+                      Aún no hay muestras de ponderación para esta combinación de filtros
+                    </p>
+                    <p className="text-[10px] text-[#3A3A3C] max-w-md mx-auto">
+                      A medida que los compradores interactúen con los sliders del comparador dinámico, este módulo promediará qué valora el público según modelo, motorización, carrocería y origen.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1888,109 +3120,537 @@ export default function AdminDashboardPage() {
 
           {activeTab === 'ads' && (
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 h-full">
+              {/* COLUMNA IZQUIERDA: INYECTOR DE ADS POR ESPACIO PUBLICITARIO */}
               <div className="xl:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-fit overflow-y-auto custom-scrollbar">
-                <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-6 border-b border-[#C0C0C0] pb-2">Crear Anuncio B2B</h2>
+                <div className="flex items-center justify-between mb-4 border-b border-[#C0C0C0] pb-3">
+                  <div>
+                    <h2 className="font-bold text-[#0A1F33] text-sm uppercase">
+                      {adForm.id ? 'Editar Pauta Publicitaria' : 'Inyector de Pautas Publicitarias'}
+                    </h2>
+                    <p className="text-[10px] text-[#3A3A3C] mt-0.5">
+                      Seleccioná uno de los 5 espacios publicitarios para configurar la campaña.
+                    </p>
+                  </div>
+                  {adForm.id && (
+                    <button
+                      type="button"
+                      onClick={handleResetAdForm}
+                      className="text-[9px] font-bold uppercase text-[#D93025] border border-[#D93025] px-2.5 py-1 hover:bg-[#D93025] hover:text-white transition-colors shrink-0"
+                    >
+                      Cancelar Edición ✕
+                    </button>
+                  )}
+                </div>
+
                 <form onSubmit={handleCreateAd} className="flex flex-col gap-4">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><label htmlFor="adForm-startDate" className="text-[9px] font-bold uppercase block mb-1">Inicio Vigencia</label><input id="adForm-startDate" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.startDate} onChange={e => setAdForm({...adForm, startDate: e.target.value})} required /></div>
-                    <div><label htmlFor="adForm-endDate" className="text-[9px] font-bold uppercase block mb-1">Fin Vigencia</label><input id="adForm-endDate" type="date" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.endDate} onChange={e => setAdForm({...adForm, endDate: e.target.value})} required /></div>
-                  </div>
+                  {/* PASO 1: SELECCIÓN DEL ESPACIO PUBLICITARIO (1 a 5) */}
                   <div>
-                    <label htmlFor="adForm-location" className="text-[10px] font-bold uppercase block mb-1">Ubicación</label>
-                    <select id="adForm-location" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.location} onChange={e => setAdForm({...adForm, location: e.target.value})}>
-                      <option value="ambos">Impactar en toda la plataforma</option><option value="home">Exclusivo en Home</option><option value="catalogo">Exclusivo en Catálogo</option><option value="recomendador">Exclusivo en Recomendador</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label htmlFor="adForm-targetCategory" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Categoría Objetivo (Contextual)</label>
-                    <select id="adForm-targetCategory" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={adForm.targetCategory} onChange={e => setAdForm({...adForm, targetCategory: e.target.value})}>
-                      <option value="Todas">Todas (Impacto Global)</option>
-                      {categoriasUnicas.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div><label htmlFor="adForm-sponsor" className="text-[10px] font-bold uppercase block mb-1">Patrocinador (Marca/Empresa)</label><input id="adForm-sponsor" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.sponsor} onChange={e => setAdForm({...adForm, sponsor: e.target.value})} required /></div>
-                  <div className="grid grid-cols-2 gap-2">
-                     <div><label htmlFor="adForm-headline" className="text-[10px] font-bold uppercase block mb-1">Titular (Opcional)</label><input id="adForm-headline" type="text" placeholder="Ej: Nueva Generación" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.headline} onChange={e => setAdForm({...adForm, headline: e.target.value})} /></div>
-                     <div><label htmlFor="adForm-highlight" className="text-[10px] font-bold uppercase block mb-1">Resalte Cyan (Opcional)</label><input id="adForm-highlight" type="text" placeholder="Ej: 2026" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.highlight} onChange={e => setAdForm({...adForm, highlight: e.target.value})} /></div>
-                  </div>
-                  <div><label htmlFor="adForm-price" className="text-[10px] font-bold uppercase block mb-1">Precio Promo</label><input id="adForm-price" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.price} onChange={e => setAdForm({...adForm, price: e.target.value})} /></div>
-                  <div><label htmlFor="adForm-link" className="text-[10px] font-bold uppercase block mb-1">URL Enlace (General)</label><input id="adForm-link" type="text" placeholder="https://www.ejemplo.com.py o /negociamos-por-vos" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.link} onChange={e => setAdForm({...adForm, link: e.target.value})} /></div>
-                  <ImageUploadField label="Imagen del Banner" folder="campaigns" value={adForm.img} onChange={url => setAdForm({...adForm, img: url})} />
-                  
-                  {/* BOTÓN DE ACCIÓN (CTA) */}
-                  <div className="border border-[#C0C0C0] p-4 bg-[#F8F9FA] flex flex-col gap-3">
-                    <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2">
-                      <span className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest block">Botón de Acción (Opcional)</span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" checked={adForm.ctaEnabled} onChange={e => setAdForm({...adForm, ctaEnabled: e.target.checked})} />
-                        <div className="w-9 h-5 bg-[#C0C0C0] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#00BFFF]/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#00BFFF]"></div>
-                      </label>
+                    <label htmlFor="adForm-location" className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block mb-2">
+                      1. Espacio Publicitario (Ubicación)
+                    </label>
+                    <div className="grid grid-cols-1 gap-1.5 mb-2">
+                      {[
+                        { id: 'home', num: '1', title: 'Home', badge: '1200x400 px', desc: 'Banner principal en la portada de DATACAR.' },
+                        { id: 'catalogo', num: '2', title: 'Catálogo General', badge: '1200x400 px', desc: 'Banner general en el listado del catálogo.' },
+                        { id: 'catalogo_filtros', num: '3', title: 'Catálogo Filtros', badge: '1200x400 px', desc: 'Banner según filtro de Carrocería y/o Movilidad.' },
+                        { id: 'recomendador', num: '4', title: 'Banner Recomendador', badge: '1200x400 px', desc: 'Debajo de recomendados (apaga auto-pauta DATACAR).' },
+                        { id: 'comparador', num: '5', title: 'Comparador', badge: 'Sin dimensiones', desc: 'Resalta el modelo en pauta con su CTA nativo.' },
+                      ].map(space => {
+                        const isSelected = adForm.location === space.id;
+                        return (
+                          <button
+                            key={space.id}
+                            type="button"
+                            onClick={() => setAdForm({
+                              ...adForm,
+                              location: space.id,
+                              targetCategory: space.id === 'catalogo_filtros' ? adForm.targetCategory : 'Todas',
+                              targetCombustible: space.id === 'catalogo_filtros' ? adForm.targetCombustible : 'Todas',
+                            })}
+                            className={`w-full text-left p-2.5 border transition-colors flex items-center justify-between gap-2 ${
+                              isSelected
+                                ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]'
+                                : 'bg-[#F8F9FA] text-[#0A1F33] border-[#C0C0C0] hover:border-[#00BFFF]'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 uppercase ${isSelected ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#E6E6E6] text-[#0A1F33]'}`}>
+                                  #{space.num}
+                                </span>
+                                <span className="text-xs font-black uppercase tracking-wide truncate">
+                                  {space.title}
+                                </span>
+                              </div>
+                              <p className={`text-[9px] mt-0.5 truncate ${isSelected ? 'text-[#C0C0C0]' : 'text-[#3A3A3C]'}`}>
+                                {space.desc}
+                              </p>
+                            </div>
+                            <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-1 border shrink-0 ${
+                              isSelected
+                                ? 'border-[#00BFFF] text-[#00BFFF] bg-[#00BFFF]/10'
+                                : 'border-[#C0C0C0] text-[#3A3A3C] bg-white'
+                            }`}>
+                              {space.badge}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    {adForm.ctaEnabled && (
-                      <>
-                        <div>
-                          <label htmlFor="adForm-ctaText" className="text-[9px] font-bold uppercase block mb-1">Texto del Botón</label>
-                          <input id="adForm-ctaText" type="text" placeholder="Ej: Ver Oferta" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.ctaText} onChange={e => setAdForm({...adForm, ctaText: e.target.value})} />
-                        </div>
-                        <div>
-                          <label htmlFor="adForm-ctaUrl" className="text-[9px] font-bold uppercase block mb-1">URL del Botón</label>
-                          <input id="adForm-ctaUrl" type="text" placeholder="https://..." className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={adForm.ctaUrl} onChange={e => setAdForm({...adForm, ctaUrl: e.target.value})} />
-                        </div>
-                        <div>
-                          <label className="text-[9px] font-bold uppercase block mb-1">Color del Botón</label>
-                          <div className="flex gap-2">
-                            {['#00BFFF', '#0A1F33', '#FFFFFF', '#D93025'].map(color => (
-                              <button key={color} type="button" onClick={() => setAdForm({...adForm, ctaColor: color})} className={`w-8 h-8 rounded-none border-2 transition-colors ${adForm.ctaColor === color ? 'border-[#3A3A3C]' : 'border-[#C0C0C0]'}`} style={{ backgroundColor: color }} aria-label={`Color ${color}`} />
-                            ))}
-                          </div>
-                        </div>
-                        <div className="mt-2 text-center p-3 border border-[#C0C0C0] bg-white">
-                          <span className="text-[8px] text-[#C0C0C0] uppercase block mb-2">Vista previa:</span>
-                          <span className="inline-block px-4 py-2 text-[10px] font-bold uppercase tracking-widest border border-transparent" style={{ backgroundColor: adForm.ctaColor, color: ['#FFFFFF'].includes(adForm.ctaColor) ? '#0A1F33' : '#FFFFFF' }}>{adForm.ctaText || 'BOTÓN'}</span>
-                        </div>
-                      </>
-                    )}
+                    {/* FICHA INFORMATIVA DEL ESPACIO SELECCIONADO */}
+                    <div className="bg-[#F5FBFF] border border-[#00BFFF]/50 p-3 text-[10px] text-[#0A1F33]">
+                      {adForm.location === 'home' && (
+                        <p><strong>1. Home (1200x400):</strong> Se muestra en la página principal. Requiere imagen (subida o URL), anunciante, enlace web de redirección y fechas de inicio/fin.</p>
+                      )}
+                      {adForm.location === 'catalogo' && (
+                        <p><strong>2. Catálogo General (1200x400):</strong> Se muestra en el catálogo general cuando no hay una pauta específica de filtro. Requiere imagen (subida o URL), anunciante, enlace web y fechas de inicio/fin.</p>
+                      )}
+                      {adForm.location === 'catalogo_filtros' && (
+                        <p><strong>3. Catálogo Filtros (1200x400):</strong> Se activa cuando el usuario filtra por <strong>Tipo de Carrocería</strong> y/o <strong>Tipo de Movilidad</strong> (HEV, PHEV, EV, MHEV, Nafta, Diésel, etc.).</p>
+                      )}
+                      {adForm.location === 'recomendador' && (
+                        <p><strong>4. Banner Recomendador (1200x400):</strong> Se ubica en el Recomendador luego de mostrar las opciones recomendadas. <strong>Lógica automática:</strong> Mientras esta campaña esté activa y en fecha, <strong>apaga automáticamente</strong> el banner institucional de DATACAR. Si no hay pauta activa, vuelve a aparecer el aviso de DATACAR.</p>
+                      )}
+                      {adForm.location === 'comparador' && (
+                        <p><strong>5. Comparador (Sin dimensiones):</strong> Resalta el modelo elegido como <strong>&ldquo;⭐ Opción Patrocinada&rdquo;</strong> en el comparador de versiones. No requiere imagen de banner ni enlace externo (usa el botón CTA propio del comparador).</p>
+                      )}
+                    </div>
                   </div>
-                  <button type="submit" disabled={loading} className="mt-2 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors">Inyectar Campaña</button>
+
+                  {/* CONFIGURACIÓN ESPECÍFICA PARA #3 CATÁLOGO FILTROS */}
+                  {adForm.location === 'catalogo_filtros' && (
+                    <div className="bg-[#F8F9FA] border border-[#00BFFF] p-3.5 flex flex-col gap-3">
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block border-b border-[#C0C0C0]/60 pb-1.5">
+                        Segmentación del Filtro (Carrocería y/o Movilidad)
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label htmlFor="adForm-targetCategory" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Tipo de Carrocería
+                          </label>
+                          <select
+                            id="adForm-targetCategory"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-semibold text-[#0A1F33]"
+                            value={adForm.targetCategory}
+                            onChange={e => setAdForm({ ...adForm, targetCategory: e.target.value })}
+                          >
+                            <option value="Todas">Cualquiera (Sin filtro de carrocería)</option>
+                            {categoriasUnicas.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="adForm-targetCombustible" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Tipo de Movilidad
+                          </label>
+                          <select
+                            id="adForm-targetCombustible"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-semibold text-[#0A1F33]"
+                            value={adForm.targetCombustible}
+                            onChange={e => setAdForm({ ...adForm, targetCombustible: e.target.value })}
+                          >
+                            <option value="Todas">Cualquiera (Sin filtro de movilidad)</option>
+                            {combustiblesUnicos.map(comb => (
+                              <option key={comb} value={comb}>
+                                {comb} — {combustibleLabel(comb)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <span className="text-[9px] text-[#3A3A3C] leading-snug">
+                        Podés elegir solo Carrocería (ej: SUV), solo Movilidad (ej: HEV), o combinar ambos filtros a la vez.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* CONFIGURACIÓN ESPECÍFICA PARA #5 COMPARADOR (FILTROS CONCESIONARIA / MARCA -> MODELO) */}
+                  {adForm.location === 'comparador' && (
+                    <div className="bg-[#F8F9FA] border border-[#00BFFF] p-3.5 flex flex-col gap-3">
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block border-b border-[#C0C0C0]/60 pb-1.5">
+                        ⭐ Selección del Modelo en Pauta (Comparador)
+                      </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label htmlFor="adFilter-concesionaria" className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                            Filtrar por Concesionaria
+                          </label>
+                          <select
+                            id="adFilter-concesionaria"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                            value={adModelFilterConcesionaria}
+                            onChange={e => {
+                              const deal = e.target.value;
+                              setAdModelFilterConcesionaria(deal);
+                              setAdModelFilterMarca('Todas');
+                            }}
+                          >
+                            <option value="Todas">Todas las Concesionarias</option>
+                            {concesionariasParaAds.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label htmlFor="adFilter-marca" className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                            Filtrar por Marca
+                          </label>
+                          <select
+                            id="adFilter-marca"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                            value={adModelFilterMarca}
+                            onChange={e => setAdModelFilterMarca(e.target.value)}
+                          >
+                            <option value="Todas">Todas las Marcas ({marcasParaAds.length})</option>
+                            {marcasParaAds.map(b => (
+                              <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="adForm-modelId" className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                          Modelo a Destacar en Pauta *
+                        </label>
+                        <select
+                          id="adForm-modelId"
+                          className="w-full border border-[#0A1F33] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-bold text-[#0A1F33]"
+                          value={adForm.modelId || ''}
+                          onChange={e => {
+                            const mId = e.target.value;
+                            const sel = modelosList.find(m => m.id === mId);
+                            const brand = sel ? marcasList.find(b => b.id === sel.brandId) : null;
+                            const dealerVer = versionesList.find(v => v.modelId === mId && v.concesionaria);
+                            const suggestedSponsor = adModelFilterConcesionaria !== 'Todas'
+                              ? adModelFilterConcesionaria
+                              : (brand?.name || dealerVer?.concesionaria || '');
+                            setAdForm({
+                              ...adForm,
+                              modelId: mId,
+                              sponsor: adForm.sponsor || suggestedSponsor
+                            });
+                          }}
+                          required={adForm.location === 'comparador'}
+                        >
+                          <option value="">-- Seleccioná un modelo ({modelosParaAds.length} disponibles) --</option>
+                          {modelosParaAds.map(m => {
+                            const b = marcasList.find(brand => brand.id === m.brandId);
+                            const dealerVer = versionesList.find(v => v.modelId === m.id && v.concesionaria);
+                            const dealerTag = dealerVer?.concesionaria ? ` (${dealerVer.concesionaria})` : '';
+                            const label = b ? `${b.name} - ${m.name}${dealerTag}` : `${m.name}${dealerTag}`;
+                            return (
+                              <option key={m.id} value={m.id}>{label}</option>
+                            );
+                          })}
+                        </select>
+                        <span className="text-[9px] text-[#3A3A3C] block mt-1 leading-tight">
+                          No requiere subir imagen ni enlace externo: el comparador resaltará automáticamente la tarjeta del modelo como <strong>&ldquo;Opción Patrocinada&rdquo;</strong> con su botón CTA de cotización.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PASO 2: ANUNCIANTE (OBLIGATORIO EN LOS 5 ESPACIOS) */}
+                  <div>
+                    <label htmlFor="adForm-sponsor" className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                      2. Anunciante (Marca / Concesionaria) *
+                    </label>
+                    <input
+                      id="adForm-sponsor"
+                      type="text"
+                      placeholder="Ej: Toyotoshi S.A. / Toyota Paraguay"
+                      className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33]"
+                      value={adForm.sponsor}
+                      onChange={e => setAdForm({ ...adForm, sponsor: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  {/* PASO 3: IMAGEN 1200x400 Y ENLACE DE REDIRECCIÓN (SOLO ESPACIOS 1, 2, 3 Y 4) */}
+                  {adForm.location !== 'comparador' && (
+                    <div className="border border-[#C0C0C0] p-3.5 bg-[#F8F9FA] flex flex-col gap-3">
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/60 pb-1.5">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
+                          3. Creatividad del Aviso y Enlace
+                        </span>
+                        <span className="text-[9px] font-black text-[#00BFFF] bg-[#0A1F33] px-2 py-0.5 uppercase tracking-widest">
+                          1200 x 400 px
+                        </span>
+                      </div>
+
+                      <ImageUploadField
+                        label="Imagen del Banner (Subir archivo o pegar enlace de imagen) *"
+                        folder="campaigns"
+                        value={adForm.img}
+                        onChange={url => setAdForm({ ...adForm, img: url })}
+                      />
+
+                      <div>
+                        <label htmlFor="adForm-link" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                          Enlace Web de Redirección *
+                        </label>
+                        <input
+                          id="adForm-link"
+                          type="text"
+                          placeholder="https://www.anunciante.com.py o /catalogo?marca=..."
+                          className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] bg-white"
+                          value={adForm.link}
+                          onChange={e => setAdForm({ ...adForm, link: e.target.value })}
+                          required={adForm.location !== 'comparador'}
+                        />
+                        <span className="text-[9px] text-[#3A3A3C] block mt-1">
+                          Web a la que será dirigido el usuario al hacer clic en el banner.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PASO 4: VIGENCIA DE LA CAMPAÑA (INICIO / FIN) */}
+                  <div className="border border-[#C0C0C0] p-3.5 bg-[#FFFFFF]">
+                    <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block mb-2">
+                      {adForm.location === 'comparador' ? '3. Inicio y Fin de la Campaña *' : '4. Inicio y Fin de la Campaña *'}
+                    </span>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="adForm-startDate" className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                          Fecha de Inicio
+                        </label>
+                        <input
+                          id="adForm-startDate"
+                          type="date"
+                          className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]"
+                          value={adForm.startDate}
+                          onChange={e => setAdForm({ ...adForm, startDate: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="adForm-endDate" className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                          Fecha de Fin
+                        </label>
+                        <input
+                          id="adForm-endDate"
+                          type="date"
+                          className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33]"
+                          value={adForm.endDate}
+                          onChange={e => setAdForm({ ...adForm, endDate: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="mt-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3.5 hover:bg-[#00BFFF] hover:text-[#0A1F33] transition-colors tracking-widest"
+                  >
+                    {adForm.id ? 'Guardar Cambios de Pauta' : 'Activar e Inyectar Pauta'}
+                  </button>
                 </form>
               </div>
 
+              {/* COLUMNA DERECHA: BÓVEDA PUBLICITARIA ACTIVA CON FILTRO POR ESPACIO */}
               <div className="xl:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-full min-h-[500px]">
-                <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col md:flex-row justify-between items-center shrink-0 gap-4">
-                  <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Bóveda Publicitaria Activa</span>
-                </div>
-                <div className="overflow-auto flex-grow custom-scrollbar p-6 flex flex-col gap-4">
-                  {campaignsList.length === 0 ? <p className="text-[10px] text-center text-[#C0C0C0] font-bold uppercase">Sin campañas.</p> : campaignsList.map((camp: any) => (
-                    <div key={camp.id} className={`border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${camp.isActive ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] bg-[#F8F9FA]'}`}>
-                       <div className="flex items-center gap-4 min-w-0">
-                         {isValidImageSrc(camp.img) && (
-                           <div className="w-24 h-12 relative bg-white border border-[#C0C0C0]/50 shrink-0">
-                             <Image
-                               src={camp.img}
-                               alt={camp.sponsor}
-                               fill
-                               className="object-contain"
-                               unoptimized={!isOptimizableImageSrc(camp.img)}
-                             />
-                           </div>
-                         )}
-                         <div className="min-w-0">
-                           <p className="text-[9px] font-bold text-[#3A3A3C] uppercase truncate">{camp.sponsor} • Categoría: {camp.targetCategory || 'Todas'}</p>
-                           <p className="font-black text-sm text-[#0A1F33] uppercase truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{camp.headline || camp.sponsor}</p>
-                           <p className="text-[8px] text-[#C0C0C0] uppercase mt-1">Ubicación: {camp.location} | Vence: {camp.endDate}</p>
-                         </div>
-                       </div>
-                       <div className="flex gap-2 shrink-0">
-                         <button onClick={() => handleToggleAd(camp.id, camp.isActive)} className={`border ${camp.isActive ? 'border-[#D93025] text-[#D93025]' : 'border-[#0A1F33] text-[#0A1F33]'} px-4 py-2 text-[9px] font-bold uppercase`}>{camp.isActive ? 'Pausar' : 'Activar'}</button>
-                         <button onClick={() => handleDelete('campaigns', camp.id)} className="border border-[#C0C0C0] text-[#C0C0C0] px-3 py-2 text-[9px] font-bold uppercase">X</button>
-                       </div>
+                <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col gap-3 shrink-0">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                      <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33] block">
+                        Bóveda de Pautas Publicitarias
+                      </span>
+                      <span className="text-[10px] text-[#3A3A3C]">
+                        Administrá las campañas activas, programadas y pausadas en los 5 espacios de DATACAR.
+                      </span>
                     </div>
-                  ))}
+                    <span className="text-[10px] font-bold uppercase tracking-widest bg-[#0A1F33] text-[#00BFFF] px-3 py-1.5 self-start sm:self-auto">
+                      Total: {campaignsList.length} pautas
+                    </span>
+                  </div>
+
+                  {/* FILTROS RÁPIDOS DE LA BÓVEDA POR ESPACIO */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[
+                      { id: 'todos', label: 'Todos los espacios' },
+                      { id: 'home', label: '1. Home' },
+                      { id: 'catalogo', label: '2. Catálogo General' },
+                      { id: 'catalogo_filtros', label: '3. Catálogo Filtros' },
+                      { id: 'recomendador', label: '4. Recomendador' },
+                      { id: 'comparador', label: '5. Comparador' },
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setAdVaultFilterLocation(tab.id)}
+                        className={`px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                          adVaultFilterLocation === tab.id
+                            ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]'
+                            : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="overflow-auto flex-grow custom-scrollbar p-6 flex flex-col gap-4">
+                  {(() => {
+                    const now = new Date();
+                    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                    // Verificar si hay alguna campaña vigente en el Recomendador para mostrar el estado del banner DATACAR
+                    const recomendadorHasActiveSponsor = campaignsList.some((c: any) => {
+                      if (c.isActive === false) return false;
+                      const loc = (c.location || '').toLowerCase();
+                      if (loc !== 'recomendador' && loc !== 'ambos') return false;
+                      if (c.startDate && c.startDate > today) return false;
+                      if (c.endDate && c.endDate < today) return false;
+                      return true;
+                    });
+
+                    const filteredVault = campaignsList.filter((camp: any) => {
+                      if (adVaultFilterLocation === 'todos') return true;
+                      const isFilterAd = camp.location === 'catalogo_filtros' || (camp.location === 'catalogo' && ((camp.targetCategory && camp.targetCategory !== 'Todas') || (camp.targetCombustible && camp.targetCombustible !== 'Todas')));
+                      if (adVaultFilterLocation === 'catalogo_filtros') return isFilterAd;
+                      if (adVaultFilterLocation === 'catalogo') return (camp.location === 'catalogo' && !isFilterAd) || camp.location === 'ambos';
+                      if (adVaultFilterLocation === 'comparador') return camp.location === 'comparador' || Boolean(camp.modelId);
+                      return camp.location === adVaultFilterLocation || camp.location === 'ambos';
+                    });
+
+                    return (
+                      <>
+                        {/* INDICADOR DE ESTADO AUTOMÁTICO DEL BANNER RECOMENDADOR (DATACAR VS ANUNCIANTE) */}
+                        {(adVaultFilterLocation === 'todos' || adVaultFilterLocation === 'recomendador') && (
+                          <div className={`p-3 border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                            recomendadorHasActiveSponsor
+                              ? 'bg-[#ECFDF5] border-[#6EE7B7] text-[#065F46]'
+                              : 'bg-[#F8F9FA] border-[#C0C0C0] text-[#0A1F33]'
+                          }`}>
+                            <div className="text-[10px]">
+                              <span className="font-black uppercase tracking-wider block">
+                                Estado Espacio #4 (Banner Recomendador):
+                              </span>
+                              <span>
+                                {recomendadorHasActiveSponsor
+                                  ? 'Ocupado por anunciante activo → La pauta propia de DATACAR se encuentra apagada automáticamente.'
+                                  : 'Sin anunciante vigente → Se muestra automáticamente la pauta institucional de "DATACAR (Negociamos por vos)".'}
+                              </span>
+                            </div>
+                            <span className={`text-[8px] font-black uppercase px-2.5 py-1 border shrink-0 self-start sm:self-center ${
+                              recomendadorHasActiveSponsor
+                                ? 'bg-white border-[#059669] text-[#059669]'
+                                : 'bg-[#0A1F33] border-[#0A1F33] text-[#00BFFF]'
+                            }`}>
+                              {recomendadorHasActiveSponsor ? 'Anunciante Activo (Datacar OFF)' : 'Pauta DATACAR Activa (Auto)'}
+                            </span>
+                          </div>
+                        )}
+
+                        {filteredVault.length === 0 ? (
+                          <p className="text-[10px] text-center text-[#C0C0C0] font-bold uppercase py-12">
+                            No hay campañas registradas para este espacio publicitario.
+                          </p>
+                        ) : (
+                          filteredVault.map((camp: any) => {
+                            const isVigente = camp.isActive !== false && (!camp.startDate || camp.startDate <= today) && (!camp.endDate || camp.endDate >= today);
+                            const isProgramada = camp.isActive !== false && camp.startDate && camp.startDate > today;
+                            const isVencida = camp.isActive !== false && camp.endDate && camp.endDate < today;
+                            const isPausada = camp.isActive === false;
+
+                            const isFilterAd = camp.location === 'catalogo_filtros' || (camp.location === 'catalogo' && ((camp.targetCategory && camp.targetCategory !== 'Todas') || (camp.targetCombustible && camp.targetCombustible !== 'Todas')));
+                            const isCompAd = camp.location === 'comparador' || (Boolean(camp.modelId) && camp.location !== 'home' && camp.location !== 'catalogo' && camp.location !== 'recomendador');
+
+                            const locationLabel = (() => {
+                              if (isCompAd) return '5. Comparador (Modelo Patrocinado • Sin dimensiones)';
+                              if (isFilterAd) return '3. Catálogo Filtros (1200x400)';
+                              if (camp.location === 'home') return '1. Home (1200x400)';
+                              if (camp.location === 'catalogo') return '2. Catálogo General (1200x400)';
+                              if (camp.location === 'recomendador') return '4. Banner Recomendador (1200x400)';
+                              return `Multiespacio (${camp.location})`;
+                            })();
+
+                            return (
+                              <div key={camp.id} className={`border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${camp.isActive !== false ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] bg-[#F8F9FA]'}`}>
+                                <div className="flex items-center gap-4 min-w-0 w-full">
+                                  {isValidImageSrc(camp.img) && (
+                                    <div className="w-28 h-14 relative bg-white border border-[#C0C0C0]/60 shrink-0">
+                                      <Image
+                                        src={camp.img}
+                                        alt={camp.sponsor || 'Banner'}
+                                        fill
+                                        className="object-contain p-0.5"
+                                        unoptimized={!isOptimizableImageSrc(camp.img)}
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                      <span className="bg-[#0A1F33] text-[#FFFFFF] px-2 py-0.5 text-[8px] font-black uppercase tracking-wider">
+                                        {locationLabel}
+                                      </span>
+                                      {isVigente && <span className="bg-[#ECFDF5] text-[#059669] border border-[#6EE7B7] px-2 py-0.5 text-[8px] font-bold uppercase">Vigente</span>}
+                                      {isProgramada && <span className="bg-[#FFFBEB] text-[#B45309] border border-[#FCD34D] px-2 py-0.5 text-[8px] font-bold uppercase">Programada</span>}
+                                      {isVencida && <span className="bg-[#FEF2F2] text-[#DC2626] border border-[#FCA5A5] px-2 py-0.5 text-[8px] font-bold uppercase">Vencida</span>}
+                                      {isPausada && <span className="bg-[#F8F9FA] text-[#3A3A3C] border border-[#C0C0C0] px-2 py-0.5 text-[8px] font-bold uppercase">Pausada</span>}
+                                    </div>
+
+                                    <p className="font-black text-sm text-[#0A1F33] uppercase truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                                      Anunciante: {camp.sponsor}
+                                    </p>
+
+                                    {/* DETALLES SEGÚN EL ESPACIO */}
+                                    {isFilterAd && (
+                                      <div className="flex flex-wrap gap-1.5 mt-1">
+                                        {camp.targetCategory && camp.targetCategory !== 'Todas' && (
+                                          <span className="bg-white border border-[#0A1F33] text-[#0A1F33] text-[8px] font-bold uppercase px-2 py-0.5">
+                                            Carrocería: {camp.targetCategory}
+                                          </span>
+                                        )}
+                                        {camp.targetCombustible && camp.targetCombustible !== 'Todas' && (
+                                          <span className="bg-white border border-[#00BFFF] text-[#0A1F33] text-[8px] font-bold uppercase px-2 py-0.5">
+                                            Movilidad: {camp.targetCombustible} ({combustibleLabel(camp.targetCombustible)})
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {isCompAd && camp.modelId && (
+                                      <p className="mt-1">
+                                        <span className="inline-block bg-[#00BFFF]/15 border border-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase px-2 py-0.5">
+                                          ⭐ Modelo en Pauta: {camp.brandName ? `${camp.brandName} ` : ''}{camp.modelName || camp.modelId} (CTA Nativo Comparador)
+                                        </span>
+                                      </p>
+                                    )}
+
+                                    {!isCompAd && camp.link && (
+                                      <p className="text-[9px] text-[#3A3A3C] truncate mt-1">
+                                        <span className="font-bold uppercase text-[#0A1F33]">Redirección:</span>{' '}
+                                        <span className="font-mono text-[#00BFFF]">{camp.link}</span>
+                                      </p>
+                                    )}
+
+                                    <p className="text-[9px] text-[#3A3A3C] font-semibold uppercase mt-1">
+                                      Vigencia: <span className="text-[#0A1F33] font-bold">{camp.startDate || 'Sin inicio'}</span> al <span className="text-[#0A1F33] font-bold">{camp.endDate || 'Sin fin'}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 shrink-0 self-end md:self-center">
+                                  <button onClick={() => handleEditAd(camp)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-white px-3 py-2 text-[9px] font-bold uppercase transition-colors">Editar</button>
+                                  <button onClick={() => handleToggleAd(camp.id, camp.isActive !== false)} className={`border ${camp.isActive !== false ? 'border-[#D93025] text-[#D93025]' : 'border-[#0A1F33] text-[#0A1F33]'} px-3 py-2 text-[9px] font-bold uppercase`}>{camp.isActive !== false ? 'Pausar' : 'Activar'}</button>
+                                  <button onClick={() => handleDelete('campaigns', camp.id)} className="border border-[#C0C0C0] text-[#C0C0C0] hover:border-[#D93025] hover:text-[#D93025] px-2.5 py-2 text-[9px] font-bold uppercase" title="Eliminar pauta">✕</button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

@@ -186,12 +186,14 @@ export default function HomeClient() {
         setSearchIndex(tempSearchIndex);
         setTiposDisponibles(Array.from(tempTipos).sort());
 
-        // Carga de Pauta (Home)
-        const today = new Date().toISOString().split('T')[0];
+        // Carga de Pauta (Espacio #1: Home)
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const validCampaign = (campaignsData as AdCampaign[]).find(c =>
-          c.isActive === true &&
+          c.isActive !== false &&
           (c.location === 'home' || c.location === 'ambos') &&
-          c.startDate <= today && c.endDate >= today
+          (!c.startDate || c.startDate <= today) &&
+          (!c.endDate || c.endDate >= today)
         );
         if (validCampaign) setActiveAd(validCampaign);
 

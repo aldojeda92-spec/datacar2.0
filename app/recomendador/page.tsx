@@ -207,9 +207,9 @@ export default function RecomendadorPage() {
         const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         const activeAds = (campaignsData as AdCampaign[]).filter(c => {
-          if (!c.isActive) return false;
+          if (c.isActive === false) return false;
           const loc = (c.location || '').toLowerCase();
-          const validLoc = !loc || loc === 'recomendador' || loc === 'ambos' || loc === 'todas';
+          const validLoc = loc === 'recomendador' || loc === 'ambos';
           if (!validLoc) return false;
           if (c.startDate && c.startDate > localToday) return false;
           if (c.endDate && c.endDate < localToday) return false;
@@ -670,21 +670,9 @@ export default function RecomendadorPage() {
       selectedAd = ads[0];
     }
 
-    // 5. Fallback institucional DATACAR sólo si no hay ninguna campaña cargada en la base de datos
-    if (!selectedAd) {
-      selectedAd = {
-        id: 'fallback_datacar',
-        sponsor: 'Servicio DATACAR',
-        headline: '¿Cansado de negociar',
-        highlight: 'con vendedores?',
-        price: 'Asesoría Premium',
-        link: '/negociamos-por-vos',
-        img: '',
-        location: 'recomendador',
-        isActive: true
-      };
-    }
-    setSmartAd(selectedAd);
+    // Si hay campaña de un anunciante activa, se guarda en smartAd (y apaga automáticamente el banner de DATACAR).
+    // Si no hay pauta activa (null), se mostrará el banner institucional de DATACAR.
+    setSmartAd(selectedAd || null);
     return finalTop3;
   };
 
@@ -1198,33 +1186,8 @@ export default function RecomendadorPage() {
               ))}
             </div>
 
-            {/* BANNER B2B NEGOCIACIÓN (ROMPEOLAS) */}
-            <div className="bg-[#0A1F33] border border-[#0A1F33] p-8 md:p-12 mb-12 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden rounded-none shadow-none">
-              <span className="absolute top-4 left-4 bg-[#FFFFFF]/10 border border-[#FFFFFF]/20 text-[#FFFFFF] text-[8px] font-bold uppercase tracking-widest px-3 py-1 inline-block z-20">Servicio DATACAR</span>
-              <div className="md:w-1/3 z-10 text-center md:text-left mt-6 md:mt-0">
-                <h3 className="font-black text-3xl text-[#FFFFFF] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Indeciso? <br/>Negociamos por vos</h3>
-                <p className="text-[11px] text-[#C0C0C0] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Analizamos las opciones y peleamos el mejor precio directo en concesionaria oficial.</p>
-              </div>
-
-              <div className="md:w-2/3 flex flex-col sm:flex-row gap-4 w-full z-10">
-                <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/20 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left">
-                  <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest block mb-2">Opción 1</span>
-                  <h4 className="font-bold text-[#FFFFFF] text-sm uppercase mb-1">Comparar Manualmente</h4>
-                  <p className="text-[10px] text-[#C0C0C0] mb-4">Usa nuestra herramienta B2B.</p>
-                  <Link href="/comparador" className="w-full block border border-[#FFFFFF] text-[#FFFFFF] hover:bg-[#FFFFFF] hover:text-[#0A1F33] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors text-center rounded-none">Ir al Comparador →</Link>
-                </div>
-                <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/20 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left">
-                  <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest block mb-2">Opción 2</span>
-                  <h4 className="font-bold text-[#FFFFFF] text-sm uppercase mb-1">Delegar Compra</h4>
-                  <p className="text-[10px] text-[#C0C0C0] mb-4">Ahorro y cero estrés garantizado.</p>
-                  <Link href="/negociamos-por-vos" className="w-full block bg-[#00BFFF] text-[#0A1F33] hover:bg-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent text-center rounded-none">Delegar Ahora →</Link>
-                </div>
-              </div>
-            </div>
-
-            {/* INYECCIÓN SMART AD (100% IMAGEN DE BANNER) */}
-            {/* INYECCIÓN SMART AD (100% IMAGEN DE BANNER O FORMATO EDITORIAL) */}
-            {smartAd && (() => {
+            {/* ESPACIO #4: BANNER RECOMENDADOR (1200x400 de anunciante o pauta automática DATACAR) */}
+            {smartAd ? (() => {
               const targetUrl = normalizeExternalUrl(smartAd.ctaUrl || smartAd.link);
               const isClickable = targetUrl !== '#';
               const isExternal = isClickable && targetUrl.startsWith('http');
@@ -1286,7 +1249,31 @@ export default function RecomendadorPage() {
                   )}
                 </a>
               );
-            })()}
+            })() : (
+              /* PAUTA PROPIA DE DATACAR (SE APAGA AUTOMÁTICAMENTE CUANDO HAY UN ANUNCIANTE ACTIVO) */
+              <div className="bg-[#0A1F33] border border-[#0A1F33] p-8 md:p-12 mb-12 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden rounded-none shadow-none">
+                <span className="absolute top-4 left-4 bg-[#FFFFFF]/10 border border-[#FFFFFF]/20 text-[#FFFFFF] text-[8px] font-bold uppercase tracking-widest px-3 py-1 inline-block z-20">Servicio DATACAR</span>
+                <div className="md:w-1/3 z-10 text-center md:text-left mt-6 md:mt-0">
+                  <h3 className="font-black text-3xl text-[#FFFFFF] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Indeciso? <br/>Negociamos por vos</h3>
+                  <p className="text-[11px] text-[#C0C0C0] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Analizamos las opciones y peleamos el mejor precio directo en concesionaria oficial.</p>
+                </div>
+
+                <div className="md:w-2/3 flex flex-col sm:flex-row gap-4 w-full z-10">
+                  <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/20 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left">
+                    <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest block mb-2">Opción 1</span>
+                    <h4 className="font-bold text-[#FFFFFF] text-sm uppercase mb-1">Comparar Manualmente</h4>
+                    <p className="text-[10px] text-[#C0C0C0] mb-4">Usa nuestra herramienta B2B.</p>
+                    <Link href="/comparador" className="w-full block border border-[#FFFFFF] text-[#FFFFFF] hover:bg-[#FFFFFF] hover:text-[#0A1F33] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors text-center rounded-none">Ir al Comparador →</Link>
+                  </div>
+                  <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/20 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left">
+                    <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest block mb-2">Opción 2</span>
+                    <h4 className="font-bold text-[#FFFFFF] text-sm uppercase mb-1">Delegar Compra</h4>
+                    <p className="text-[10px] text-[#C0C0C0] mb-4">Ahorro y cero estrés garantizado.</p>
+                    <Link href="/negociamos-por-vos" className="w-full block bg-[#00BFFF] text-[#0A1F33] hover:bg-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent text-center rounded-none">Delegar Ahora →</Link>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* RUNNER-UPS (OTRAS OPCIONES - HORIZONTAL FLAT) */}
             {otherMatches.length > 0 && (

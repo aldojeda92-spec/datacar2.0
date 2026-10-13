@@ -69,7 +69,8 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 interface AdCampaign { 
   id: string; sponsor: string; headline: string; highlight: string; 
   price: string; link: string; img: string; location: string; 
-  targetCategory?: string; // Necesario para segmentación contextual
+  targetCategory?: string; // Filtro por tipo de carrocería
+  targetCombustible?: string; // Filtro por tipo de movilidad (EV, PHEV, HEV, MHEV, NAFTA, DIESEL, FLEX)
   startDate: string; endDate: string; isActive: boolean; 
 }
 
@@ -326,13 +327,14 @@ function CatalogoContent() {
         setOrigenesDisponibles(Array.from(tempOrigenes).sort());
         setCombustiblesDisponibles(Array.from(tempCombustibles).sort());
 
-        // Carga y validación de TODAS las campañas vigentes para este contexto
-        const today = new Date().toISOString().split('T')[0];
+        // Carga y validación de TODAS las campañas vigentes para Catálogo General y Catálogo Filtros
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const validAds = (campaignsData as AdCampaign[]).filter(c =>
-          c.isActive === true &&
-          (c.location === 'catalogo' || c.location === 'ambos') &&
-          c.startDate <= today &&
-          c.endDate >= today
+          c.isActive !== false &&
+          (c.location === 'catalogo' || c.location === 'catalogo_filtros' || c.location === 'ambos') &&
+          (!c.startDate || c.startDate <= today) &&
+          (!c.endDate || c.endDate >= today)
         );
         setActiveCampaigns(validAds);
 
@@ -442,22 +444,49 @@ function CatalogoContent() {
 
   // ==========================================
   // 3. MOTOR DE INYECCIÓN CONTEXTUAL (ADS)
+  // Espacio #2: Catálogo General | Espacio #3: Catálogo Filtros (Carrocería y/o Movilidad)
   // ==========================================
   const adToShow = useMemo(() => {
     if (activeCampaigns.length === 0) return null;
 
-    // Prioridad 1: Hay un filtro de categoría (tipo) activo
-    if (activeFilters.tipos.length > 0) {
-      const targetCat = activeFilters.tipos[0].toUpperCase();
-      const specificAd = activeCampaigns.find(c => c.targetCategory?.toUpperCase() === targetCat);
-      if (specificAd) return specificAd;
+    const activeTipos = activeFilters.tipos.map(t => normalizeCarroceria(t).toUpperCase());
+    const activeCombs = activeFilters.combustibles.map(c => normalizeCombustible(c).toUpperCase());
+    const hasTipoFilter = activeTipos.length > 0;
+    const hasCombFilter = activeCombs.length > 0;
+
+    // Prioridad 1: Hay filtro de Carrocería y/o Movilidad activo -> Buscar en "Catálogo Filtros"
+    if (hasTipoFilter || hasCombFilter) {
+      // 1a. Campaña que coincida en AMBOS (Carrocería + Movilidad) cuando ambos filtros están activos
+      if (hasTipoFilter && hasCombFilter) {
+        const dualMatch = activeCampaigns.find(c => {
+          const cat = c.targetCategory && c.targetCategory !== 'Todas' ? normalizeCarroceria(c.targetCategory).toUpperCase() : '';
+          const comb = c.targetCombustible && c.targetCombustible !== 'Todas' ? normalizeCombustible(c.targetCombustible).toUpperCase() : '';
+          return cat && comb && activeTipos.includes(cat) && activeCombs.includes(comb);
+        });
+        if (dualMatch) return dualMatch;
+      }
+
+      // 1b. Campaña que coincida por Carrocería (sin restricción de movilidad incompatible) o por Movilidad (sin restricción de carrocería incompatible)
+      const singleFilterMatch = activeCampaigns.find(c => {
+        const cat = c.targetCategory && c.targetCategory !== 'Todas' ? normalizeCarroceria(c.targetCategory).toUpperCase() : '';
+        const comb = c.targetCombustible && c.targetCombustible !== 'Todas' ? normalizeCombustible(c.targetCombustible).toUpperCase() : '';
+        if (!cat && !comb) return false; // Es anuncio general, no de filtro
+        const catOk = !cat || (hasTipoFilter && activeTipos.includes(cat));
+        const combOk = !comb || (hasCombFilter && activeCombs.includes(comb));
+        return catOk && combOk;
+      });
+      if (singleFilterMatch) return singleFilterMatch;
     }
 
-    // Prioridad 2 (Fallback): Buscar un anuncio Global/Genérico
-    const generalAd = activeCampaigns.find(c => c.targetCategory === 'Todas' || !c.targetCategory);
+    // Prioridad 2 (Catálogo General / Fallback): Campaña de Catálogo General (sin filtros específicos)
+    const generalAd = activeCampaigns.find(c =>
+      (c.location === 'catalogo' || c.location === 'ambos') &&
+      (!c.targetCategory || c.targetCategory === 'Todas') &&
+      (!c.targetCombustible || c.targetCombustible === 'Todas')
+    );
     return generalAd || null;
 
-  }, [activeCampaigns, activeFilters.tipos]);
+  }, [activeCampaigns, activeFilters.tipos, activeFilters.combustibles]);
 
   // ==========================================
   // 4. LÓGICA DE PAGINACIÓN

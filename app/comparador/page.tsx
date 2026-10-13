@@ -1,7 +1,7 @@
 // app/comparador/page.tsx
 'use client';
 
-import React, { useState, useEffect, Suspense, useRef, useMemo } from 'react';
+import React, { useState, useEffect, Suspense, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -10,7 +10,7 @@ import { db } from '../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../lib/compareStorage';
 import { combustibleLabel } from '../../lib/combustible';
-import { getCachedBrands, getCachedModels, getCachedVersions, getCachedConcesionarias } from '../../lib/catalogCache';
+import { getCachedBrands, getCachedModels, getCachedVersions, getCachedConcesionarias, getCachedCampaigns } from '../../lib/catalogCache';
 import LeadModal from '../components/LeadModal';
 import Modal from '../components/a11y/Modal';
 import { sendComparisonLinkEmail, sendLeadNotificationEmail } from '../../lib/mailer';
@@ -18,6 +18,12 @@ import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarChec
 import { track } from '../../lib/analytics';
 import DatacarCheckBadge from '../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../components/Navbar';
+import DynamicAttributeComparator from '../components/DynamicAttributeComparator';
+import { 
+  AttributeWeights, 
+  VehicleScoreResult, 
+  computeAttributeScores 
+} from '../../lib/attributeScoring';
 
 // ==========================================
 // INTERFACES (Estructura de Datos)
@@ -312,6 +318,60 @@ function ComparadorContent() {
   // Popular Comparisons
   const [popularComparisons, setPopularComparisons] = useState<{combo: string, ids: string[], count: number}[]>([]);
 
+  // Ponderador Dinámico por Atributos
+  const [weights, setWeights] = useState<AttributeWeights>({
+    motor: 50,
+    seguridad: 50,
+    confort: 50,
+    economia: 50,
+  });
+
+  // Cálculo dinámico de scores por atributos
+  const attributeScores = useMemo(() => {
+    if (vehiclesData.length < 2) return [];
+    return computeAttributeScores(vehiclesData, weights);
+  }, [vehiclesData, weights]);
+
+  // Identificación del ganador sugerido
+  const winnerId = useMemo(() => {
+    if (attributeScores.length < 2) return null;
+    let max = -1;
+    let top: string | null = null;
+    attributeScores.forEach(s => {
+      if (s.totalScore > max) {
+        max = s.totalScore;
+        top = s.vehicleId;
+      }
+    });
+    return top;
+  }, [attributeScores]);
+
+  // Campañas Publicitarias / Pautas Activas (Para Opción Patrocinada B2B)
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+
+  useEffect(() => {
+    getCachedCampaigns().then(c => {
+      if (Array.isArray(c)) setCampaigns(c);
+    }).catch(err => {
+      console.warn('Error al cargar campañas en comparador:', err);
+    });
+  }, []);
+
+  const getVehicleSponsorship = useCallback((veh: VersionDetail | undefined) => {
+    if (!veh || !campaigns || campaigns.length === 0) return null;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return campaigns.find(c => {
+      if (c.isActive === false) return false;
+      if (c.location && c.location !== 'comparador' && c.location !== 'ambos') return false;
+      if (!c.modelId) return false;
+      if (c.modelId !== veh.modelId) return false;
+      if (c.startDate && c.startDate > today) return false;
+      if (c.endDate && c.endDate < today) return false;
+      return true;
+    }) || null;
+  }, [campaigns]);
+
   // ==========================================
   // 1. CARGA DE DATOS Y LECTURA DE URL
   // ==========================================
@@ -425,14 +485,20 @@ function ComparadorContent() {
   // ==========================================
   useEffect(() => {
     if (vehiclesData.length >= 2) {
-      const sortedIds = vehiclesData.map(v => v.id).sort();
-      const comboKey = sortedIds.join('_');
+      const slotIds = vehiclesData.map(v => v.id);
+      const sortedIds = [...slotIds].sort();
+      const comboKey = slotIds.join('_');
       
       if (trackedRef.current !== comboKey) {
         trackedRef.current = comboKey;
+        const firstVeh = vehiclesData[0];
         addDoc(collection(db, 'comparison_stats'), {
           combo: vehiclesData.map(v => `${v.brandName} ${v.modelName}`).join(' vs '),
           ids: sortedIds,
+          slotIds,
+          firstSlotId: firstVeh?.id || '',
+          firstSlotModelId: firstVeh?.modelId || '',
+          firstSlotModel: firstVeh ? `${firstVeh.brandName} ${firstVeh.modelName}`.trim() : '',
           timestamp: serverTimestamp()
         }).catch(err => console.error("Error telemetría", err));
       }
@@ -626,14 +692,39 @@ function ComparadorContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[0, 1, 2].map((idx) => {
                 const veh = vehiclesData[idx];
+                const vehScore = veh ? attributeScores.find(s => s.vehicleId === veh.id) : null;
+                const isHighestMatch = veh && winnerId === veh.id && vehiclesData.length >= 2;
+                const sponsorship = veh ? getVehicleSponsorship(veh) : null;
+                const isSponsored = !!sponsorship;
+
                 return (
-                  <div key={idx} className="relative bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col justify-between transition-all group overflow-hidden">
+                  <div 
+                    key={idx} 
+                    className={`relative bg-[#FFFFFF] flex flex-col justify-between transition-all group overflow-hidden ${
+                      isSponsored
+                        ? 'border-2 border-[#00BFFF] shadow-lg ring-2 ring-[#00BFFF]/25'
+                        : 'border border-[#C0C0C0]'
+                    }`}
+                  >
                     {veh ? (
                       <>
+                        {/* Banner Superior: Exclusivo para Opción Patrocinada (Destacado B2B) */}
+                        {isSponsored && (
+                          <div className="bg-[#00BFFF] text-white text-[9px] font-black uppercase tracking-widest px-3 py-1.5 flex items-center justify-between z-10 shadow-sm">
+                            <span className="flex items-center gap-1.5">
+                              <span>⭐</span>
+                              <span>Opción Patrocinada</span>
+                            </span>
+                            <span className="bg-[#0A1F33] text-white text-[8px] font-bold px-1.5 py-0.5 tracking-wider">
+                              {sponsorship?.sponsor || 'Destacado'}
+                            </span>
+                          </div>
+                        )}
+
                         {/* Botón Quitar */}
                         <button
                           onClick={() => handleRemove(veh.id)}
-                          className="absolute top-2.5 right-2.5 z-20 w-7 h-7 flex items-center justify-center bg-[#FFFFFF]/90 hover:bg-[#D93025] hover:text-[#FFFFFF] text-[#C0C0C0] border border-[#C0C0C0]/60 transition-colors"
+                          className={`absolute ${isSponsored ? 'top-8' : 'top-2.5'} right-2.5 z-20 w-7 h-7 flex items-center justify-center bg-[#FFFFFF]/90 hover:bg-[#D93025] hover:text-[#FFFFFF] text-[#C0C0C0] border border-[#C0C0C0]/60 transition-colors`}
                           title="Quitar este vehículo"
                         >
                           ✕
@@ -672,8 +763,61 @@ function ComparadorContent() {
                           </div>
                         </div>
 
+                        {/* Cuadro Verde: Indicador de Match y Afinidad (si hay 2 o más vehículos) */}
+                        {vehiclesData.length >= 2 && vehScore && (
+                          <div className={`px-4 py-2 border-t transition-colors ${
+                            isSponsored 
+                              ? 'bg-[#F0F9FF] border-[#00BFFF]/40' 
+                              : isHighestMatch
+                                ? 'bg-[#F8F9FA] border-[#0A1F33]/20'
+                                : 'bg-[#F8F9FA] border-[#C0C0C0]/30'
+                          }`}>
+                            <div className="flex items-center justify-between text-[10px] mb-1 font-bold">
+                              <span className="uppercase tracking-wider text-[#3A3A3C] flex items-center gap-1">
+                                {isSponsored ? (
+                                  <span className="text-[#00BFFF] font-black">
+                                    {isHighestMatch ? '★ Match de Preferencias (Mayor Afinidad)' : 'Afinidad con tus preferencias'}
+                                  </span>
+                                ) : isHighestMatch ? (
+                                  <span className="text-[#0A1F33] font-bold">★ Mayor Afinidad</span>
+                                ) : (
+                                  <span>Afinidad</span>
+                                )}
+                              </span>
+                              <span 
+                                className={`font-black text-xs ${
+                                  isSponsored 
+                                    ? 'text-[#00BFFF]' 
+                                    : isHighestMatch
+                                      ? 'text-[#0A1F33]'
+                                      : 'text-[#3A3A3C]'
+                                }`} 
+                                style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}
+                              >
+                                {vehScore.totalScore}% Match
+                              </span>
+                            </div>
+                            <div className="w-full bg-[#E0E0E0] h-1.5 overflow-hidden">
+                              <div 
+                                className={`h-full transition-all duration-500 ${
+                                  isSponsored 
+                                    ? 'bg-[#00BFFF]' 
+                                    : isHighestMatch 
+                                      ? 'bg-[#0A1F33]' 
+                                      : 'bg-[#3A3A3C]/70'
+                                }`}
+                                style={{ width: `${vehScore.totalScore}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         {/* Bottom: Precio y Cotizar */}
-                        <div className="p-4 pt-3 bg-[#F8F9FA] border-t border-[#C0C0C0]/40 flex items-center justify-between gap-3">
+                        <div className={`p-4 pt-3 border-t transition-colors flex items-center justify-between gap-2 sm:gap-3 ${
+                          isSponsored 
+                            ? 'bg-[#F0F9FF] border-[#00BFFF]/40' 
+                            : 'bg-[#F8F9FA] border-[#C0C0C0]/40'
+                        }`}>
                           <div>
                             <span className="text-[8px] font-bold text-[#C0C0C0] uppercase tracking-widest block leading-none mb-1">Precio Contado</span>
                             <span className="font-black text-lg sm:text-xl text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -682,9 +826,20 @@ function ComparadorContent() {
                           </div>
                           <button
                             onClick={() => setConsultingVehicle(veh)}
-                            className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-2.5 px-4 transition-colors shrink-0 rounded-none"
+                            className={`font-bold text-[10px] uppercase tracking-widest py-2.5 px-3.5 transition-all shrink-0 rounded-none shadow-sm flex items-center gap-1.5 ${
+                              isSponsored
+                                ? 'bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF]'
+                                : 'bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF]'
+                            }`}
                           >
-                            Consultar
+                            {isSponsored ? (
+                              <>
+                                <span>Cotizar Opción Patrocinada</span>
+                                <span>→</span>
+                              </>
+                            ) : (
+                              <span>Consultar</span>
+                            )}
                           </button>
                         </div>
                       </>
@@ -710,28 +865,35 @@ function ComparadorContent() {
                 );
               })}
             </div>
+            
+            {/* ========================================================
+                1.5. COMPARADOR DINÁMICO POR ATRIBUTOS (PONDERACIÓN INTELIGENTE)
+                ======================================================== */}
+            {vehiclesData.length >= 2 && (
+              <DynamicAttributeComparator
+                vehicles={vehiclesData}
+                weights={weights}
+                onWeightsChange={setWeights}
+                scores={attributeScores}
+                winnerId={winnerId}
+              />
+            )}
 
             {/* ========================================================
-                2. BARRA DE CONTROL Y CATEGORÍAS (INTERACTIVA)
+                2. BARRA DE CONTROL Y ACCIONES (FICHA TÉCNICA)
                 ======================================================== */}
-            <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-3 sm:p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-3 sm:p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
               
-              {/* Salto Rápido a Categorías */}
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full md:w-auto">
-                <span className="text-[9px] font-black uppercase tracking-widest text-[#0A1F33] mr-1 hidden sm:inline-block">Ir a:</span>
-                {SPEC_SECTIONS.map((sec) => (
-                  <button
-                    key={sec.id}
-                    onClick={() => scrollToSection(sec.id)}
-                    className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 border border-[#C0C0C0] hover:border-[#00BFFF] hover:text-[#00BFFF] bg-[#F8F9FA] transition-colors rounded-none"
-                  >
-                    {sec.icon} {sec.title.split('. ')[1]}
-                  </button>
-                ))}
+              {/* Título de Ficha Técnica (Reemplaza los botones de categorías según requerimiento) */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="w-2 h-2 rounded-full bg-[#00BFFF]"></span>
+                <h2 className="text-xs sm:text-sm font-black text-[#0A1F33] uppercase tracking-wider" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  Ficha Técnica Detallada
+                </h2>
               </div>
 
               {/* Controles de Vista: Solo Diferencias + Switch Mobile */}
-              <div className="flex items-center justify-between sm:justify-end gap-3 w-full md:w-auto border-t md:border-t-0 pt-3 md:pt-0 border-[#C0C0C0]/50">
+              <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0 border-[#C0C0C0]/50">
                 {/* Selector Modo Mobile (Versus vs Tabla) */}
                 <div className="flex md:hidden items-center border border-[#C0C0C0] p-0.5 bg-[#F8F9FA]">
                   <button
@@ -1041,6 +1203,15 @@ function ComparadorContent() {
                 </Link>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* DISCLAIMER DE RESPONSABILIDAD GENERAL */}
+        {vehiclesData.length > 0 && (
+          <div className="w-full mt-6 mb-2 text-center">
+            <p className="text-[10px] text-[#3A3A3C]/80 italic max-w-2xl mx-auto leading-relaxed">
+              Los datos mostrados se basan en las fichas técnicas oficiales de las concesionarias. Recomendamos agendar un Test Drive para comprobar el vehículo en persona.
+            </p>
           </div>
         )}
       </div>
