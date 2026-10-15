@@ -24,6 +24,8 @@ import {
   VehicleScoreResult, 
   computeAttributeScores 
 } from '../../lib/attributeScoring';
+import { fetchPopularComparisonsData, PopularComparisonItem } from '../../lib/popularComparisons';
+import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 
 // ==========================================
 // INTERFACES (Estructura de Datos)
@@ -315,8 +317,8 @@ function ComparadorContent() {
   // DATACAR CHECK
   const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
 
-  // Popular Comparisons
-  const [popularComparisons, setPopularComparisons] = useState<{combo: string, ids: string[], count: number}[]>([]);
+  // Popular Comparisons (5 a 8)
+  const [popularComparisons, setPopularComparisons] = useState<PopularComparisonItem[]>([]);
 
   // Ponderador Dinámico por Atributos
   const [weights, setWeights] = useState<AttributeWeights>({
@@ -450,29 +452,18 @@ function ComparadorContent() {
   }, [searchParams]);
 
   // ==========================================
-  // 1.5. CARGA DE COMPARACIONES POPULARES
+  // 1.5. CARGA DE COMPARACIONES POPULARES (5 A 8)
   // ==========================================
   useEffect(() => {
     const fetchPopularComparisons = async () => {
       try {
-        const statsSnap = await getDocs(collection(db, 'comparison_stats'));
-        const counts: Record<string, { combo: string, ids: string[], count: number }> = {};
-        
-        statsSnap.forEach(docSnap => {
-          const data = docSnap.data();
-          if (data.combo && data.ids && Array.isArray(data.ids)) {
-            if (!counts[data.combo]) {
-              counts[data.combo] = { combo: data.combo, ids: data.ids, count: 0 };
-            }
-            counts[data.combo].count += 1;
-          }
-        });
-
-        const sortedComparisons = Object.values(counts)
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 8);
-
-        setPopularComparisons(sortedComparisons);
+        const [vers, mods, brs] = await Promise.all([
+          getCachedVersions(),
+          getCachedModels(),
+          getCachedBrands(),
+        ]);
+        const comps = await fetchPopularComparisonsData(vers, mods, brs);
+        setPopularComparisons(comps);
       } catch (error) {
         console.error("Error fetching popular comparisons", error);
       }
@@ -645,6 +636,9 @@ function ComparadorContent() {
             <h1 className="font-black text-2xl sm:text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               Comparador de <span className="text-[#00BFFF]">Autos 0KM</span>
             </h1>
+            <p className="text-[11px] text-[#3A3A3C] font-bold uppercase tracking-wider mt-1.5">
+              Compará sin costo • Precios oficiales directos de concesionaria, sin recargos ni comisiones
+            </p>
           </div>
           {compareItems.length > 0 && (
             <div className="flex items-center gap-4">
@@ -834,11 +828,11 @@ function ComparadorContent() {
                           >
                             {isSponsored ? (
                               <>
-                                <span>Cotizar Opción Patrocinada</span>
+                                <span>{formatHablarCon(veh.concesionaria)}</span>
                                 <span>→</span>
                               </>
                             ) : (
-                              <span>Consultar</span>
+                              <span>{formatHablarCon(veh.concesionaria)}</span>
                             )}
                           </button>
                         </div>
@@ -1094,9 +1088,9 @@ function ComparadorContent() {
                                     <button
                                       onClick={() => setConsultingVehicle(veh)}
                                       className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-[9px] font-bold uppercase tracking-wider py-1 px-2.5 transition-colors rounded-none"
-                                      title="Cotizar este vehículo"
+                                      title={formatHablarCon(veh.concesionaria)}
                                     >
-                                      Cotizar
+                                      {formatHablarCon(veh.concesionaria)}
                                     </button>
                                     <button
                                       onClick={() => handleRemove(veh.id)}
@@ -1310,7 +1304,7 @@ function ComparadorContent() {
         vehiculoInteres={`Comparativa: ${vehiclesData.map(v => `${v.brandName} ${v.modelName}`).join(' vs ')}`}
         marcaVehiculo={vehiclesData.map(v => v.brandName).join(' / ')}
         origenLead="Comparador — Asesoría comparativa"
-        concesionariaDestino="A designar (Central DATACAR)"
+        concesionariaDestino=""
       />
     </main>
   );

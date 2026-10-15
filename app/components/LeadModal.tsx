@@ -8,6 +8,7 @@ import { db } from '../../lib/firebase';
 import { sendLeadNotificationEmail } from '../../lib/mailer';
 import { normalizePhonePY } from '../../lib/phone';
 import { track } from '../../lib/analytics';
+import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 import Modal from './a11y/Modal';
 
 interface LeadModalProps {
@@ -42,6 +43,8 @@ export default function LeadModal({
   const emailId = `${idPrefix}-email`;
   const telefonoErrId = `${idPrefix}-telefono-err`;
   const emailErrId = `${idPrefix}-email-err`;
+
+  const cleanConcesionaria = sanitizeDealershipName(concesionariaDestino);
 
   // Telemetría de embudo: apertura del modal (con su origen).
   useEffect(() => {
@@ -96,6 +99,8 @@ export default function LeadModal({
       ? normalizedPhone
       : 'No proporcionado';
 
+    const cleanConcesionaria = sanitizeDealershipName(concesionariaDestino);
+
     try {
       // 1. Inyección directa a Firebase (La Bóveda)
       await addDoc(collection(db, 'leads'), {
@@ -105,8 +110,8 @@ export default function LeadModal({
         vehiculo: `${marcaVehiculo} ${vehiculoInteres}`,
         marca: marcaVehiculo,
         origen: origenLead,
-        concesionaria_destino: concesionariaDestino || 'A designar (Central DATACAR)',
-        concesionaria_destino_norm: (concesionariaDestino || 'A DESIGNAR').toUpperCase().trim(),
+        concesionaria_destino: cleanConcesionaria || 'A designar (Central DATACAR)',
+        concesionaria_destino_norm: (cleanConcesionaria || 'A DESIGNAR').toUpperCase().trim(),
         estado: 'Nuevo',
         createdAt: serverTimestamp(),
       });
@@ -119,7 +124,7 @@ export default function LeadModal({
           leadEmail: formData.email.trim(),
           vehicleOfInterest: `${marcaVehiculo} ${vehiculoInteres}`,
           origen: origenLead,
-          concesionariaDestino: concesionariaDestino || 'Central DATACAR',
+          concesionariaDestino: cleanConcesionaria || 'Central DATACAR',
         });
       } catch (mailError) {
         // Silenciamos el error de correo hacia el cliente. El Lead YA está salvado en DB.
@@ -176,18 +181,21 @@ export default function LeadModal({
             ¡Listo, te contactamos!
           </h3>
           <p className="text-xs text-[#3A3A3C] font-medium leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
-            Un asesor de <strong className="text-[#0A1F33]">{concesionariaDestino || 'DATACAR'}</strong> te va a contactar en menos de 2 h hábiles para avanzar con tu {marcaVehiculo}.
+            Un asesor de <strong className="text-[#0A1F33]">{cleanConcesionaria || 'la concesionaria oficial'}</strong> te va a contactar en menos de 2 h hábiles para avanzar con tu {marcaVehiculo}.
           </p>
         </div>
       ) : (
         <>
           <div className="mb-6">
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">
-              Asesoría sin costo
+              Servicio 100% Sin Costo
             </span>
-            <h3 className="font-black text-2xl text-[#0A1F33] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-              Quiero que me contacten
+            <h3 className="font-black text-2xl text-[#0A1F33] uppercase leading-tight mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+              {formatHablarCon(cleanConcesionaria)}
             </h3>
+            <p className="text-[10px] text-[#1E8E3E] font-bold uppercase tracking-wider mb-2">
+              Precios oficiales directos de concesionaria, sin comisiones ni recargos
+            </p>
             <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest font-bold border-b border-[#C0C0C0]/50 pb-4">
               Vehículo: <span className="text-[#3A3A3C]">{marcaVehiculo} {vehiculoInteres}</span>
             </p>
@@ -278,7 +286,7 @@ export default function LeadModal({
               disabled={status === 'loading'}
               className="w-full bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 mt-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-transparent rounded-none"
             >
-              {status === 'loading' ? 'Procesando...' : 'Quiero que me contacten'}
+              {status === 'loading' ? 'Procesando...' : formatHablarCon(cleanConcesionaria)}
             </button>
 
             <p className="text-[10px] text-center text-[#3A3A3C] font-medium leading-relaxed mt-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>

@@ -4,11 +4,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getCachedBrands, getCachedModels, getCachedCampaigns } from '../lib/catalogCache';
+import { getCachedBrands, getCachedModels, getCachedCampaigns, getCachedVersions } from '../lib/catalogCache';
 // CORRECCIÓN BUGS DE RUTA: Apuntamos al directorio actual porque components está dentro de app/
 import NewsletterForm from './components/NewsletterForm';
 import { isOptimizableImageSrc, isValidImageSrc } from '../lib/imageSrc';
 import { normalizeCarroceria } from '../lib/carroceria';
+import { normalizeCombustible, combustibleLabel } from '../lib/combustible';
 import { normalizeExternalUrl } from '../lib/externalUrl';
 import Navbar, { NavItem } from './components/Navbar';
 import InstagramReelsSection from './components/InstagramReelsSection';
@@ -16,11 +17,25 @@ import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../lib/finance';
 import { useLead } from './context/LeadContext';
+import { fetchPopularComparisonsData, PopularComparisonItem } from '../lib/popularComparisons';
+import { resolveModelDealership, sanitizeDealershipName } from '../lib/dealerships';
 // ==========================================
 // INTERFACES B2B 
 // ==========================================
 interface AutoModel {
-  id: string; brandId: string; brand: string; name: string; category: string; price: number; img: string; isPopular?: boolean;
+  id: string;
+  brandId: string;
+  brand: string;
+  name: string;
+  category: string;
+  price: number;
+  img: string;
+  isPopular?: boolean;
+  combustible?: string;
+  transmision?: string;
+  plazas?: number;
+  concesionaria?: string;
+  versionesCount?: number;
 }
 interface SearchItem { id: string; type: 'Marca' | 'Modelo'; title: string; subtitle?: string; brandId?: string; modelId?: string; }
 interface BrandItem { id: string; name: string; logoUrl?: string; }
@@ -109,8 +124,8 @@ export default function HomeClient() {
   
   const [isLoading, setIsLoading] = useState(true);
 
-  // Comparaciones Populares
-  const [topComparisons, setTopComparisons] = useState<{combo: string, ids: string}[]>([]);
+  // Comparaciones Populares (5 a 8)
+  const [topComparisons, setTopComparisons] = useState<PopularComparisonItem[]>([]);
 
   // Calculadora Financiera
   const { openLeadModal } = useLead();
@@ -145,10 +160,11 @@ export default function HomeClient() {
     const fetchEcosistema = async () => {
       setIsLoading(true);
       try {
-        const [brandsData, modelsData, campaignsData] = await Promise.all([
+        const [brandsData, modelsData, campaignsData, versionsData] = await Promise.all([
           getCachedBrands(),
           getCachedModels(),
           getCachedCampaigns(),
+          getCachedVersions(),
         ]);
 
         const brandsMap: Record<string, string> = {};
@@ -163,10 +179,26 @@ export default function HomeClient() {
           tempSearchIndex.push({ id: `b_${brandData.id}`, type: 'Marca', title: brandName });
         });
 
+        const versionsByModel = new Map<string, any[]>();
+        versionsData.forEach((v: any) => {
+          if (!v.modelId) return;
+          const list = versionsByModel.get(v.modelId) || [];
+          list.push(v);
+          versionsByModel.set(v.modelId, list);
+        });
+
         const fetchedAutos: AutoModel[] = modelsData.map((data) => {
           const brandName = brandsMap[data.brandId] || 'MARCA';
           const cleanCategory = normalizeCarroceria(data.tipo_carroceria);
           tempTipos.add(cleanCategory);
+
+          const mVers = versionsByModel.get(data.id) || [];
+          const repVer = [...mVers].sort((a: any, b: any) => (Number(a.price) || 0) - (Number(b.price) || 0))[0] || mVers[0];
+          const rawComb = repVer ? normalizeCombustible(repVer.specs?.combustible) : '';
+          const cleanComb = rawComb ? combustibleLabel(rawComb) || rawComb : '';
+          const transmision = repVer?.specs?.transmision || '';
+          const plazas = Number(repVer?.specs?.plazas) || 5;
+          const concesionaria = resolveModelDealership(mVers, repVer);
 
           tempSearchIndex.push({ id: `m_${data.id}`, type: 'Modelo', title: `${brandName} ${data.name}`, subtitle: cleanCategory, brandId: data.brandId, modelId: data.id });
           return {
@@ -177,7 +209,12 @@ export default function HomeClient() {
             category: cleanCategory,
             price: Number(data.startingPrice) || 0,
             img: data.imgUrl || '',
-            isPopular: data.isPopular || false
+            isPopular: data.isPopular || false,
+            combustible: cleanComb,
+            transmision: transmision,
+            plazas: plazas,
+            concesionaria: concesionaria,
+            versionesCount: mVers.length,
           };
         });
 
@@ -198,28 +235,22 @@ export default function HomeClient() {
         if (validCampaign) setActiveAd(validCampaign);
 
         // Carga de Configuración Financiera
-        const finDoc = await getDoc(doc(db, 'config', 'financial'));
-        if (finDoc.exists()) {
-          setFinancialConfig(finDoc.data() as FinancialConfig);
+        try {
+          const finDoc = await getDoc(doc(db, 'config', 'financial'));
+          if (finDoc.exists()) {
+            setFinancialConfig(finDoc.data() as FinancialConfig);
+          }
+        } catch (err) {
+          console.warn("Configuración financiera no disponible:", err);
         }
 
-        // Carga de Comparaciones Populares
-        const statsSnap = await getDocs(collection(db, 'comparison_stats'));
-        const comboCounts: Record<string, { count: number, ids: string }> = {};
-        statsSnap.forEach(doc => {
-          const data = doc.data();
-          if (data.combo && data.ids) {
-            if (!comboCounts[data.combo]) {
-              comboCounts[data.combo] = { count: 0, ids: data.ids };
-            }
-            comboCounts[data.combo].count += 1;
-          }
-        });
-        const sortedCombos = Object.entries(comboCounts)
-          .sort((a, b) => b[1].count - a[1].count)
-          .slice(0, 6)
-          .map(([combo, data]) => ({ combo, ids: data.ids }));
-        setTopComparisons(sortedCombos);
+        // Carga de Comparaciones Populares (5 a 8 items con fallback)
+        try {
+          const comps = await fetchPopularComparisonsData(versionsData, modelsData, brandsData);
+          setTopComparisons(comps);
+        } catch (err) {
+          console.warn("Error cargando comparaciones populares:", err);
+        }
 
       } catch (error) {
         console.error("Error Firebase:", error);
@@ -334,7 +365,7 @@ export default function HomeClient() {
           ========================================== */}
       <section className="w-full bg-[#0A1F33] pt-20 pb-16 px-4 flex flex-col items-center relative z-40 border-b-4 border-[#00BFFF]">
         <div className="text-center mb-10">
-          <span className="bg-[#FFFFFF]/10 text-[#00BFFF] border border-[#00BFFF]/30 font-bold tracking-widest uppercase px-4 py-1 text-[10px] mb-6 inline-block">Antes de comprar, compará</span>
+          <span className="bg-[#FFFFFF]/10 text-[#00BFFF] border border-[#00BFFF]/30 font-bold tracking-widest uppercase px-4 py-1 text-[10px] mb-6 inline-block">100% Sin Costo • Precios Oficiales de Concesionaria</span>
           <h1 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Visitá todas las concesionarias<br/><span className="text-[#00BFFF]">en un solo lugar.</span>
           </h1>
@@ -382,6 +413,11 @@ export default function HomeClient() {
             </div>
           )}
         </div>
+
+        {/* Microcopy de Transparencia Comercial */}
+        <p className="text-[11px] text-[#C0C0C0] uppercase font-bold tracking-wider mb-2 text-center">
+          Compará sin costo • Precios directos de concesionaria, 0% recargos ni comisiones
+        </p>
 
         {/* Filtros Rápidos */}
         <div className="flex flex-wrap justify-center gap-3 px-2 mt-4 max-w-5xl" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
@@ -479,20 +515,21 @@ export default function HomeClient() {
             </div>
           ) : autosMasBuscados.length > 0 ? (
             autosMasBuscados.map((auto) => (
-              <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block group">
-                <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#0A1F33] transition-all flex flex-col overflow-hidden">
-                  {/* Top Bar de la Tarjeta */}
+              <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block group h-full">
+                <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#00BFFF] hover:shadow-lg transition-all duration-200 flex flex-col justify-between overflow-hidden relative">
+                  
+                  {/* Top Bar: Marca & Categoría */}
                   <div className="px-5 py-3 border-b border-[#C0C0C0]/30 flex justify-between items-center bg-[#F8F9FA]">
-                    <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest">
+                    <span className="text-[10px] font-black text-[#00BFFF] uppercase tracking-wider">
                       {auto.brand}
                     </span>
-                    <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest border border-[#C0C0C0] px-2 py-0.5 bg-[#FFFFFF]">
+                    <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-wider border border-[#C0C0C0] px-2.5 py-0.5 bg-[#FFFFFF]">
                       {auto.category}
                     </span>
                   </div>
 
-                  {/* Imagen Grande y Nítida */}
-                  <div className="relative w-full h-48 sm:h-52 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors p-6">
+                  {/* Imagen del Vehículo */}
+                  <div className="relative w-full h-44 sm:h-48 bg-gradient-to-b from-[#FAFBFD] to-[#FFFFFF] p-4 flex items-center justify-center overflow-hidden">
                     {isValidImageSrc(auto.img) ? (
                       <Image
                         src={auto.img}
@@ -509,23 +546,59 @@ export default function HomeClient() {
                     )}
                   </div>
 
-                  {/* Datos del Auto */}
-                  <div className="p-5 flex flex-col flex-grow border-t border-[#C0C0C0]/40 bg-[#FFFFFF]">
-                    <h3 className="font-black text-lg text-[#0A1F33] uppercase leading-tight mb-3 truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  {/* Información Detallada del Modelo */}
+                  <div className="p-5 pt-3 flex flex-col flex-grow bg-[#FFFFFF]">
+                    <h3 className="font-black text-lg text-[#0A1F33] uppercase leading-tight mb-2 truncate group-hover:text-[#00BFFF] transition-colors" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                       {auto.name}
                     </h3>
 
-                    <div className="mt-auto pt-4 border-t border-[#C0C0C0]/40 flex justify-between items-end">
-                      <div>
-                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio de lista desde</span>
-                        <p className="font-black text-2xl text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-                          US$ {auto.price.toLocaleString()}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                        Ver ficha →
-                      </span>
+                    {/* Ficha Rápida / Atributos Detallados */}
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {auto.combustible && (
+                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2 py-0.5 border border-[#E0E2E6] uppercase">
+                          ⛽ {auto.combustible}
+                        </span>
+                      )}
+                      {auto.transmision && (
+                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2 py-0.5 border border-[#E0E2E6] uppercase">
+                          ⚙️ {auto.transmision.toLowerCase().includes('auto') || auto.transmision.toLowerCase().includes('at') || auto.transmision.toLowerCase().includes('cvt') ? 'Automática' : 'Manual'}
+                        </span>
+                      )}
+                      {auto.plazas ? (
+                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2 py-0.5 border border-[#E0E2E6] uppercase">
+                          👥 {auto.plazas} Plazas
+                        </span>
+                      ) : null}
+                      {auto.versionesCount && auto.versionesCount > 1 ? (
+                        <span className="text-[9px] font-bold text-[#00BFFF] bg-[#F0FBFF] px-2 py-0.5 border border-[#00BFFF]/30 uppercase">
+                          {auto.versionesCount} Versiones
+                        </span>
+                      ) : null}
                     </div>
+
+                    {/* Concesionaria oficial */}
+                    {auto.concesionaria && (
+                      <p className="text-[9px] text-[#6A6A6C] uppercase font-semibold tracking-wider mb-3 truncate flex items-center gap-1">
+                        <span className="text-[#1E8E3E]">✓</span> Oficial: <span className="font-bold text-[#3A3A3C]">{auto.concesionaria}</span>
+                      </p>
+                    )}
+
+                    {/* Precio Contado */}
+                    <div className="mt-auto pt-3 border-t border-[#C0C0C0]/50">
+                      <span className="text-[9px] text-[#6A6A6C] font-bold uppercase tracking-widest block mb-0.5">
+                        Precio contado desde
+                      </span>
+                      <p className="font-black text-2xl text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                        US$ {auto.price.toLocaleString()}
+                      </p>
+                    </div>
+
+                    {/* CTA Claro y Prominente */}
+                    <div className="mt-4 w-full bg-[#0A1F33] group-hover:bg-[#00BFFF] text-[#FFFFFF] group-hover:text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-3 text-center transition-all flex items-center justify-center gap-2 border border-transparent shadow-xs">
+                      <span>Ver Ficha y Versiones</span>
+                      <span className="group-hover:translate-x-1 transition-transform">→</span>
+                    </div>
+
                   </div>
                 </div>
               </Link>
@@ -810,7 +883,11 @@ export default function HomeClient() {
         <div className="flex flex-wrap gap-4">
           {topComparisons.length > 0 ? (
             topComparisons.map((comp, idx) => (
-              <Link key={idx} href={`/comparador?autos=${comp.ids}`} className="border border-[#C0C0C0] hover:border-[#00BFFF] bg-[#FFFFFF] p-4 text-center font-bold text-[#0A1F33] text-[11px] uppercase tracking-widest transition-colors hover:text-[#00BFFF]">
+              <Link
+                key={idx}
+                href={`/comparador?autos=${Array.isArray(comp.ids) ? comp.ids.join(',') : comp.ids}`}
+                className="border border-[#C0C0C0] hover:border-[#00BFFF] bg-[#FFFFFF] p-4 text-center font-bold text-[#0A1F33] text-[11px] uppercase tracking-widest transition-colors hover:text-[#00BFFF]"
+              >
                 {comp.combo}
               </Link>
             ))

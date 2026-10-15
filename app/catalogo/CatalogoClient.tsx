@@ -946,7 +946,6 @@ function CatalogoContent() {
                           marcaVehiculo={auto.brand}
                           concesionariaDestino={auto.concesionaria || ''}
                           origenLead="Catálogo General"
-                          textoMenu="Consultar Ahora"
                           variante="primario"
                         />
                         <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="w-full text-center border border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-3 transition-colors rounded-none">

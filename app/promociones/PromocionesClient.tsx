@@ -279,7 +279,7 @@ export default function PromocionesClient() {
                         vehiculoInteres={`${brand?.name} ${model?.name} ${version.name}`}
                         marcaVehiculo={brand?.name || ''}
                         origenLead="Promociones"
-                        concesionariaDestino={concesionariaObj?.id || concesionariaName}
+                        concesionariaDestino={concesionariaName || concesionariaObj?.name || ''}
                       />
                     </div>
                   </div>

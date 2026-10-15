@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useLead } from '../context/LeadContext';
+import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 
 interface BotonCotizarProps {
   vehiculoInteres: string;
@@ -17,19 +18,22 @@ export default function BotonCotizar({
   marcaVehiculo, 
   origenLead, 
   concesionariaDestino,
-  textoMenu = 'Consultar',
+  textoMenu,
   variante = 'primario'
 }: BotonCotizarProps) {
   const { openLeadModal } = useLead();
+  const cleanConcesionaria = sanitizeDealershipName(concesionariaDestino);
 
   const handleClick = () => {
     openLeadModal({
       vehiculoInteres,
       marcaVehiculo,
       origenLead,
-      concesionariaDestino
+      concesionariaDestino: cleanConcesionaria
     });
   };
+
+  const labelBoton = textoMenu || formatHablarCon(cleanConcesionaria);
 
   // Estilos basados estrictamente en el Manual de Marca DATACAR v2.1
   const estilosBase = "w-full font-bold text-xs uppercase tracking-widest py-3 transition-colors text-center cursor-pointer";
@@ -42,7 +46,7 @@ export default function BotonCotizar({
       className={`${estilosBase} ${variante === 'primario' ? estilosPrimario : estilosSecundario}`}
       style={{ fontFamily: 'var(--font-inter), sans-serif' }}
     >
-      {textoMenu}
+      {labelBoton}
     </button>
   );
 }

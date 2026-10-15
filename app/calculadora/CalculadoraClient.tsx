@@ -144,7 +144,7 @@ export default function CalculadoraClient() {
       // Armamos el payload dinámico para inyectarlo en el correo
       setModalPayload({
         marca: bName,
-        vehiculo: `${mName} ${vName} | (P.Lista: US$ ${precioVehiculo} / Entrega: US$ ${entregaDirecto} / ${plazoDirecto} meses / Cuota Est: US$ ${Math.round(cuotaCalculada || 0)})`,
+        vehiculo: `${mName} ${vName} | (P.Contado: US$ ${precioVehiculo} / Entrega: US$ ${entregaDirecto} / ${plazoDirecto} meses / Cuota Est: US$ ${Math.round(cuotaCalculada || 0)})`,
         concesionaria: bName 
       });
     } else {

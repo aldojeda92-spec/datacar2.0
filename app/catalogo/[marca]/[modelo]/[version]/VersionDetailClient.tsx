@@ -20,6 +20,7 @@ import { FAQ_FICHA_VEHICULO as faqs } from '../../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../../lib/compareStorage';
 import { getCachedConcesionarias } from '../../../../../lib/catalogCache';
 import { buildCheckedDealershipSet, isDatacarCheck } from '../../../../../lib/datacarCheck';
+import { sanitizeDealershipName, formatHablarCon } from '../../../../../lib/dealerships';
 import { track } from '../../../../../lib/analytics';
 import DatacarCheckBadge from '../../../../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../../../../components/Navbar';
@@ -242,7 +243,7 @@ export default function VersionDetailClient({
               </p>
 
               <div className="mb-8 border-l-4 border-[#0A1F33] pl-4 bg-[#FFFFFF] p-4 border-t border-r border-b border-[#C0C0C0]">
-                <span className="text-[10px] uppercase font-bold text-[#C0C0C0] tracking-widest block mb-1">Precio de Lista Sugerido</span>
+                <span className="text-[10px] uppercase font-bold text-[#C0C0C0] tracking-widest block mb-1">Precio Contado Sugerido</span>
                 <span className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {version.price.toLocaleString()}</span>
                 {formatFechaLarga(version.updatedAt) && (
                   <span className="block text-[10px] text-[#C0C0C0] font-medium tracking-wide mt-1">Precio actualizado el {formatFechaLarga(version.updatedAt)}</span>
@@ -254,9 +255,14 @@ export default function VersionDetailClient({
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <button onClick={() => { setLeadOrigen('ficha'); setShowConsultar(true); }} className="flex-1 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 border border-transparent rounded-none">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> Contactar a un Asesor
-                </button>
+                {(() => {
+                  const cleanDealership = sanitizeDealershipName(version.concesionaria);
+                  return (
+                    <button onClick={() => { setLeadOrigen('ficha'); setShowConsultar(true); }} className="flex-1 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 border border-transparent rounded-none">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> {formatHablarCon(cleanDealership)}
+                    </button>
+                  );
+                })()}
                 <button onClick={() => setShowCalcular(true)} className="flex-1 bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 rounded-none">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg> Simular Cuotas
                 </button>
@@ -393,7 +399,7 @@ export default function VersionDetailClient({
         }
         marcaVehiculo={brand?.name || ''}
         origenLead={leadOrigen === 'calc' ? 'Calculadora en Ficha' : 'Ficha Versión Exacta'}
-        concesionariaDestino={version.concesionaria || brand?.name || 'Central DATACAR'}
+        concesionariaDestino={sanitizeDealershipName(version.concesionaria) || brand?.name || ''}
       />
 
       <Modal

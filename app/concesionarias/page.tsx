@@ -1,16 +1,23 @@
 // app/concesionarias/page.tsx
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import Link from 'next/link';
-import { collection, getDocs, doc, getDoc, updateDoc, addDoc, setDoc, serverTimestamp, query, where, writeBatch } from 'firebase/firestore';
+import Image from 'next/image';
+import { 
+  collection, getDocs, doc, getDoc, updateDoc, addDoc, setDoc, deleteDoc, 
+  serverTimestamp, query, where, writeBatch 
+} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { db, auth } from '../../lib/firebase';
+import { db, auth, storage } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { useToast } from '../context/ToastContext';
 import { sendDealershipRequestEmail } from '../../lib/mailer';
+import { invalidateCatalogCache } from '../../lib/catalogCache';
+import Modal from '../components/a11y/Modal';
 
 // ==========================================
 // INTERFACES B2B
@@ -21,7 +28,147 @@ interface UserData {
   marcasPermitidas: string[];
 }
 
-interface RequestForm { nombre: string; cargo: string; concesionaria: string; marcas: string; telefono: string; email: string; }
+interface RequestForm {
+  nombre: string;
+  cargo: string;
+  concesionaria: string;
+  marcas: string;
+  telefono: string;
+  email: string;
+}
+
+// ==========================================
+// HELPERS Y SUBIDA DE IMÁGENES
+// ==========================================
+const isValidImageSrc = (url?: string): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  return trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/');
+};
+
+const isOptimizableImageSrc = (url?: string): boolean => {
+  if (!isValidImageSrc(url)) return false;
+  const trimmed = url!.trim();
+  return trimmed.startsWith('/') || trimmed.startsWith('https://images.unsplash.com');
+};
+
+const formatLastModified = (val: any) => {
+  if (!val) return 'Sin fecha';
+  try {
+    const d = val?.toDate ? val.toDate() : new Date(val);
+    if (isNaN(d.getTime())) return 'Sin fecha';
+    return d.toLocaleString('es-PY', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return 'Sin fecha';
+  }
+};
+
+function ImageUploadField({ label, folder, value, onChange, accentClass }: {
+  label: string;
+  folder: string;
+  value: string;
+  onChange: (url: string) => void;
+  accentClass?: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const inputId = useId();
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError('');
+    setUploading(true);
+
+    try {
+      // 1. Intentar subida mediante el endpoint interno del servidor (evita bloqueos de CORS)
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', folder);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          onChange(data.url);
+          return;
+        }
+      }
+
+      // 2. Fallback a Firebase Storage si el endpoint local no está disponible
+      const path = `${folder}/${Date.now()}_${file.name}`;
+      const fileRef = ref(storage, path);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      onChange(url);
+    } catch (err: any) {
+      console.error('Error al subir imagen:', err);
+      setError(err.message || 'Error al subir la imagen. También podés pegar una URL directa abajo.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={inputId} className={`text-[10px] font-bold uppercase block ${accentClass || 'text-[#3A3A3C]'}`}>{label}</label>
+      
+      {isValidImageSrc(value) && (
+        <div className="flex items-center gap-3 p-2 bg-[#F8F9FA] border border-[#C0C0C0]/50 w-full mb-1">
+          <Image
+            src={value}
+            alt="Vista previa"
+            width={96}
+            height={48}
+            className="h-12 w-auto object-contain border border-[#C0C0C0]/50 p-1 bg-[#FFFFFF]"
+            unoptimized={!isOptimizableImageSrc(value)}
+          />
+          <div className="flex flex-col flex-grow min-w-0">
+            <span className="text-[9px] font-bold text-[#0A1F33] uppercase truncate">URL Actual:</span>
+            <span className="text-[9px] text-[#3A3A3C] font-mono truncate">{value}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <input
+          id={inputId}
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          disabled={uploading}
+          className={`w-full border p-2.5 text-xs focus:outline-none disabled:opacity-50 ${accentClass ? 'border-[#00BFFF]/30 focus:border-[#00BFFF]' : 'focus:border-[#0A1F33]'}`}
+        />
+
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest shrink-0">O pegar URL:</span>
+          <input
+            type="text"
+            placeholder="https://... o /uploads/..."
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="flex-1 border p-1.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+          />
+        </div>
+      </div>
+
+      {uploading && <p className="text-[10px] text-[#00BFFF] font-bold uppercase tracking-wider mt-0.5">Subiendo imagen al servidor...</p>}
+      {error && <p className="text-[10px] text-red-600 mt-0.5">{error}</p>}
+    </div>
+  );
+}
 
 export default function PortalConcesionariasPage() {
   const { showToast } = useToast();
@@ -40,7 +187,7 @@ export default function PortalConcesionariasPage() {
 
   // Dashboard State
   const [activeTab, setActiveTab] = useState<'leads' | 'inventario'>('leads');
-  const [invSubTab, setInvSubTab] = useState<'catalogo' | 'manual' | 'csv'>('catalogo');
+  const [invSubTab, setInvSubTab] = useState<'versiones' | 'modelos' | 'csv'>('versiones');
   
   // Datos relacionales
   const [leads, setLeads] = useState<any[]>([]);
@@ -51,19 +198,52 @@ export default function PortalConcesionariasPage() {
   // ==========================================
   // ESTADOS DE FILTRO PARA INVENTARIO
   // ==========================================
-  const [inventarioSearch, setInventarioSearch] = useState('');
-  const [invFilterMarca, setInvFilterMarca] = useState('Todas');
-  const [invFilterModelo, setInvFilterModelo] = useState('Todos');
+  const [invVerFilterMarca, setInvVerFilterMarca] = useState('Todas');
+  const [invVerFilterModelo, setInvVerFilterModelo] = useState('Todos');
+  const [searchTermVersiones, setSearchTermVersiones] = useState('');
 
-  // Estado para Edición de Precios
-  const [editingVersion, setEditingVersion] = useState<string | null>(null);
-  const [newPrice, setNewPrice] = useState<string>('');
-  const [newPromo, setNewPromo] = useState<string>('');
+  const [invModFilterMarca, setInvModFilterMarca] = useState('Todas');
+  const [searchTermModelos, setSearchTermModelos] = useState('');
 
-  // Formularios Carga Manual
-  const [modeloForm, setModeloForm] = useState({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', origen: '', startingPrice: '', imgUrl: '' });
-  const [versionForm, setVersionForm] = useState({ 
-    id: '', modelId: '', name: '', price: '', promocion: '', url_auto: '', motor: '', transmision: '', combustible: '', traccion: '', plazas: '', airbags: '', tamanho_pantalla: ''
+  // Edición Inline por Columna con Lápiz (✏️)
+  const [inlineEdit, setInlineEdit] = useState<{
+    type: 'version' | 'modelo';
+    id: string;
+    field: string;
+    value: string;
+  } | null>(null);
+
+  // Modales de Edición / Creación Completa
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  const [versionFormData, setVersionFormData] = useState({
+    id: '',
+    modelId: '',
+    name: '',
+    price: '',
+    promocion: '',
+    url_auto: '',
+    motor: '',
+    transmision: '',
+    combustible: '',
+    traccion: '',
+    plazas: '',
+    airbags: '',
+    tamanho_pantalla: '',
+    garantia: '',
+    adas: '',
+    techo_panoramico: '',
+    asiento_cuero: ''
+  });
+
+  const [modeloModalOpen, setModeloModalOpen] = useState(false);
+  const [modeloFormData, setModeloFormData] = useState({
+    id: '',
+    brandId: '',
+    name: '',
+    tipo_carroceria: 'SUV',
+    origen: '',
+    startingPrice: '',
+    imgUrl: ''
   });
 
   // Estados CSV
@@ -79,8 +259,7 @@ export default function PortalConcesionariasPage() {
       const permitidasNormalizadas = uData.marcasPermitidas.map(m => m.toUpperCase().trim());
       const dealershipNameNorm = uData.dealershipName.toUpperCase().trim();
 
-      // Obtenemos Catálogo Global (los leads se filtran server-side por concesionaria_destino_norm,
-      // no se descarga la colección completa de leads de todas las concesionarias)
+      // Obtenemos Catálogo Global
       const [bSnap, mSnap, vSnap, leadsSnap] = await Promise.all([
         getDocs(collection(db, 'brands')),
         getDocs(collection(db, 'models')),
@@ -121,18 +300,12 @@ export default function PortalConcesionariasPage() {
       setInventario(invEnriquecido);
 
       // ==============================================
-      // RESOLUCIÓN: LEADS (filtrados server-side por concesionaria, y acá
-      // client-side por marca -- una concesionaria puede representar varias
-      // marcas pero un usuario B2B puntual solo tiene acceso a la suya).
-      // Los leads viejos sin campo `marca` (creados antes de este fix, o
-      // generados por flujos que no tienen una marca específica asociada,
-      // ej. "Negociamos por vos") se muestran igual para no ocultar leads
-      // reales por falta de dato histórico.
+      // RESOLUCIÓN: LEADS (filtrados server-side por concesionaria)
       // ==============================================
       const myLeads = leadsSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter((lead: any) => !lead.marca || permitidasNormalizadas.includes(String(lead.marca).toUpperCase().trim()))
-        .sort((a: any, b: any) => b.createdAt?.toDate() - a.createdAt?.toDate());
+        .sort((a: any, b: any) => (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0) - (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0));
 
       setLeads(myLeads);
 
@@ -216,7 +389,7 @@ export default function PortalConcesionariasPage() {
   };
 
   // ==========================================
-  // 4. ALTA Y LOGIN (Con Alerta Ejecutiva)
+  // 4. ALTA Y LOGIN
   // ==========================================
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,55 +441,295 @@ export default function PortalConcesionariasPage() {
   };
 
   // ==========================================
-  // 6. FUNCIONES INVENTARIO (Carga Manual y Edición)
+  // 6. SCOPE DE PERMISOS B2B
   // ==========================================
-  const handleSavePrice = async (versionId: string, versionName: string) => {
+  const permittedBrandsObjects = useMemo(() => {
+    if (!userData?.marcasPermitidas) return [];
+    const norm = userData.marcasPermitidas.map(m => m.toUpperCase().trim());
+    return marcasList.filter(b => norm.includes(b.name.toUpperCase().trim()));
+  }, [marcasList, userData?.marcasPermitidas]);
+
+  const permittedBrandIds = useMemo(() => {
+    return new Set(permittedBrandsObjects.map(b => b.id));
+  }, [permittedBrandsObjects]);
+
+  const permittedModels = useMemo(() => {
+    return modelosList.filter(m => permittedBrandIds.has(m.brandId));
+  }, [modelosList, permittedBrandIds]);
+
+  // ==========================================
+  // 7. EDICIÓN INLINE CON LÁPIZ (✏️)
+  // ==========================================
+  const handleInlineSave = async () => {
+    if (!inlineEdit) return;
+    const { type, id, field, value } = inlineEdit;
     try {
-      await updateDoc(doc(db, 'versions', versionId), { price: Number(newPrice), promocion: newPromo, updatedAt: serverTimestamp() });
-      await logAudit('UPDATE_PRICE', versionId, `Versión ${versionName} actualizada a US$ ${newPrice} | Promo: ${newPromo}`);
-      
-      setInventario(prev => prev.map(v => v.id === versionId ? { ...v, price: Number(newPrice), promocion: newPromo } : v));
-      setEditingVersion(null);
-      setFeedback({ type: 'success', message: 'Precio actualizado en toda la plataforma.' });
-      setTimeout(() => setFeedback({ type: '', message: '' }), 3000);
-    } catch (error) {
-      showToast("Error actualizando precio.");
+      const now = new Date();
+      const updatePayload: any = { updatedAt: serverTimestamp() };
+
+      if (type === 'version') {
+        if (field === 'price') updatePayload.price = Number(value) || 0;
+        else if (field === 'promocion') updatePayload.promocion = value;
+        else if (field === 'name') updatePayload.name = value;
+        else if (field === 'url_auto') updatePayload.url_auto = value;
+        else if (['motor', 'transmision', 'combustible'].includes(field)) {
+          updatePayload[`specs.${field}`] = value;
+        }
+
+        await updateDoc(doc(db, 'versions', id), updatePayload);
+        setInventario(prev => prev.map(v => {
+          if (v.id !== id) return v;
+          if (field === 'price') return { ...v, price: Number(value) || 0, updatedAt: now };
+          if (field === 'promocion') return { ...v, promocion: value, updatedAt: now };
+          if (field === 'name') return { ...v, name: value, updatedAt: now };
+          if (field === 'url_auto') return { ...v, url_auto: value, updatedAt: now };
+          if (['motor', 'transmision', 'combustible'].includes(field)) {
+            return { ...v, specs: { ...(v.specs || {}), [field]: value }, updatedAt: now };
+          }
+          return v;
+        }));
+
+        await logAudit('INLINE_EDIT_VERSION', id, `Modificó campo ${field} a: ${value}`);
+        invalidateCatalogCache('versions');
+        showToast("Campo actualizado correctamente.");
+      } else if (type === 'modelo') {
+        if (field === 'name') updatePayload.name = value.toUpperCase();
+        else if (field === 'tipo_carroceria') updatePayload.tipo_carroceria = normalizeCarroceria(value);
+        else if (field === 'origen') updatePayload.origen = value;
+        else if (field === 'startingPrice') updatePayload.startingPrice = Number(value) || 0;
+
+        await updateDoc(doc(db, 'models', id), updatePayload);
+        setModelosList(prev => prev.map(m => {
+          if (m.id !== id) return m;
+          if (field === 'name') return { ...m, name: value.toUpperCase(), updatedAt: now };
+          if (field === 'tipo_carroceria') return { ...m, tipo_carroceria: normalizeCarroceria(value), updatedAt: now };
+          if (field === 'origen') return { ...m, origen: value, updatedAt: now };
+          if (field === 'startingPrice') return { ...m, startingPrice: Number(value) || 0, updatedAt: now };
+          return m;
+        }));
+
+        await logAudit('INLINE_EDIT_MODEL', id, `Modificó campo ${field} a: ${value}`);
+        invalidateCatalogCache('models');
+        showToast("Modelo actualizado correctamente.");
+      }
+      setInlineEdit(null);
+    } catch (err: any) {
+      console.error("Error en edición inline:", err);
+      showToast("Error al guardar cambios.");
     }
   };
 
-  const handleSaveModelo = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!modeloForm.name || !modeloForm.brandId) return;
+  // ==========================================
+  // 8. BORRADO DE REGISTROS (🗑️)
+  // ==========================================
+  const handleDeleteVersion = async (id: string, name: string) => {
+    if (!confirm(`¿Confirmas la eliminación permanente de la versión "${name}"? Esta acción no se puede deshacer.`)) return;
     try {
-      const id = generarSlug(`${modeloForm.brandId}-${modeloForm.name}`);
-      await setDoc(doc(db, 'models', id), { ...modeloForm, name: modeloForm.name.toUpperCase(), tipo_carroceria: normalizeCarroceria(modeloForm.tipo_carroceria), startingPrice: Number(modeloForm.startingPrice) || 0, updatedAt: serverTimestamp() }, { merge: true });
-      await logAudit('CREATE_MODEL', id, `Modelo creado: ${modeloForm.name.toUpperCase()}`);
-      setFeedback({ type: 'success', message: 'Modelo guardado correctamente. Ahora puedes agregarle versiones.' });
-      setModeloForm({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', origen: '', startingPrice: '', imgUrl: '' }); 
-      if (userData) fetchDashboardData(userData);
-    } catch (err: any) { setFeedback({ type: 'error', message: err.message }); }
+      await deleteDoc(doc(db, 'versions', id));
+      setInventario(prev => prev.filter(v => v.id !== id));
+      await logAudit('DELETE_VERSION', id, `Versión eliminada: ${name}`);
+      invalidateCatalogCache('versions');
+      showToast("Versión eliminada permanentemente.");
+    } catch (err: any) {
+      console.error("Error eliminando versión:", err);
+      showToast("Error al eliminar versión.");
+    }
   };
 
-  const handleSaveVersion = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!versionForm.name || !versionForm.modelId) return;
+  const handleDeleteModelo = async (id: string, name: string) => {
+    // Verificamos si hay versiones creadas bajo este modelo
+    const versionesAsociadas = inventario.filter(v => v.modelId === id);
+    if (versionesAsociadas.length > 0) {
+      alert(`No se puede eliminar el modelo "${name}" porque contiene ${versionesAsociadas.length} versión(es) asociada(s). Primero elimina o traslada sus versiones.`);
+      return;
+    }
+
+    if (!confirm(`¿Confirmas la eliminación permanente del modelo "${name}"? Esta acción no se puede deshacer.`)) return;
     try {
-      const id = `${versionForm.modelId}_${generarSlug(versionForm.name)}`;
-      await setDoc(doc(db, 'versions', id), {
-        modelId: versionForm.modelId, name: versionForm.name, 
-        concesionaria: userData?.dealershipName, // Force B2B ownership
-        promocion: versionForm.promocion, url_auto: versionForm.url_auto, price: Number(versionForm.price) || 0,
-        specs: { motor: versionForm.motor, transmision: versionForm.transmision, combustible: versionForm.combustible, traccion: versionForm.traccion, plazas: Number(versionForm.plazas) || 0, airbags: Number(versionForm.airbags) || 0, tamanho_pantalla: Number(versionForm.tamanho_pantalla) || 0 },
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      
-      await logAudit('CREATE_VERSION', id, `Versión agregada: ${versionForm.name}`);
-      setFeedback({ type: 'success', message: 'Versión añadida a tu inventario correctamente.' });
-      setVersionForm({ id: '', modelId: '', name: '', price: '', promocion: '', url_auto: '', motor: '', transmision: '', combustible: '', traccion: '', plazas: '', airbags: '', tamanho_pantalla: '' });
+      await deleteDoc(doc(db, 'models', id));
+      setModelosList(prev => prev.filter(m => m.id !== id));
+      await logAudit('DELETE_MODEL', id, `Modelo eliminado: ${name}`);
+      invalidateCatalogCache('models');
+      showToast("Modelo eliminado permanentemente.");
       if (userData) fetchDashboardData(userData);
-    } catch (err: any) { setFeedback({ type: 'error', message: err.message }); }
+    } catch (err: any) {
+      console.error("Error eliminando modelo:", err);
+      showToast("Error al eliminar modelo.");
+    }
   };
 
   // ==========================================
-  // 7. CARGA MASIVA CSV (Con Validación RBAC)
+  // 9. MODALES ABM (CREAR / EDITAR COMPLETO)
+  // ==========================================
+  const openNewVersionModal = () => {
+    setVersionFormData({
+      id: '',
+      modelId: permittedModels[0]?.id || '',
+      name: '',
+      price: '',
+      promocion: '',
+      url_auto: '',
+      motor: '',
+      transmision: '',
+      combustible: 'Nafta',
+      traccion: 'Delantera',
+      plazas: '5',
+      airbags: '6',
+      tamanho_pantalla: '10',
+      garantia: '5 Años o 100.000 Km',
+      adas: '',
+      techo_panoramico: '',
+      asiento_cuero: ''
+    });
+    setVersionModalOpen(true);
+  };
+
+  const triggerEditVersion = (v: any) => {
+    setVersionFormData({
+      id: v.id,
+      modelId: v.modelId || '',
+      name: v.name || '',
+      price: String(v.price || ''),
+      promocion: v.promocion || '',
+      url_auto: v.url_auto || '',
+      motor: v.specs?.motor || '',
+      transmision: v.specs?.transmision || '',
+      combustible: v.specs?.combustible || '',
+      traccion: v.specs?.traccion || '',
+      plazas: String(v.specs?.plazas || ''),
+      airbags: String(v.specs?.airbags || ''),
+      tamanho_pantalla: String(v.specs?.tamanho_pantalla || ''),
+      garantia: v.specs?.garantia || '',
+      adas: Array.isArray(v.features?.adas) ? v.features.adas.join(', ') : '',
+      techo_panoramico: v.features?.techo_panoramico || '',
+      asiento_cuero: v.features?.asiento_cuero || ''
+    });
+    setVersionModalOpen(true);
+  };
+
+  const handleSaveVersionModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!versionFormData.name || !versionFormData.modelId) {
+      showToast("Nombre y Modelo son requeridos.");
+      return;
+    }
+
+    try {
+      const isEditing = Boolean(versionFormData.id);
+      const id = isEditing ? versionFormData.id : `${versionFormData.modelId}_${generarSlug(versionFormData.name)}`;
+
+      const adasArray = versionFormData.adas
+        ? versionFormData.adas.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+
+      const docPayload: any = {
+        modelId: versionFormData.modelId,
+        name: versionFormData.name,
+        concesionaria: userData?.dealershipName, // Force B2B ownership
+        price: Number(versionFormData.price) || 0,
+        promocion: versionFormData.promocion || '',
+        url_auto: versionFormData.url_auto || '',
+        specs: {
+          motor: versionFormData.motor || '',
+          transmision: versionFormData.transmision || '',
+          combustible: versionFormData.combustible || '',
+          traccion: versionFormData.traccion || '',
+          plazas: Number(versionFormData.plazas) || 0,
+          airbags: Number(versionFormData.airbags) || 0,
+          tamanho_pantalla: Number(versionFormData.tamanho_pantalla) || 0,
+          garantia: versionFormData.garantia || ''
+        },
+        features: {
+          adas: adasArray,
+          techo_panoramico: versionFormData.techo_panoramico || 'No',
+          asiento_cuero: versionFormData.asiento_cuero || 'No'
+        },
+        updatedAt: serverTimestamp()
+      };
+
+      await setDoc(doc(db, 'versions', id), docPayload, { merge: true });
+      await logAudit(
+        isEditing ? 'UPDATE_VERSION' : 'CREATE_VERSION',
+        id,
+        `Versión ${isEditing ? 'actualizada' : 'creada'}: ${versionFormData.name}`
+      );
+
+      invalidateCatalogCache('versions');
+      showToast(`Versión ${isEditing ? 'actualizada' : 'creada'} exitosamente.`);
+      setVersionModalOpen(false);
+      if (userData) fetchDashboardData(userData);
+    } catch (err: any) {
+      console.error("Error guardando versión:", err);
+      showToast("Error al guardar la versión.");
+    }
+  };
+
+  const openNewModeloModal = () => {
+    setModeloFormData({
+      id: '',
+      brandId: permittedBrandsObjects[0]?.id || '',
+      name: '',
+      tipo_carroceria: 'SUV',
+      origen: '',
+      startingPrice: '',
+      imgUrl: ''
+    });
+    setModeloModalOpen(true);
+  };
+
+  const triggerEditModelo = (m: any) => {
+    setModeloFormData({
+      id: m.id,
+      brandId: m.brandId || '',
+      name: m.name || '',
+      tipo_carroceria: m.tipo_carroceria || 'SUV',
+      origen: m.origen || '',
+      startingPrice: String(m.startingPrice || ''),
+      imgUrl: m.imgUrl || ''
+    });
+    setModeloModalOpen(true);
+  };
+
+  const handleSaveModeloModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modeloFormData.name || !modeloFormData.brandId) {
+      showToast("Nombre y Marca son requeridos.");
+      return;
+    }
+
+    try {
+      const isEditing = Boolean(modeloFormData.id);
+      const id = isEditing ? modeloFormData.id : generarSlug(`${modeloFormData.brandId}-${modeloFormData.name}`);
+
+      const docPayload: any = {
+        brandId: modeloFormData.brandId,
+        name: modeloFormData.name.toUpperCase(),
+        tipo_carroceria: normalizeCarroceria(modeloFormData.tipo_carroceria),
+        origen: modeloFormData.origen || '',
+        startingPrice: Number(modeloFormData.startingPrice) || 0,
+        imgUrl: modeloFormData.imgUrl || '',
+        updatedAt: serverTimestamp()
+      };
+
+      await setDoc(doc(db, 'models', id), docPayload, { merge: true });
+      await logAudit(
+        isEditing ? 'UPDATE_MODEL' : 'CREATE_MODEL',
+        id,
+        `Modelo ${isEditing ? 'actualizado' : 'creado'}: ${modeloFormData.name.toUpperCase()}`
+      );
+
+      invalidateCatalogCache('models');
+      showToast(`Modelo ${isEditing ? 'actualizado' : 'creado'} exitosamente.`);
+      setModeloModalOpen(false);
+      if (userData) fetchDashboardData(userData);
+    } catch (err: any) {
+      console.error("Error guardando modelo:", err);
+      showToast("Error al guardar el modelo.");
+    }
+  };
+
+  // ==========================================
+  // 10. CARGA MASIVA CSV (Con Validación RBAC)
   // ==========================================
   const procesarCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -389,33 +802,54 @@ export default function PortalConcesionariasPage() {
       if (operationCount > 0) await batch.commit();
       
       await logAudit('BULK_CSV_UPLOAD', 'Lote CSV', `Subió ${csvData.length} registros exitosamente.`);
+      invalidateCatalogCache('models');
+      invalidateCatalogCache('versions');
       setFeedback({ type: 'success', message: `Inyección masiva completada: ${csvData.length} vehículos actualizados.` });
       setCsvData([]); if (userData) fetchDashboardData(userData);
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
   // ==========================================
-  // FILTRADO DINÁMICO DE INVENTARIO
+  // FILTRADO DINÁMICO DE VERSIONES
   // ==========================================
-  const inventarioFiltrado = useMemo(() => {
+  const modelosParaFiltro = useMemo(() => {
+    if (invVerFilterMarca === 'Todas') return permittedModels;
+    return permittedModels.filter(m => m.brandId === invVerFilterMarca);
+  }, [permittedModels, invVerFilterMarca]);
+
+  const filteredVersiones = useMemo(() => {
     return inventario.filter(v => {
-      if (invFilterMarca !== 'Todas' && v.brandName?.toUpperCase() !== invFilterMarca.toUpperCase()) return false;
-      if (invFilterModelo !== 'Todos' && v.modelName?.toUpperCase() !== invFilterModelo.toUpperCase()) return false;
-      if (inventarioSearch) {
-        const term = inventarioSearch.toLowerCase();
-        if (!v.name?.toLowerCase().includes(term) && !v.brandName?.toLowerCase().includes(term) && !v.modelName?.toLowerCase().includes(term)) {
+      const mod = modelosList.find(m => m.id === v.modelId);
+      if (invVerFilterMarca !== 'Todas' && mod?.brandId !== invVerFilterMarca) return false;
+      if (invVerFilterModelo !== 'Todos' && v.modelId !== invVerFilterModelo) return false;
+      if (searchTermVersiones) {
+        const term = searchTermVersiones.toLowerCase();
+        const matchName = v.name?.toLowerCase().includes(term);
+        const matchBrand = v.brandName?.toLowerCase().includes(term);
+        const matchModel = v.modelName?.toLowerCase().includes(term);
+        const matchMotor = v.specs?.motor?.toLowerCase().includes(term);
+        if (!matchName && !matchBrand && !matchModel && !matchMotor) return false;
+      }
+      return true;
+    });
+  }, [inventario, modelosList, invVerFilterMarca, invVerFilterModelo, searchTermVersiones]);
+
+  // ==========================================
+  // FILTRADO DINÁMICO DE MODELOS
+  // ==========================================
+  const filteredModelos = useMemo(() => {
+    return permittedModels.filter(m => {
+      if (invModFilterMarca !== 'Todas' && m.brandId !== invModFilterMarca) return false;
+      if (searchTermModelos) {
+        const term = searchTermModelos.toLowerCase();
+        const brandName = marcasList.find(b => b.id === m.brandId)?.name || '';
+        if (!m.name?.toLowerCase().includes(term) && !brandName.toLowerCase().includes(term) && !m.tipo_carroceria?.toLowerCase().includes(term)) {
           return false;
         }
       }
       return true;
     });
-  }, [inventario, inventarioSearch, invFilterMarca, invFilterModelo]);
-
-  const modelosFiltradosSelect = useMemo(() => {
-    if (invFilterMarca === 'Todas') return modelosList;
-    const marcaSeleccionada = marcasList.find(m => m.name.toUpperCase() === invFilterMarca.toUpperCase());
-    return modelosList.filter(m => m.brandId === marcaSeleccionada?.id);
-  }, [modelosList, marcasList, invFilterMarca]);
+  }, [permittedModels, invModFilterMarca, searchTermModelos, marcasList]);
 
   // ==========================================
   // RENDER: VISTAS NO AUTENTICADAS
@@ -472,8 +906,6 @@ export default function PortalConcesionariasPage() {
   // ==========================================
   // RENDER: DASHBOARD DE CONCESIONARIA B2B
   // ==========================================
-  const permittedBrandsObjects = marcasList.filter(m => userData.marcasPermitidas.map(p=>p.toUpperCase()).includes(m.name.toUpperCase()));
-
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col text-[#3A3A3C] font-sans">
       
@@ -481,8 +913,16 @@ export default function PortalConcesionariasPage() {
         <div className="flex items-center gap-6">
           <div className="font-black text-2xl tracking-widest uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>DATA<span className="font-light">CAR</span></div>
           <div className="hidden md:flex flex-col border-l border-[#FFFFFF]/20 pl-6">
-            <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest">Sucursal Activa</span>
+            <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest">Concesionaria Oficial</span>
             <span className="text-[13px] font-bold uppercase tracking-wide">{userData.dealershipName}</span>
+          </div>
+          <div className="hidden lg:flex items-center gap-1.5 border-l border-[#FFFFFF]/20 pl-6">
+            <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest">Marcas asignadas:</span>
+            {userData.marcasPermitidas.map(m => (
+              <span key={m} className="bg-[#00BFFF]/20 border border-[#00BFFF]/40 text-[#00BFFF] text-[8px] font-bold uppercase px-2 py-0.5 tracking-wider">
+                {m}
+              </span>
+            ))}
           </div>
         </div>
         <div className="flex items-center gap-6">
@@ -532,13 +972,15 @@ export default function PortalConcesionariasPage() {
                   ) : leads.map(lead => (
                     <tr key={lead.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
                       <td className="p-4 border-r border-[#C0C0C0]/50 align-top">
-                        <span className="block font-bold text-[#0A1F33]">{lead.createdAt?.toDate().toLocaleDateString() || 'N/A'}</span>
-                        <span className="text-[9px] text-[#C0C0C0]">{lead.createdAt?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) || ''}</span>
+                        <span className="block font-bold text-[#0A1F33]">{lead.createdAt?.toDate ? lead.createdAt.toDate().toLocaleDateString() : 'N/A'}</span>
+                        <span className="text-[9px] text-[#C0C0C0]">{lead.createdAt?.toDate ? lead.createdAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
                       </td>
                       <td className="p-4 border-r border-[#C0C0C0]/50 align-top">
                         <span className="block font-black text-[#0A1F33] uppercase mb-1">{lead.nombre}</span>
-                        <a href={`https://wa.me/595${lead.telefono.substring(1)}`} target="_blank" rel="noopener noreferrer" className="text-[#1E8E3E] font-bold hover:underline block mb-1">WA: {lead.telefono}</a>
-                        {lead.email !== 'No proporcionado' && lead.email !== '-' && <a href={`mailto:${lead.email}`} className="text-[#00BFFF] hover:underline block">Email: {lead.email}</a>}
+                        {lead.telefono && lead.telefono !== 'No proporcionado' && (
+                          <a href={`https://wa.me/595${lead.telefono.startsWith('0') ? lead.telefono.substring(1) : lead.telefono}`} target="_blank" rel="noopener noreferrer" className="text-[#1E8E3E] font-bold hover:underline block mb-1">WA: {lead.telefono}</a>
+                        )}
+                        {lead.email && lead.email !== 'No proporcionado' && lead.email !== '-' && <a href={`mailto:${lead.email}`} className="text-[#00BFFF] hover:underline block">Email: {lead.email}</a>}
                       </td>
                       <td className="p-4 border-r border-[#C0C0C0]/50 align-top whitespace-normal min-w-[250px]">
                         <span className="block font-bold text-[#0A1F33] uppercase leading-tight mb-2">{lead.vehiculo}</span>
@@ -560,85 +1002,225 @@ export default function PortalConcesionariasPage() {
         )}
 
         {/* ======================================= */}
-        {/* VISTA: INVENTARIO B2B */}
+        {/* VISTA: INVENTARIO B2B (CUADROS TIPO ADMIN) */}
         {/* ======================================= */}
         {activeTab === 'inventario' && (
           <div className="flex flex-col gap-6">
             
             {/* SUB-TABS INVENTARIO */}
             <div className="flex gap-4">
-              <button onClick={() => setInvSubTab('catalogo')} className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-colors ${invSubTab === 'catalogo' ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}>Mi Catálogo</button>
-              <button onClick={() => setInvSubTab('manual')} className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-colors ${invSubTab === 'manual' ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}>+ Carga Manual</button>
-              <button onClick={() => setInvSubTab('csv')} className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border transition-colors ${invSubTab === 'csv' ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}>Importar CSV</button>
+              <button 
+                onClick={() => setInvSubTab('versiones')} 
+                className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest border transition-colors flex items-center gap-2 ${invSubTab === 'versiones' ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}
+              >
+                <span>Cuadro de Versiones</span>
+                <span className={`text-[8.5px] px-1.5 py-0.2 font-black ${invSubTab === 'versiones' ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#F0F0F0] text-[#0A1F33]'}`}>
+                  {inventario.length}
+                </span>
+              </button>
+              
+              <button 
+                onClick={() => setInvSubTab('modelos')} 
+                className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest border transition-colors flex items-center gap-2 ${invSubTab === 'modelos' ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}
+              >
+                <span>Cuadro de Modelos</span>
+                <span className={`text-[8.5px] px-1.5 py-0.2 font-black ${invSubTab === 'modelos' ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#F0F0F0] text-[#0A1F33]'}`}>
+                  {permittedModels.length}
+                </span>
+              </button>
+
+              <button 
+                onClick={() => setInvSubTab('csv')} 
+                className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest border transition-colors ${invSubTab === 'csv' ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}
+              >
+                Importar CSV Masivo
+              </button>
             </div>
 
-            {/* SUB-VISTA: CATÁLOGO DE INVENTARIO */}
-            {invSubTab === 'catalogo' && (
-              <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col min-h-[500px]">
-                <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col md:flex-row justify-between items-center gap-4">
-                  <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Control de Precios y Versiones</span>
-                  
-                  {/* Filtros de Búsqueda */}
-                  <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    <select className="border border-[#C0C0C0] p-2 text-[10px] font-bold uppercase tracking-widest focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={invFilterMarca} onChange={e => {setInvFilterMarca(e.target.value); setInvFilterModelo('Todos');}}>
-                      <option value="Todas">Todas las marcas</option>
-                      {userData.marcasPermitidas.map((m: string) => <option key={m} value={m.toUpperCase()}>{m.toUpperCase()}</option>)}
-                    </select>
-                    <select className="border border-[#C0C0C0] p-2 text-[10px] font-bold uppercase tracking-widest focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none disabled:bg-[#F8F9FA]" value={invFilterModelo} onChange={e => setInvFilterModelo(e.target.value)} disabled={invFilterMarca === 'Todas'}>
-                      <option value="Todos">Todos los modelos</option>
-                      {modelosFiltradosSelect.map(m => <option key={m.id} value={m.name.toUpperCase()}>{m.name.toUpperCase()}</option>)}
-                    </select>
-                    <input type="text" aria-label="Buscar versión" placeholder="Buscar versión..." className="border border-[#C0C0C0] px-3 py-2 text-xs w-full md:w-48 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={inventarioSearch} onChange={e => setInventarioSearch(e.target.value)} />
+            {/* ------------------------------------------------------------------ */}
+            {/* SUB-VISTA: CUADRO DE VERSIONES */}
+            {/* ------------------------------------------------------------------ */}
+            {invSubTab === 'versiones' && (
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col min-h-[550px] shadow-none">
+                {/* BARRA SUPERIOR DE CONTROL Y FILTROS */}
+                <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col lg:flex-row justify-between items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Inventario de Versiones</span>
+                    <span className="text-[10px] bg-[#0A1F33] text-[#00BFFF] px-2.5 py-0.5 font-bold uppercase tracking-wider">{filteredVersiones.length} de {inventario.length}</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 w-full lg:w-auto items-center">
+                    {/* Filtro Marca */}
+                    <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                      <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Marca:</span>
+                      <select 
+                        className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                        value={invVerFilterMarca} 
+                        onChange={e => { setInvVerFilterMarca(e.target.value); setInvVerFilterModelo('Todos'); }}
+                      >
+                        <option value="Todas">Todas mis marcas ({permittedBrandsObjects.length})</option>
+                        {permittedBrandsObjects.map(b => <option key={b.id} value={b.id}>{b.name.toUpperCase()}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Filtro Modelo en Cascada */}
+                    <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                      <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Modelo:</span>
+                      <select 
+                        className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer disabled:opacity-50"
+                        value={invVerFilterModelo} 
+                        onChange={e => setInvVerFilterModelo(e.target.value)}
+                      >
+                        <option value="Todos">Todos los modelos ({modelosParaFiltro.length})</option>
+                        {modelosParaFiltro.map(m => <option key={m.id} value={m.id}>{m.name.toUpperCase()}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Buscador */}
+                    <input 
+                      type="text" 
+                      placeholder="Buscar versión o motor..." 
+                      className="border border-[#C0C0C0] px-3 py-1 text-xs w-full lg:w-44 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" 
+                      value={searchTermVersiones} 
+                      onChange={e => setSearchTermVersiones(e.target.value)} 
+                    />
+
+                    <button 
+                      onClick={openNewVersionModal}
+                      className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors shrink-0 shadow-sm"
+                    >
+                      + Agregar Versión
+                    </button>
                   </div>
                 </div>
-                
+
+                {/* TABLA / CUADRO VERSIONES */}
                 <div className="overflow-x-auto flex-grow custom-scrollbar">
-                  <table className="w-full text-left border-collapse whitespace-nowrap min-w-[800px]">
-                    <thead className="bg-[#FFFFFF] sticky top-0 border-b border-[#C0C0C0]">
-                      <tr className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">
-                        <th className="p-4 border-r border-[#C0C0C0]/50">Marca</th>
-                        <th className="p-4 border-r border-[#C0C0C0]/50">Modelo</th>
-                        <th className="p-4 border-r border-[#C0C0C0]/50">Versión</th>
-                        <th className="p-4 border-r border-[#C0C0C0]/50">Precio (USD) & Promoción</th>
-                        <th className="p-4 text-right">Acción B2B</th>
+                  <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1100px]">
+                    <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b-2 border-[#0A1F33]">
+                      <tr className="text-[9px] font-black text-[#0A1F33] uppercase tracking-widest">
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Marca / Modelo</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Versión ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Precio USD ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Promoción ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Motor / Combustible ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Ficha URL ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación</th>
+                        <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="text-[11px] text-[#3A3A3C]">
-                      {inventarioFiltrado.length === 0 ? (
-                        <tr><td colSpan={5} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No hay vehículos que coincidan con la búsqueda.</td></tr>
-                      ) : inventarioFiltrado.map(v => (
-                        <tr key={v.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                          <td className="p-4 font-bold text-[#0A1F33] uppercase border-r border-[#C0C0C0]/50">{v.brandName}</td>
-                          <td className="p-4 font-bold text-[#0A1F33] uppercase border-r border-[#C0C0C0]/50">{v.modelName}</td>
-                          <td className="p-4 text-[#3A3A3C] uppercase border-r border-[#C0C0C0]/50">{v.name}</td>
-                          
-                          {/* LÓGICA DE EDICIÓN IN-LINE */}
-                          {editingVersion === v.id ? (
-                            <>
-                              <td className="p-4 border-r border-[#C0C0C0]/50 flex gap-2 items-center">
-                                <input type="number" className="border border-[#00BFFF] p-2 text-xs focus:outline-none bg-[#F5FBFF] w-32 rounded-none" value={newPrice} onChange={e => setNewPrice(e.target.value)} autoFocus />
-                                <input type="text" className="border border-[#0A1F33] p-2 text-xs focus:outline-none bg-[#FFFFFF] w-48 rounded-none" value={newPromo} onChange={e => setNewPromo(e.target.value)} placeholder="Ej: Bono US$ 2000" />
-                              </td>
-                              <td className="p-4 text-right">
-                                <div className="flex justify-end gap-2">
-                                  <button onClick={() => setEditingVersion(null)} className="border border-[#D93025] text-[#D93025] px-3 py-2 text-[9px] font-bold uppercase hover:bg-[#FFE6E6] transition-colors rounded-none">Cancelar</button>
-                                  <button onClick={() => handleSavePrice(v.id, v.name)} className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] px-4 py-2 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none border border-transparent">Guardar</button>
+                      {filteredVersiones.length === 0 ? (
+                        <tr><td colSpan={8} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron versiones en tu inventario.</td></tr>
+                      ) : filteredVersiones.map(v => (
+                        <tr key={v.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group">
+                          <td className="p-3.5 font-bold uppercase border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40">
+                            <span className="bg-[#0A1F33] text-[#FFFFFF] text-[9px] px-2 py-0.5 font-black uppercase tracking-wider block w-fit mb-1">{v.brandName}</span>
+                            <span className="text-[#0A1F33] text-[11px] font-black">{v.modelName}</span>
+                          </td>
+
+                          {/* Versión inline */}
+                          <td className="p-3.5 border-r border-[#C0C0C0]/50 font-semibold text-[#0A1F33]">
+                            {inlineEdit?.type === 'version' && inlineEdit?.id === v.id && inlineEdit?.field === 'name' ? (
+                              <div className="flex items-center gap-1">
+                                <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-36 uppercase focus:outline-none" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2">
+                                <span>{v.name}</span>
+                                <button onClick={() => setInlineEdit({ type: 'version', id: v.id, field: 'name', value: v.name || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar nombre">✏️</button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Precio inline */}
+                          <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33]">
+                            {inlineEdit?.type === 'version' && inlineEdit?.id === v.id && inlineEdit?.field === 'price' ? (
+                              <div className="flex items-center gap-1">
+                                <input type="number" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 focus:outline-none font-bold" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2">
+                                <span>US$ {Number(v.price).toLocaleString()}</span>
+                                <button onClick={() => setInlineEdit({ type: 'version', id: v.id, field: 'price', value: String(v.price || '') })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar precio">✏️</button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Promoción inline */}
+                          <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                            {inlineEdit?.type === 'version' && inlineEdit?.id === v.id && inlineEdit?.field === 'promocion' ? (
+                              <div className="flex items-center gap-1">
+                                <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-36 focus:outline-none" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-[10px] font-bold uppercase ${v.promocion ? 'text-[#00BFFF]' : 'text-[#C0C0C0]'}`}>{v.promocion || 'Sin Promo'}</span>
+                                <button onClick={() => setInlineEdit({ type: 'version', id: v.id, field: 'promocion', value: v.promocion || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar promo">✏️</button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Motor specs inline */}
+                          <td className="p-3.5 border-r border-[#C0C0C0]/50">
+                            {inlineEdit?.type === 'version' && inlineEdit?.id === v.id && inlineEdit?.field === 'motor' ? (
+                              <div className="flex items-center gap-1">
+                                <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-32 focus:outline-none" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <span className="font-bold text-[#0A1F33] block text-[10px]">{v.specs?.motor || 'Sin motor'}</span>
+                                  <span className="text-[9px] text-[#C0C0C0] uppercase">{v.specs?.combustible || ''} {v.specs?.transmision ? `• ${v.specs.transmision}` : ''}</span>
                                 </div>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="p-4 border-r border-[#C0C0C0]/50">
-                                <span className="font-black text-[#0A1F33] block" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {Number(v.price).toLocaleString()}</span>
-                                <span className="font-bold text-[#00BFFF] uppercase tracking-widest text-[9px]">{v.promocion || 'Sin Promo'}</span>
-                              </td>
-                              <td className="p-4 text-right">
-                                <button onClick={() => { setEditingVersion(v.id); setNewPrice(v.price.toString()); setNewPromo(v.promocion || ''); }} className="border border-[#C0C0C0] text-[#0A1F33] px-4 py-2 text-[9px] font-bold uppercase tracking-widest hover:border-[#0A1F33] transition-colors rounded-none">
-                                  Editar Precio
-                                </button>
-                              </td>
-                            </>
-                          )}
+                                <button onClick={() => setInlineEdit({ type: 'version', id: v.id, field: 'motor', value: v.specs?.motor || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar motor">✏️</button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* URL Ficha Técnica inline */}
+                          <td className="p-3.5 border-r border-[#C0C0C0]/50 max-w-[120px] truncate">
+                            {inlineEdit?.type === 'version' && inlineEdit?.id === v.id && inlineEdit?.field === 'url_auto' ? (
+                              <div className="flex items-center gap-1">
+                                <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-32 focus:outline-none" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2">
+                                {v.url_auto ? <a href={v.url_auto} target="_blank" rel="noopener noreferrer" className="text-[#00BFFF] hover:underline text-[10px] truncate max-w-[90px] inline-block">Ver Ficha ↗</a> : <span className="text-[#C0C0C0] text-[10px]">Sin URL</span>}
+                                <button onClick={() => setInlineEdit({ type: 'version', id: v.id, field: 'url_auto', value: v.url_auto || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar URL">✏️</button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Última Modificación */}
+                          <td className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 text-[10px] text-[#C0C0C0]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#00BFFF] shrink-0"></span>
+                              <span>{formatLastModified(v.updatedAt)}</span>
+                            </div>
+                          </td>
+
+                          {/* Acciones */}
+                          <td className="p-3.5 text-right bg-[#F8F9FA]/40 sticky right-0">
+                            <div className="flex items-center justify-end gap-2">
+                              <button onClick={() => triggerEditVersion(v)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Editar ficha completa">
+                                Ficha Completa ✏️
+                              </button>
+                              <button onClick={() => handleDeleteVersion(v.id, v.name)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Borrar versión">
+                                🗑️ Borrar
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -647,73 +1229,191 @@ export default function PortalConcesionariasPage() {
               </div>
             )}
 
-            {/* SUB-VISTA: CARGA MANUAL (ABM Restringido) */}
-            {invSubTab === 'manual' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Formulario de Modelo */}
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-fit">
-                  <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-2 border-b border-[#C0C0C0] pb-2">1. Crear Nuevo Modelo</h2>
-                  <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest mb-6">Si el modelo ya existe en la plataforma, no necesitas crearlo de nuevo.</p>
-                  
-                  <form onSubmit={handleSaveModelo} className="flex flex-col gap-4">
-                    <div>
-                      <label htmlFor="conc-modeloForm-brandId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Marca Permitida</label>
-                      <select id="conc-modeloForm-brandId" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={modeloForm.brandId} onChange={e => setModeloForm({...modeloForm, brandId: e.target.value})} required>
-                        <option value="">Seleccionar marca...</option>
-                        {permittedBrandsObjects.map(m => <option key={m.id} value={m.id}>{m.name.toUpperCase()}</option>)}
+            {/* ------------------------------------------------------------------ */}
+            {/* SUB-VISTA: CUADRO DE MODELOS */}
+            {/* ------------------------------------------------------------------ */}
+            {invSubTab === 'modelos' && (
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col min-h-[550px] shadow-none">
+                <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col lg:flex-row justify-between items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Modelos de tus Marcas</span>
+                    <span className="text-[10px] bg-[#0A1F33] text-[#00BFFF] px-2.5 py-0.5 font-bold uppercase tracking-wider">{filteredModelos.length} de {permittedModels.length}</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 w-full lg:w-auto items-center">
+                    {/* Filtro Marca */}
+                    <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                      <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Marca:</span>
+                      <select 
+                        className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                        value={invModFilterMarca} 
+                        onChange={e => setInvModFilterMarca(e.target.value)}
+                      >
+                        <option value="Todas">Todas mis marcas ({permittedBrandsObjects.length})</option>
+                        {permittedBrandsObjects.map(b => <option key={b.id} value={b.id}>{b.name.toUpperCase()}</option>)}
                       </select>
                     </div>
-                    <div><label htmlFor="conc-modeloForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre del Modelo</label><input id="conc-modeloForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={modeloForm.name} onChange={e => setModeloForm({...modeloForm, name: e.target.value})} placeholder="Ej: Sportage" required /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><label htmlFor="conc-modeloForm-tipo" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Categoría</label><input id="conc-modeloForm-tipo" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={modeloForm.tipo_carroceria} onChange={e => setModeloForm({...modeloForm, tipo_carroceria: e.target.value})} placeholder="Ej: SUV" /></div>
-                      <div><label htmlFor="conc-modeloForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen Fabrica</label><input id="conc-modeloForm-origen" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={modeloForm.origen} onChange={e => setModeloForm({...modeloForm, origen: e.target.value})} /></div>
-                    </div>
-                    <div><label htmlFor="conc-modeloForm-imgUrl" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Imagen</label><input id="conc-modeloForm-imgUrl" type="url" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none" value={modeloForm.imgUrl} onChange={e => setModeloForm({...modeloForm, imgUrl: e.target.value})} placeholder="https://..." /></div>
-                    <button type="submit" className="w-full bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-4 hover:bg-[#00BFFF] transition-colors rounded-none mt-2">Crear Modelo</button>
-                  </form>
+
+                    {/* Buscador */}
+                    <input 
+                      type="text" 
+                      placeholder="Buscar modelo..." 
+                      className="border border-[#C0C0C0] px-3 py-1 text-xs w-full lg:w-44 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF]" 
+                      value={searchTermModelos} 
+                      onChange={e => setSearchTermModelos(e.target.value)} 
+                    />
+
+                    <button 
+                      onClick={openNewModeloModal}
+                      className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors shrink-0 shadow-sm"
+                    >
+                      + Agregar Modelo
+                    </button>
+                  </div>
                 </div>
 
-                {/* Formulario de Versión */}
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-fit">
-                  <h2 className="font-bold text-[#00BFFF] text-sm uppercase mb-2 border-b border-[#C0C0C0] pb-2">2. Añadir Versión al Inventario</h2>
-                  <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest mb-6">Completa las especificaciones exactas para el cotizador.</p>
-                  
-                  <form onSubmit={handleSaveVersion} className="flex flex-col gap-4">
-                    <div>
-                      <label htmlFor="conc-versionForm-modelId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Modelo Vinculado</label>
-                      <select id="conc-versionForm-modelId" className="w-full border p-3 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={versionForm.modelId} onChange={e => setVersionForm({...versionForm, modelId: e.target.value})} required>
-                        <option value="">Seleccionar modelo existente...</option>
-                        {/* Filtramos los modelos para que solo pueda añadir versiones a sus marcas */}
-                        {modelosList.filter(m => permittedBrandsObjects.map(b=>b.id).includes(m.brandId)).map(m => <option key={m.id} value={m.id}>{m.name.toUpperCase()}</option>)}
-                      </select>
-                    </div>
-                    <div><label htmlFor="conc-versionForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre de Versión</label><input id="conc-versionForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={versionForm.name} onChange={e => setVersionForm({...versionForm, name: e.target.value})} placeholder="Ej: 2.0 EX AT" required /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><label htmlFor="conc-versionForm-price" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio (USD)</label><input id="conc-versionForm-price" type="number" className="w-full border p-3 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={versionForm.price} onChange={e => setVersionForm({...versionForm, price: e.target.value})} required /></div>
-                      <div><label htmlFor="conc-versionForm-transmision" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Transmisión</label><input id="conc-versionForm-transmision" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={versionForm.transmision} onChange={e => setVersionForm({...versionForm, transmision: e.target.value})} /></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><label htmlFor="conc-versionForm-combustible" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Combustible</label><input id="conc-versionForm-combustible" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={versionForm.combustible} onChange={e => setVersionForm({...versionForm, combustible: e.target.value})} /></div>
-                      <div><label htmlFor="conc-versionForm-plazas" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Plazas</label><input id="conc-versionForm-plazas" type="number" className="w-full border p-3 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={versionForm.plazas} onChange={e => setVersionForm({...versionForm, plazas: e.target.value})} /></div>
-                    </div>
-                    <button type="submit" className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-4 transition-colors rounded-none mt-2">Publicar Versión</button>
-                  </form>
+                {/* TABLA / CUADRO MODELOS */}
+                <div className="overflow-x-auto flex-grow custom-scrollbar">
+                  <table className="w-full text-left border-collapse whitespace-nowrap min-w-[950px]">
+                    <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b-2 border-[#0A1F33]">
+                      <tr className="text-[9px] font-black text-[#0A1F33] uppercase tracking-widest">
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Foto</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Marca</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Nombre Modelo ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Categoría ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Origen Fábrica ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50">Precio Inicial USD ✏️</th>
+                        <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación</th>
+                        <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[11px] text-[#3A3A3C]">
+                      {filteredModelos.length === 0 ? (
+                        <tr><td colSpan={8} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron modelos asignados a tus marcas.</td></tr>
+                      ) : filteredModelos.map(m => {
+                        const brandObj = marcasList.find(b => b.id === m.brandId);
+                        const brandName = brandObj?.name || 'N/A';
+
+                        return (
+                          <tr key={m.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group">
+                            <td className="p-3 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 w-16">
+                              {isValidImageSrc(m.imgUrl) ? (
+                                <Image src={m.imgUrl} alt={m.name} width={56} height={32} className="h-8 w-14 object-cover border border-[#C0C0C0]/50" unoptimized={!isOptimizableImageSrc(m.imgUrl)} />
+                              ) : (
+                                <div className="h-8 w-14 bg-[#F5F5F5] border border-[#C0C0C0]/50 flex items-center justify-center text-[8px] text-[#C0C0C0] uppercase font-bold">Sin Foto</div>
+                              )}
+                            </td>
+
+                            <td className="p-3.5 font-bold uppercase border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40">
+                              <span className="bg-[#0A1F33] text-[#FFFFFF] text-[9px] px-2 py-0.5 font-black uppercase tracking-wider">{brandName}</span>
+                            </td>
+
+                            {/* Nombre Modelo inline */}
+                            <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33]">
+                              {inlineEdit?.type === 'modelo' && inlineEdit?.id === m.id && inlineEdit?.field === 'name' ? (
+                                <div className="flex items-center gap-1">
+                                  <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-36 uppercase focus:outline-none font-bold" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                  <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                  <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                  <span>{m.name}</span>
+                                  <button onClick={() => setInlineEdit({ type: 'modelo', id: m.id, field: 'name', value: m.name || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar nombre">✏️</button>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Categoría inline */}
+                            <td className="p-3.5 border-r border-[#C0C0C0]/50 font-bold uppercase text-[10px]">
+                              {inlineEdit?.type === 'modelo' && inlineEdit?.id === m.id && inlineEdit?.field === 'tipo_carroceria' ? (
+                                <div className="flex items-center gap-1">
+                                  <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 uppercase focus:outline-none" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                  <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                  <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="bg-[#F0F0F0] px-2 py-0.5 border border-[#C0C0C0]/50">{m.tipo_carroceria || 'SUV'}</span>
+                                  <button onClick={() => setInlineEdit({ type: 'modelo', id: m.id, field: 'tipo_carroceria', value: m.tipo_carroceria || 'SUV' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar categoría">✏️</button>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Origen inline */}
+                            <td className="p-3.5 border-r border-[#C0C0C0]/50 text-[10px] uppercase">
+                              {inlineEdit?.type === 'modelo' && inlineEdit?.id === m.id && inlineEdit?.field === 'origen' ? (
+                                <div className="flex items-center gap-1">
+                                  <input type="text" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 uppercase focus:outline-none" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                  <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                  <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                  <span>{m.origen || '-'}</span>
+                                  <button onClick={() => setInlineEdit({ type: 'modelo', id: m.id, field: 'origen', value: m.origen || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar origen">✏️</button>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Precio Inicial inline */}
+                            <td className="p-3.5 border-r border-[#C0C0C0]/50 font-black text-[#0A1F33]">
+                              {inlineEdit?.type === 'modelo' && inlineEdit?.id === m.id && inlineEdit?.field === 'startingPrice' ? (
+                                <div className="flex items-center gap-1">
+                                  <input type="number" className="border border-[#00BFFF] p-1 text-xs bg-white w-28 focus:outline-none font-bold" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleInlineSave(); if (e.key === 'Escape') setInlineEdit(null); }} />
+                                  <button onClick={handleInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                  <button onClick={() => setInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                  <span>US$ {Number(m.startingPrice || 0).toLocaleString()}</span>
+                                  <button onClick={() => setInlineEdit({ type: 'modelo', id: m.id, field: 'startingPrice', value: String(m.startingPrice || 0) })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar precio base">✏️</button>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Última Modificación */}
+                            <td className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40 text-[10px] text-[#C0C0C0]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#00BFFF] shrink-0"></span>
+                                <span>{formatLastModified(m.updatedAt)}</span>
+                              </div>
+                            </td>
+
+                            {/* Acciones */}
+                            <td className="p-3.5 text-right bg-[#F8F9FA]/40 sticky right-0">
+                              <div className="flex items-center justify-end gap-2">
+                                <button onClick={() => triggerEditModelo(m)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Editar modelo y foto">
+                                  Ficha Completa ✏️
+                                </button>
+                                <button onClick={() => handleDeleteModelo(m.id, m.name)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Borrar modelo">
+                                  🗑️ Borrar
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
 
+            {/* ------------------------------------------------------------------ */}
             {/* SUB-VISTA: CARGA MASIVA CSV */}
+            {/* ------------------------------------------------------------------ */}
             {invSubTab === 'csv' && (
               <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-fit">
                 <div className="p-6 border-b border-[#C0C0C0] bg-[#F5F5F5]">
-                  <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-2">Importador Masivo CSV (Protegido)</h2>
+                  <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-2">Importador Masivo CSV (Protegido por Permisos)</h2>
                   <p className="text-[11px] text-[#3A3A3C] font-medium leading-relaxed mb-4">
                     Instrucciones de formato: Crea un archivo Excel o Google Sheets y expórtalo como <strong>CSV (delimitado por comas)</strong>. 
                     Asegúrate de incluir exactamente estos nombres en los encabezados (primera fila):<br/><br/>
-                    <code className="bg-[#0A1F33] text-[#00BFFF] p-2 block text-[10px]">marca, modelo, version, precio, tipo_carroceria, motor, transmision, combustible</code>
+                    <code className="bg-[#0A1F33] text-[#00BFFF] p-2 block text-[10px] font-mono">marca, modelo, version, precio, tipo_carroceria, motor, transmision, combustible</code>
                   </p>
                   <p className="text-[10px] font-bold text-[#D93025] uppercase tracking-widest border border-[#D93025] p-3 inline-block">
-                    ⚠️ Seguridad B2B: El sistema verificará automáticamente la columna "marca". Si incluyes marcas para las cuales no tienes permisos asignados, esas filas serán descartadas. El sistema forzará a tu concesionaria como dueña del inventario.
+                    ⚠️ Seguridad B2B: El sistema verificará automáticamente la columna &quot;marca&quot;. Si incluyes marcas para las cuales no tienes permisos asignados, esas filas serán descartadas automáticamente. Tu inventario quedará vinculado a <strong>{userData.dealershipName}</strong>.
                   </p>
                 </div>
                 
@@ -753,6 +1453,350 @@ export default function PortalConcesionariasPage() {
         )}
         
       </main>
+
+      {/* ======================================================== */}
+      {/* MODAL: EDICIÓN / CREACIÓN COMPLETA DE VERSIÓN */}
+      {/* ======================================================== */}
+      <Modal
+        isOpen={versionModalOpen}
+        onClose={() => setVersionModalOpen(false)}
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-2xl w-full border-t-4 border-[#00BFFF] relative shadow-none max-h-[90vh] overflow-y-auto custom-scrollbar"
+      >
+        <button onClick={() => setVersionModalOpen(false)} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black text-lg border-none outline-none">✕</button>
+        <h3 className="font-black text-xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+          {versionFormData.id ? 'Editar Ficha Completa de Versión' : 'Agregar Nueva Versión'}
+        </h3>
+        <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">
+          Concesionaria: <span className="text-[#0A1F33]">{userData.dealershipName}</span>
+        </p>
+
+        <form onSubmit={handleSaveVersionModal} className="flex flex-col gap-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="modal-version-modelId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Modelo Vinculado <span className="text-[#D93025]">*</span></label>
+              <select
+                id="modal-version-modelId"
+                className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.modelId}
+                onChange={e => setVersionFormData({ ...versionFormData, modelId: e.target.value })}
+                required
+                disabled={Boolean(versionFormData.id)}
+              >
+                <option value="">Seleccionar modelo...</option>
+                {permittedModels.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {marcasList.find(b => b.id === m.brandId)?.name || ''} {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="modal-version-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre de la Versión <span className="text-[#D93025]">*</span></label>
+              <input
+                id="modal-version-name"
+                type="text"
+                placeholder="Ej: 2.0 EX AT 4x4"
+                className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.name}
+                onChange={e => setVersionFormData({ ...versionFormData, name: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="modal-version-price" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio de Lista USD <span className="text-[#D93025]">*</span></label>
+              <input
+                id="modal-version-price"
+                type="number"
+                placeholder="Ej: 32500"
+                className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF] font-bold"
+                value={versionFormData.price}
+                onChange={e => setVersionFormData({ ...versionFormData, price: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="modal-version-promocion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Promoción Especial / Bono</label>
+              <input
+                id="modal-version-promocion"
+                type="text"
+                placeholder="Ej: Bono USD 2.000 + Transferencia gratis"
+                className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.promocion}
+                onChange={e => setVersionFormData({ ...versionFormData, promocion: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-[#C0C0C0]/50 pt-4">
+            <div>
+              <label htmlFor="modal-version-motor" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Motorización</label>
+              <input
+                id="modal-version-motor"
+                type="text"
+                placeholder="Ej: 2.0L Turbo 240 HP"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.motor}
+                onChange={e => setVersionFormData({ ...versionFormData, motor: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="modal-version-transmision" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Transmisión</label>
+              <input
+                id="modal-version-transmision"
+                type="text"
+                placeholder="Ej: Automática 8 Velocidades"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.transmision}
+                onChange={e => setVersionFormData({ ...versionFormData, transmision: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="modal-version-combustible" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Combustible</label>
+              <select
+                id="modal-version-combustible"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.combustible}
+                onChange={e => setVersionFormData({ ...versionFormData, combustible: e.target.value })}
+              >
+                <option value="Nafta">Nafta</option>
+                <option value="Diesel">Diesel</option>
+                <option value="HEV">Híbrido Convencional (HEV)</option>
+                <option value="PHEV">Híbrido Enchufable (PHEV)</option>
+                <option value="MHEV">Microhíbrido (MHEV)</option>
+                <option value="EV">100% Eléctrico (EV)</option>
+                <option value="Flex">Flex / Etanol</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label htmlFor="modal-version-traccion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tracción</label>
+              <input
+                id="modal-version-traccion"
+                type="text"
+                placeholder="Ej: 4x4 / AWD"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.traccion}
+                onChange={e => setVersionFormData({ ...versionFormData, traccion: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="modal-version-plazas" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Plazas</label>
+              <input
+                id="modal-version-plazas"
+                type="number"
+                placeholder="Ej: 5"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.plazas}
+                onChange={e => setVersionFormData({ ...versionFormData, plazas: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="modal-version-airbags" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Airbags</label>
+              <input
+                id="modal-version-airbags"
+                type="number"
+                placeholder="Ej: 6"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.airbags}
+                onChange={e => setVersionFormData({ ...versionFormData, airbags: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="modal-version-pantalla" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Pantalla (pulg.)</label>
+              <input
+                id="modal-version-pantalla"
+                type="number"
+                placeholder="Ej: 10.25"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.tamanho_pantalla}
+                onChange={e => setVersionFormData({ ...versionFormData, tamanho_pantalla: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="modal-version-adas" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Asistencias ADAS (separadas por coma)</label>
+              <input
+                id="modal-version-adas"
+                type="text"
+                placeholder="Frenado Autónomo, Alerta Carril, Punto Ciego"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.adas}
+                onChange={e => setVersionFormData({ ...versionFormData, adas: e.target.value })}
+              />
+            </div>
+            <div>
+              <label htmlFor="modal-version-garantia" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Garantía Oficial</label>
+              <input
+                id="modal-version-garantia"
+                type="text"
+                placeholder="Ej: 5 Años o 100.000 Km"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+                value={versionFormData.garantia}
+                onChange={e => setVersionFormData({ ...versionFormData, garantia: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="modal-version-url" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Ficha Técnica Oficial (PDF o web)</label>
+            <input
+              id="modal-version-url"
+              type="url"
+              placeholder="https://..."
+              className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#FFFFFF]"
+              value={versionFormData.url_auto}
+              onChange={e => setVersionFormData({ ...versionFormData, url_auto: e.target.value })}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 mt-4 border-t border-[#C0C0C0]/50 pt-4">
+            <button
+              type="button"
+              onClick={() => setVersionModalOpen(false)}
+              className="border border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] text-xs font-bold uppercase tracking-wider py-3 px-6 transition-colors rounded-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase tracking-widest py-3 px-8 transition-colors rounded-none shadow-sm"
+            >
+              Guardar Versión
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ======================================================== */}
+      {/* MODAL: EDICIÓN / CREACIÓN COMPLETA DE MODELO */}
+      {/* ======================================================== */}
+      <Modal
+        isOpen={modeloModalOpen}
+        onClose={() => setModeloModalOpen(false)}
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-xl w-full border-t-4 border-[#0A1F33] relative shadow-none max-h-[90vh] overflow-y-auto custom-scrollbar"
+      >
+        <button onClick={() => setModeloModalOpen(false)} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black text-lg border-none outline-none">✕</button>
+        <h3 className="font-black text-xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+          {modeloFormData.id ? 'Editar Ficha de Modelo' : 'Crear Nuevo Modelo'}
+        </h3>
+        <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6">
+          Gestión de catálogo de marcas autorizadas
+        </p>
+
+        <form onSubmit={handleSaveModeloModal} className="flex flex-col gap-4 text-xs">
+          <div>
+            <label htmlFor="modal-modelo-brandId" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Marca Autorizada <span className="text-[#D93025]">*</span></label>
+            <select
+              id="modal-modelo-brandId"
+              className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none bg-[#FFFFFF]"
+              value={modeloFormData.brandId}
+              onChange={e => setModeloFormData({ ...modeloFormData, brandId: e.target.value })}
+              required
+              disabled={Boolean(modeloFormData.id)}
+            >
+              <option value="">Seleccionar marca autorizada...</option>
+              {permittedBrandsObjects.map(b => (
+                <option key={b.id} value={b.id}>{b.name.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="modal-modelo-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre del Modelo <span className="text-[#D93025]">*</span></label>
+            <input
+              id="modal-modelo-name"
+              type="text"
+              placeholder="Ej: SPORTAGE"
+              className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none bg-[#FFFFFF] uppercase font-bold"
+              value={modeloFormData.name}
+              onChange={e => setModeloFormData({ ...modeloFormData, name: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="modal-modelo-carroceria" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Categoría / Carrocería</label>
+              <select
+                id="modal-modelo-carroceria"
+                className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none bg-[#FFFFFF]"
+                value={modeloFormData.tipo_carroceria}
+                onChange={e => setModeloFormData({ ...modeloFormData, tipo_carroceria: e.target.value })}
+              >
+                <option value="SUV">SUV</option>
+                <option value="SEDAN">SEDAN</option>
+                <option value="HATCHBACK">HATCHBACK</option>
+                <option value="PICKUP">PICKUP</option>
+                <option value="UTILITARIO">UTILITARIO</option>
+                <option value="COUPE">COUPE</option>
+                <option value="MINIVAN">MINIVAN</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="modal-modelo-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen de Fabricación</label>
+              <input
+                id="modal-modelo-origen"
+                type="text"
+                placeholder="Ej: Corea del Sur, Brasil, México"
+                className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none bg-[#FFFFFF]"
+                value={modeloFormData.origen}
+                onChange={e => setModeloFormData({ ...modeloFormData, origen: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="modal-modelo-startingPrice" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Precio Desde (USD)</label>
+            <input
+              id="modal-modelo-startingPrice"
+              type="number"
+              placeholder="Ej: 28500"
+              className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] rounded-none bg-[#FFFFFF] font-bold"
+              value={modeloFormData.startingPrice}
+              onChange={e => setModeloFormData({ ...modeloFormData, startingPrice: e.target.value })}
+            />
+          </div>
+
+          {/* Subida o Cambio de Imagen */}
+          <div className="border-t border-[#C0C0C0]/50 pt-4">
+            <ImageUploadField
+              label="Foto del Modelo"
+              folder="models"
+              value={modeloFormData.imgUrl}
+              onChange={url => setModeloFormData({ ...modeloFormData, imgUrl: url })}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 mt-4 border-t border-[#C0C0C0]/50 pt-4">
+            <button
+              type="button"
+              onClick={() => setModeloModalOpen(false)}
+              className="border border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] text-xs font-bold uppercase tracking-wider py-3 px-6 transition-colors rounded-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] text-xs font-bold uppercase tracking-widest py-3 px-8 transition-colors rounded-none shadow-sm"
+            >
+              Guardar Modelo
+            </button>
+          </div>
+        </form>
+      </Modal>
+
     </div>
   );
 }

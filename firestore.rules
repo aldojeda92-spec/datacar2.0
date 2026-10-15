@@ -178,7 +178,8 @@ service cloud.firestore {
     // ---------------- comparison_stats (telemetría) ----------------
     match /comparison_stats/{statId} {
       allow create: if true;
-      allow get, list, update, delete: if isAdmin();
+      allow read: if true;
+      allow update, delete: if isAdmin();
     }
 
     // ---------------- preference_telemetry (telemetría de preferencias del comparador dinámico) ----------------

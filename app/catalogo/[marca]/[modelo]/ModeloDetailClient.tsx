@@ -23,6 +23,7 @@ import { FAQ_FICHA_VEHICULO as faqs } from '../../../../lib/faqData';
 import { getStoredCompareList, saveCompareList, clearStoredCompareList } from '../../../../lib/compareStorage';
 import { getCachedConcesionarias } from '../../../../lib/catalogCache';
 import { buildCheckedDealershipSet, isDatacarCheck } from '../../../../lib/datacarCheck';
+import { sanitizeDealershipName, formatHablarCon, resolveModelDealership } from '../../../../lib/dealerships';
 import { track } from '../../../../lib/analytics';
 import DatacarCheckBadge from '../../../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../../../components/Navbar';
@@ -199,6 +200,8 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
   if (loading) return <div className="min-h-screen bg-[#FFFFFF] flex items-center justify-center font-bold text-[#0A1F33] tracking-widest uppercase text-sm">Cargando información del auto...</div>;
   if (!model) return <div className="min-h-screen bg-[#FFFFFF] flex items-center justify-center font-bold text-[#D93025] tracking-widest uppercase text-sm">Vehículo no encontrado.</div>;
 
+  const resolvedModelDealership = resolveModelDealership(versions, baseVersion);
+
   return (
     <main className="min-h-screen bg-[#FFFFFF] text-[#3A3A3C] font-sans pb-32">
       
@@ -262,15 +265,15 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
             <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 flex items-start gap-3">
               <svg className="w-5 h-5 text-[#1E8E3E] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
               <div>
-                <p className="text-[11px] font-bold text-[#1E8E3E] uppercase tracking-widest mb-1">Compra Protegida</p>
-                <p className="text-[9px] text-[#1E8E3E]/80 uppercase">Gestión documental y análisis sin costo extra.</p>
+                <p className="text-[11px] font-bold text-[#1E8E3E] uppercase tracking-widest mb-1">Precios Oficiales de Concesionaria</p>
+                <p className="text-[9px] text-[#1E8E3E]/80 uppercase">100% sin costo. Precios directos de la concesionaria oficial, sin comisiones ni recargos.</p>
               </div>
             </div>
 
             <div className="flex flex-col gap-3">
               {/* TRIGGER MODAL GLOBAL: Envía el modelo general */}
               <button onClick={() => { setVersionToConsult(null); setLeadOrigen('ficha'); setShowConsultar(true); }} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 border border-transparent rounded-none">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> Consultar Asesor
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> {formatHablarCon(resolvedModelDealership)}
               </button>
               <button onClick={() => setShowCalcular(true)} className="w-full bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 rounded-none">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg> Calcular Cuota
@@ -318,7 +321,14 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
                   </div>
                   <div className="flex flex-col gap-2 w-full sm:w-auto">
                     {/* TRIGGER MODAL GLOBAL: Envía la versión específica */}
-                    <button onClick={() => { setVersionToConsult(ver); setLeadOrigen('ficha'); setShowConsultar(true); }} className="w-full sm:w-40 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent rounded-none">Consultar</button>
+                    {(() => {
+                      const verDealership = sanitizeDealershipName(ver.concesionaria) || resolvedModelDealership;
+                      return (
+                        <button onClick={() => { setVersionToConsult(ver); setLeadOrigen('ficha'); setShowConsultar(true); }} className="w-full sm:w-auto px-4 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent rounded-none">
+                          {formatHablarCon(verDealership)}
+                        </button>
+                      );
+                    })()}
                     <div className="flex gap-2">
                       <Link href={`/catalogo/${marcaSlug}/${modeloSlug}/${ver.id}`} className="flex-1 sm:w-20 text-center bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none">Detalles</Link>
                       <button onClick={() => handleComparar(ver)} className={`flex-1 sm:w-24 border font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors flex justify-center items-center gap-1 rounded-none ${isInCompare ? 'bg-[#E6F4EA] border-[#1E8E3E] text-[#1E8E3E]' : 'bg-[#F8F9FA] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#00BFFF] hover:text-[#00BFFF]'}`}>
@@ -486,7 +496,12 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
         }
         marcaVehiculo={brand?.name || ''}
         origenLead={leadOrigen === 'calc' ? 'Calculadora en Ficha' : 'Ficha Modelo y Versiones'}
-        concesionariaDestino={versionToConsult?.concesionaria || baseVersion?.concesionaria || brand?.name || 'Central DATACAR'}
+        concesionariaDestino={
+          sanitizeDealershipName(versionToConsult?.concesionaria) ||
+          resolvedModelDealership ||
+          brand?.name ||
+          ''
+        }
       />
 
       <Modal
@@ -541,7 +556,7 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
             onClick={() => { setVersionToConsult(null); setLeadOrigen('ficha'); setShowConsultar(true); }}
             className="flex-[1.4] bg-[#00BFFF] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 rounded-none"
           >
-            Consultar asesor
+            {formatHablarCon(resolvedModelDealership)}
           </button>
         </div>
       )}

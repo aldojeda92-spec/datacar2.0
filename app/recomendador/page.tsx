@@ -18,7 +18,9 @@ import { sendLeadNotificationEmail, sendRecommendationResultsEmail } from '../..
 import Navbar from '../components/Navbar';
 import Modal from '../components/a11y/Modal';
 import { useToast } from '../context/ToastContext';
+import { useLead } from '../context/LeadContext';
 import { track } from '../../lib/analytics';
+import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
@@ -37,6 +39,31 @@ const ALIAS = {
   TRACCION_4X4: ['4x4', 'awd', '4wd', 'integral']
 };
 
+// Jerarquía estricta de eficiencia energética para prioridad de economía
+const ENERGY_ECONOMY_RANK: Record<string, number> = {
+  'REEV': 8,
+  'EV': 7,
+  'PHEV': 6,
+  'HEV': 5,
+  'MHEV': 4,
+  'FLEX': 3,
+  'NAFTA': 2,
+  'DIESEL': 1,
+};
+
+interface BudgetRange {
+  min: number;
+  max: number;
+  label: string;
+}
+
+const BUDGET_RANGES: Record<string, BudgetRange> = {
+  '18000': { min: 0, max: 18000, label: 'Hasta US$ 18.000' },
+  '25000': { min: 18000, max: 25000, label: 'US$ 18.000 a US$ 25.000' },
+  '40000': { min: 25000, max: 40000, label: 'US$ 25.000 a US$ 40.000' },
+  '999999': { min: 40000, max: 99999999, label: 'Más de US$ 40.000' },
+};
+
 // ==========================================
 // INTERFACES
 // ==========================================
@@ -47,7 +74,10 @@ interface ModelData {
 interface VersionData {
   id: string; modelId: string; name: string; price: number; combustible: string; transmision: string; plazas: number; traccion: string;
   features_raw: string; concesionaria: string;
-  equipScore: number; 
+  equipScore: number;
+  airbags: number;
+  adasCount: number;
+  confortScore: number;
 }
 
 interface MatchReason { label: string; matched: boolean; }
@@ -56,7 +86,7 @@ interface ScoredModel {
   id: string; brandId: string; brandName: string; modelName: string;
   tipo_carroceria: string; imgUrl: string; startingPrice: number;
   availableFuels: string[]; availableTransmissions: string[]; maxPlazas: number;
-  topFeatures: string[]; dealershipStatus: string;
+  topFeatures: string[]; dealershipStatus: string; concesionaria: string;
   score: number; matchPercentage: number; equipScore: number; badge?: string;
   origen: string;
   hasAdas: boolean;
@@ -97,6 +127,7 @@ interface WizardStep {
 
 export default function RecomendadorPage() {
   const { showToast } = useToast();
+  const { openLeadModal } = useLead();
   const [step, setStep] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   
@@ -187,6 +218,13 @@ export default function RecomendadorPage() {
           const plazas = Number(v.specs?.plazas) || 5;
           const combustible = normalizeCombustible(v.specs?.combustible);
 
+          const airbagsNum = parseInt(String(v.specs?.airbags || '0').replace(/\D/g, ''), 10) || 
+            (Array.isArray(v.features?.seguridad_standard) && v.features.seguridad_standard.length ? 2 : 2);
+          const adasCount = Array.isArray(v.features?.adas) && v.features.adas.length > 0 && v.features.adas[0] !== '' ? v.features.adas.length : 0;
+          const confortScore = (Array.isArray(v.features?.confort_conveniencia) ? v.features.confort_conveniencia.length : 0) +
+            (v.features?.asiento_cuero && v.features.asiento_cuero !== '-' ? 2 : 0) +
+            (v.features?.techo_panoramico && v.features.techo_panoramico !== '-' ? 2 : 0);
+
           tempPlazas.add(plazas);
           if (combustible) tempCombustibles.add(combustible);
 
@@ -198,7 +236,10 @@ export default function RecomendadorPage() {
             traccion: (v.specs?.traccion || '').toLowerCase(),
             features_raw: rawString,
             equipScore: equipScore,
-            concesionaria: v.concesionaria || ''
+            concesionaria: v.concesionaria || '',
+            airbags: airbagsNum,
+            adasCount: adasCount,
+            confortScore: confortScore
           };
         });
 
@@ -450,55 +491,79 @@ export default function RecomendadorPage() {
       ? { ...answers, ...derivarPreferenciasNovato(answers) }
       : answers;
 
-    // DEAL-BREAKERS (Excluyentes) — se evalúan por VERSIÓN, no por modelo,
-    // para no premiar a los modelos con más trims con un simple OR entre versiones.
-    const budgetMap: Record<string, number> = { '18000': 18000, '25000': 25000, '40000': 40000, '999999': 9999999 };
-    const maxBudget = budgetMap[src['presupuesto']] || 9999999;
+    // DEAL-BREAKERS (Filtros Excluyentes Estrictos):
+    // 1. Rango de Presupuesto
+    const budgetKey = src['presupuesto'];
+    const budgetRange = budgetKey ? BUDGET_RANGES[budgetKey] : null;
+
+    // 2. Cantidad de Plazas Requerida
     const reqPlazas = (src['plazas'] && src['plazas'] !== 'any') ? Number(src['plazas']) : null;
 
-    // Carrocería es LIMITANTE (excluyente): si el usuario eligió un segmento,
-    // solo se buscan autos de ese segmento en todas las marcas -- no suma puntos,
-    // directamente descarta lo que no coincide.
+    // 3. Tipo de Carrocería
     const ansCarroceria = src['carroceria'] || [];
     const carroceriaEsFiltroDuro = !ansCarroceria.includes('any') && ansCarroceria.length > 0;
 
-    // opts.bypassHardFilters se usa para el modelo de referencia que el usuario
-    // eligió a mano ("¿ya tenés un modelo en mente?") -- ese SIEMPRE se muestra
-    // y se puntúa para comparar, así esté fuera de presupuesto o de segmento.
+    // Prioridades explícitas (de novato o de experto)
+    const prioridad = src['prioridad'] || '';
+    const uso = src['uso'] || '';
+    const isEconomyPriority = prioridad === 'consumo' || prioridad === 'precio';
+    const isComfortPriority = prioridad === 'tecnologia';
+    const isSafetyPriority = prioridad === 'seguridad' || uso === 'familia';
+
     const scoreModel = (model: ModelData, opts?: { bypassHardFilters?: boolean }): ScoredModel | null => {
       const bypass = !!opts?.bypassHardFilters;
-      if (!bypass && carroceriaEsFiltroDuro && !ansCarroceria.some((c: string) => model.tipo_carroceria === c)) return null;
+
+      // FILTRO DURO 1: Carrocería
+      if (!bypass && carroceriaEsFiltroDuro && !ansCarroceria.some((c: string) => model.tipo_carroceria === c)) {
+        return null;
+      }
 
       const mVersions = rawVersions.filter(v => v.modelId === model.id);
       if (mVersions.length === 0) return null;
 
-      // Solo el presupuesto es filtro duro por versión. Plazas es PREFERENCIA,
-      // no excluyente: pedir 4 plazas no descarta autos de 4 a 8, solo puntúa
-      // mejor a los que cumplen -- se resuelve más abajo, junto al resto de
-      // las preferencias puntuables.
-      let passingVersions = mVersions.filter(v => v.price <= maxBudget * 1.15);
-      if (passingVersions.length === 0) {
-        if (!bypass) return null; // Ningún trim de este modelo es viable
-        passingVersions = mVersions; // El modelo de referencia se muestra igual, aunque no entre en el presupuesto
+      // FILTRO DURO 2: Presupuesto Estricto (Evita mostrar modelos fuera del rango de precios)
+      let passingVersions = mVersions;
+      if (!bypass && budgetRange) {
+        // Tolerancia de borde máxima del 5% para capturar precios psicológicos (ej: $17.990)
+        const minAllowed = budgetRange.min > 0 ? budgetRange.min * 0.95 : 0;
+        const maxAllowed = budgetRange.max < 90000000 ? budgetRange.max * 1.05 : Infinity;
+        passingVersions = mVersions.filter(v => v.price >= minAllowed && v.price <= maxAllowed);
+        if (passingVersions.length === 0) {
+          return null; // Ninguna versión de este modelo entra en el presupuesto seleccionado
+        }
       }
 
-      // Versión representativa: la más barata que cumple los filtros duros.
-      // Es contra ESTA versión puntual que se puntúan combustible/transmisión/features,
-      // no contra "si alguna versión del modelo lo tiene".
-      const repVersion = [...passingVersions].sort((a, b) => a.price - b.price)[0];
+      // FILTRO DURO 3: Plazas (SI el usuario elige cantidad de pasajeros, descarta los que tengan más o menos)
+      if (!bypass && reqPlazas !== null) {
+        if (reqPlazas <= 2) {
+          passingVersions = passingVersions.filter(v => v.plazas <= 2);
+        } else if (reqPlazas === 4 || reqPlazas === 5) {
+          // Si eligió 4 o 5 plazas, descarta los vehículos de 7 o más plazas
+          passingVersions = passingVersions.filter(v => v.plazas <= 5);
+        } else if (reqPlazas >= 7) {
+          // Si necesita 7 plazas, descarta los que tengan menos de 7 plazas
+          passingVersions = passingVersions.filter(v => v.plazas >= 7);
+        }
+        if (passingVersions.length === 0) {
+          return null;
+        }
+      }
+
+      // Versión representativa: la versión que mejor se ajusta al presupuesto viable
+      const repVersion = [...passingVersions].sort((a, b) => a.price - b.price)[0] || passingVersions[0];
       const maxEquipScore = Math.max(...passingVersions.map(v => v.equipScore));
 
       const fuels = Array.from(new Set(mVersions.map(v => v.combustible)));
       const trans = Array.from(new Set(mVersions.map(v => v.transmision)));
       const maxPlazas = Math.max(...mVersions.map(v => v.plazas));
 
-      const hasAdas = ALIAS.ADAS.some(alias => repVersion.features_raw.includes(alias));
+      const hasAdas = ALIAS.ADAS.some(alias => repVersion.features_raw.includes(alias)) || repVersion.adasCount > 0;
       const hasCuero = ALIAS.CUERO.some(alias => repVersion.features_raw.includes(alias));
       const hasTecho = ALIAS.TECHO.some(alias => repVersion.features_raw.includes(alias));
       const hasCamara = ALIAS.CAMARA.some(alias => repVersion.features_raw.includes(alias));
       const has4x4 = ALIAS.TRACCION_4X4.some(alias => repVersion.features_raw.includes(alias) || repVersion.traccion.includes(alias));
 
-      // Extracción de Píldoras para UI (reflejan la versión recomendada puntual)
+      // Extracción de Píldoras para UI
       const extractedFeatures = [];
       if (hasAdas) extractedFeatures.push('ADAS');
       if (hasCuero) extractedFeatures.push('Tapizado de Cuero');
@@ -506,52 +571,108 @@ export default function RecomendadorPage() {
       if (hasTecho) extractedFeatures.push('Techo Panorámico');
       if (has4x4) extractedFeatures.push('Tracción 4x4');
 
-      const dealershipCount = new Set(mVersions.map(v => v.concesionaria).filter(Boolean)).size;
+      const validDealers = mVersions.map(v => v.concesionaria).filter(Boolean);
+      const dealershipCount = new Set(validDealers).size;
+      const primaryDealership = repVersion.concesionaria || (validDealers.length > 0 ? validDealers[0] : '');
       const dealershipStatus = dealershipCount > 1 ? `${dealershipCount} concesionarias compiten` : '1 concesionaria disponible';
 
-      // SOFT PREFERENCES (puntuables) — un punto por cada pregunta que el usuario
-      // realmente contestó, trazable 1 a 1 en matchReasons.
+      // ==========================================
+      // EVALUACIÓN DE AFINIDAD (SCORE & MATCH)
+      // ==========================================
       let score = 10;
       let maxScore = 10;
       const matchReasons: MatchReason[] = [];
 
-      // Carrocería ya se filtró como excluyente arriba: si el modelo llegó
-      // hasta acá es porque coincide, se muestra en el desglose como confirmación.
+      // Confirmación de Carrocería
       if (carroceriaEsFiltroDuro) {
         matchReasons.push({ label: 'Tipo de carrocería', matched: true });
       }
 
+      // Confirmación de Presupuesto
+      if (budgetRange) {
+        maxScore += 25;
+        score += 25;
+        matchReasons.push({ label: `Presupuesto (${budgetRange.label})`, matched: true });
+      }
+
+      // Evaluación de Plazas
       if (reqPlazas !== null) {
-        maxScore += 15;
-        const matched = repVersion.plazas >= reqPlazas;
-        if (matched) score += 15;
-        matchReasons.push({ label: `Plazas (mínimo ${reqPlazas})`, matched });
-      }
-
-      const ansMarcas = src['marcas'] || [];
-      if (!ansMarcas.includes('any') && ansMarcas.length > 0) {
         maxScore += 20;
-        const matched = ansMarcas.some((m: string) => model.brandName === m);
-        if (matched) score += 20;
-        matchReasons.push({ label: 'Marca preferida', matched });
+        const exactMatch = (reqPlazas <= 2 && repVersion.plazas <= 2) ||
+                           (reqPlazas === 4 && (repVersion.plazas === 4 || repVersion.plazas === 5)) ||
+                           (reqPlazas === 5 && repVersion.plazas === 5) ||
+                           (reqPlazas >= 7 && repVersion.plazas >= 7);
+        if (exactMatch) score += 20;
+        else score += 10;
+        matchReasons.push({ label: `Capacidad de ${repVersion.plazas} plazas`, matched: exactMatch });
       }
 
-      const ansOrigen = src['origen'] || [];
-      if (!ansOrigen.includes('any') && ansOrigen.length > 0) {
-        maxScore += 10;
-        const matched = ansOrigen.some((o: string) => model.origen === o);
-        if (matched) score += 10;
-        matchReasons.push({ label: 'Origen de fabricación', matched });
+      // 1. PRIORIDAD: ECONOMÍA Y NUEVAS ENERGÍAS
+      // Jerarquía: REEV > EV > PHEV > HEV > MHEV > FLEX > NAFTA > DIESEL
+      if (isEconomyPriority) {
+        maxScore += 40;
+        const eRank = ENERGY_ECONOMY_RANK[repVersion.combustible] || 1;
+        const energyPoints = Math.round((eRank / 8) * 40);
+        score += energyPoints;
+        matchReasons.push({
+          label: `Eficiencia Energética (${combustibleLabel(repVersion.combustible) || repVersion.combustible})`,
+          matched: eRank >= 4
+        });
+
+        // En economía, precio más bajo dentro del rango hace más match
+        if (budgetRange) {
+          maxScore += 25;
+          const rangeSpan = Math.max(1, (budgetRange.max < 90000000 ? budgetRange.max : 60000) - budgetRange.min);
+          const priceRatio = Math.max(0, Math.min(1, ((budgetRange.max < 90000000 ? budgetRange.max : 60000) - repVersion.price) / rangeSpan));
+          const priceBonus = Math.round(priceRatio * 25);
+          score += priceBonus;
+          matchReasons.push({
+            label: 'Precio accesible en tu rango',
+            matched: priceRatio >= 0.4
+          });
+        }
+      } else {
+        const ansComb = src['combustible'] || [];
+        if (!ansComb.includes('any') && ansComb.length > 0) {
+          maxScore += 20;
+          const matched = ansComb.includes(repVersion.combustible);
+          if (matched) score += 20;
+          matchReasons.push({ label: 'Combustible preferido', matched });
+        }
       }
 
-      const ansComb = src['combustible'] || [];
-      if (!ansComb.includes('any') && ansComb.length > 0) {
-        maxScore += 15;
-        const matched = ansComb.includes(repVersion.combustible);
-        if (matched) score += 15;
-        matchReasons.push({ label: 'Combustible', matched });
+      // 2. PRIORIDAD: CONFORT Y TECNOLOGÍA
+      if (isComfortPriority) {
+        maxScore += 45;
+        let cPoints = 0;
+        if (hasCamara) cPoints += 12;
+        if (hasCuero) cPoints += 12;
+        if (hasTecho) cPoints += 10;
+        cPoints += Math.min(11, repVersion.confortScore * 2);
+        score += cPoints;
+        matchReasons.push({
+          label: 'Confort y tecnología avanzada',
+          matched: cPoints >= 20
+        });
       }
 
+      // 3. PRIORIDAD: SEGURIDAD Y FAMILIA (Más Airbags y ADAS)
+      if (isSafetyPriority) {
+        maxScore += 50;
+        let sPoints = 0;
+        if (repVersion.airbags >= 6) sPoints += 25;
+        else if (repVersion.airbags >= 4) sPoints += 15;
+        else sPoints += 5;
+
+        if (hasAdas) sPoints += 25;
+        score += sPoints;
+        matchReasons.push({
+          label: repVersion.airbags >= 6 ? `${repVersion.airbags} Airbags y alta seguridad` : (hasAdas ? 'Asistencias ADAS activas' : 'Seguridad estándar'),
+          matched: repVersion.airbags >= 6 || hasAdas
+        });
+      }
+
+      // Transmisión
       if (src['transmision'] && src['transmision'] !== 'any') {
         maxScore += 15;
         let matched = false;
@@ -561,6 +682,25 @@ export default function RecomendadorPage() {
         matchReasons.push({ label: 'Tipo de transmisión', matched });
       }
 
+      // Marcas
+      const ansMarcas = src['marcas'] || [];
+      if (!ansMarcas.includes('any') && ansMarcas.length > 0) {
+        maxScore += 20;
+        const matched = ansMarcas.some((m: string) => model.brandName === m);
+        if (matched) score += 20;
+        matchReasons.push({ label: 'Marca preferida', matched });
+      }
+
+      // Origen de fabricación
+      const ansOrigen = src['origen'] || [];
+      if (!ansOrigen.includes('any') && ansOrigen.length > 0) {
+        maxScore += 10;
+        const matched = ansOrigen.some((o: string) => model.origen === o);
+        if (matched) score += 10;
+        matchReasons.push({ label: 'Origen de fabricación', matched });
+      }
+
+      // Features específicos (experto)
       const featureLabels: Record<string, string> = {
         camara: 'Cámara / Sensores', adas: 'Asistencias de manejo (ADAS)',
         cuero: 'Asientos de cuero', techo: 'Techo panorámico', '4x4': 'Tracción 4x4 / integral'
@@ -583,14 +723,13 @@ export default function RecomendadorPage() {
         tipo_carroceria: model.tipo_carroceria, imgUrl: model.imgUrl, startingPrice: repVersion.price,
         availableFuels: fuels, availableTransmissions: trans, maxPlazas,
         hasAdas, hasCuero, has4x4, hasTecho, hasCamara,
-        topFeatures: extractedFeatures.slice(0, 4), dealershipStatus,
+        topFeatures: extractedFeatures.slice(0, 4), dealershipStatus, concesionaria: primaryDealership,
         score, matchPercentage, equipScore: maxEquipScore,
         origen: model.origen, matchReasons
       };
     };
 
-    // Modelo de referencia ("¿ya tenés un modelo en mente?"): se puntúa aparte,
-    // siempre se muestra, y se saca de la lista general para no aparecer duplicado.
+    // Modelo de referencia opcional
     const referenceModel = referenceModelId ? rawModels.find(m => m.id === referenceModelId) : null;
     const referenceMatch = referenceModel ? scoreModel(referenceModel, { bypassHardFilters: true }) : null;
     setReferenceMatch(referenceMatch);
@@ -600,37 +739,40 @@ export default function RecomendadorPage() {
       .map(model => scoreModel(model))
       .filter((a): a is ScoredModel => a !== null);
 
-    // Ordenamiento: por score, y a igualdad de score, el más accesible primero
-    // (desempate honesto y explicable, no orden arbitrario de inserción).
-    let validMatches = scoredList.sort((a, b) => b.score - a.score || a.startingPrice - b.startingPrice);
-    
-    // Categorización de Pestañas Top 3
+    // Ordenamiento por Score y afinidad real
+    let validMatches = scoredList.sort((a, b) => b.score - a.score || b.matchPercentage - a.matchPercentage || a.startingPrice - b.startingPrice);
+
+    // Filtrar para evitar modelos con match deficiente si hay suficientes candidatos
+    const highQualityMatches = validMatches.filter(m => m.matchPercentage >= 50);
+    if (highQualityMatches.length >= 3) {
+      validMatches = highQualityMatches;
+    }
+
+    // Categorización inteligente de Pestañas Top 3
     let finalTop3: ScoredModel[] = [];
-    
+
     if (validMatches.length >= 3) {
-      // 1. Más Económico
-      let cheapest = [...validMatches].sort((a, b) => a.startingPrice - b.startingPrice)[0];
-      cheapest.badge = '💰 Más Económico';
-      finalTop3.push(cheapest);
-      validMatches = validMatches.filter(m => m.id !== cheapest.id);
+      // 1. #1 Mayor Coincidencia (El mejor score global según las respuestas del usuario)
+      const top1 = validMatches[0];
+      top1.badge = '🏆 Mayor Coincidencia';
+      finalTop3.push(top1);
+      validMatches = validMatches.filter(m => m.id !== top1.id);
 
-      // 2. Tope de Gama (Mayor equipScore matemático)
-      if (validMatches.length > 0) {
-        let topEquipped = [...validMatches].sort((a, b) => b.equipScore - a.equipScore)[0];
-        topEquipped.badge = '💎 Tope de Gama';
-        finalTop3.push(topEquipped);
-        validMatches = validMatches.filter(m => m.id !== topEquipped.id);
-      }
+      // 2. #2 Tope de Gama (El más equipado / mayor equipScore entre los candidatos top)
+      const topEquipPool = validMatches.slice(0, 6);
+      let topEquipped = [...topEquipPool].sort((a, b) => b.equipScore - a.equipScore)[0] || validMatches[0];
+      topEquipped.badge = '💎 Mayor Equipamiento';
+      finalTop3.push(topEquipped);
+      validMatches = validMatches.filter(m => m.id !== topEquipped.id);
 
-      // 3. Opción Equilibrada (Mejor Match Restante)
-      if (validMatches.length > 0) {
-        let balanced = validMatches[0];
-        balanced.badge = '⚖️ Opción Equilibrada';
-        finalTop3.push(balanced);
-        validMatches = validMatches.filter(m => m.id !== balanced.id);
-      }
+      // 3. #3 Opción Inteligente (Mejor balance de precio accesible entre los candidatos top)
+      const topValuePool = validMatches.slice(0, 6);
+      let topValue = [...topValuePool].sort((a, b) => a.startingPrice - b.startingPrice)[0] || validMatches[0];
+      topValue.badge = '⚖️ Opción Inteligente';
+      finalTop3.push(topValue);
+      validMatches = validMatches.filter(m => m.id !== topValue.id);
     } else {
-      finalTop3 = validMatches; // Fallback si hay < 3 resultados
+      finalTop3 = validMatches;
     }
 
     setTopMatches(finalTop3);
@@ -784,9 +926,14 @@ export default function RecomendadorPage() {
             <h1 className="font-black text-4xl md:text-5xl text-[#0A1F33] uppercase mb-4 leading-tight" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               ENCONTRÁ TU <br/><span className="text-[#00BFFF]">AUTO IDEAL</span>
             </h1>
-            <p className="text-sm text-[#3A3A3C] mb-10 leading-relaxed font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+            <p className="text-sm text-[#3A3A3C] mb-6 leading-relaxed font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
               Respondé algunas preguntas y te ayudamos a encontrar el 0km perfecto para vos, basado en tu estilo de vida y preferencias.
             </p>
+            <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-3 mb-8 text-center">
+              <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-wider">
+                100% Sin Costo • Precios directos de concesionaria oficial sin comisiones
+              </p>
+            </div>
             <button onClick={() => setStep(1)} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-sm uppercase tracking-widest py-5 transition-colors flex justify-center items-center gap-2 rounded-none">
               Empezar <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
             </button>
@@ -996,8 +1143,8 @@ export default function RecomendadorPage() {
             <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos un celular y te mostramos los 3 modelos.</p>
 
             <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 text-center rounded-none">
-              <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">Solo el celular es obligatorio</p>
-              <p className="text-xs text-[#1E8E3E]/80 mt-1">Lo usamos para que un asesor te acompañe si lo necesitás. El nombre y el correo son opcionales; si cargás el correo, te enviamos el PDF comparativo.</p>
+              <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">100% Sin Costo • Precios Oficiales sin Comisión</p>
+              <p className="text-xs text-[#1E8E3E]/80 mt-1">Datacar te conecta directo con la concesionaria oficial al precio de lista o con promociones vigentes. Cero intermediarios, cero recargos.</p>
             </div>
 
             <form onSubmit={submitLeadAndShowResults} className="flex flex-col gap-4">
@@ -1031,10 +1178,13 @@ export default function RecomendadorPage() {
       {step === WIZARD_STEPS.length + 3 && (
         <section className="flex-grow w-full pb-20">
           <div className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] py-12 px-4 text-center">
-            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">Tu Resultado</span>
+            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">100% Sin Costo • Precios Oficiales de Concesionaria</span>
             <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               Elegidos por <span className="text-[#00BFFF]">DATACAR</span>
             </h2>
+            <p className="text-xs text-[#3A3A3C] font-medium max-w-lg mx-auto mt-2">
+              Comparamos fichas técnicas sin costo y te conectamos directo con el concesionario oficial de cada marca, sin recargos ni comisiones.
+            </p>
           </div>
 
           <div className="max-w-[1200px] mx-auto px-4 lg:px-8 mt-12">
@@ -1070,10 +1220,19 @@ export default function RecomendadorPage() {
                           ))}
                         </ul>
                       )}
-                      <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50">
-                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio Desde</span>
-                        <span className="font-black text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {referenceMatch.startingPrice.toLocaleString()}</span>
-                        <Link href={`/catalogo/${referenceMatch.brandId}/${referenceMatch.id}`} className="w-full text-center block bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-3 transition-colors rounded-none">
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => openLeadModal({
+                            vehiculoInteres: `${referenceMatch.brandName} ${referenceMatch.modelName}`,
+                            marcaVehiculo: referenceMatch.brandName,
+                            origenLead: 'Recomendador - Opción Referencia',
+                            concesionariaDestino: referenceMatch.concesionaria || ''
+                          })}
+                          className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-none"
+                        >
+                          {formatHablarCon(referenceMatch.concesionaria)}
+                        </button>
+                        <Link href={`/catalogo/${referenceMatch.brandId}/${referenceMatch.id}`} className="w-full text-center block bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none">
                           Ver Detalles Técnicos
                         </Link>
                       </div>
@@ -1173,12 +1332,31 @@ export default function RecomendadorPage() {
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <button onClick={() => { setCalcVehicle(model); setCuotaCalculada(null); }} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-none">
-                            Consultar / Simular
+                        <button
+                          onClick={() => openLeadModal({
+                            vehiculoInteres: `${model.brandName} ${model.modelName}`,
+                            marcaVehiculo: model.brandName,
+                            origenLead: 'Recomendador Inteligente',
+                            concesionariaDestino: model.concesionaria || ''
+                          })}
+                          className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-none shadow-sm"
+                        >
+                          {formatHablarCon(model.concesionaria)}
                         </button>
-                        <Link href={`/catalogo/${model.brandId}/${model.id}`} className="w-full text-center bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-3 transition-colors rounded-none">
-                          Ver Detalles Técnicos
-                        </Link>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setCalcVehicle(model); setCuotaCalculada(null); }}
+                            className="flex-1 text-center bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none"
+                          >
+                            Simular Cuota
+                          </button>
+                          <Link
+                            href={`/catalogo/${model.brandId}/${model.id}`}
+                            className="flex-1 text-center bg-[#F8F9FA] border border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none"
+                          >
+                            Detalles
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </div>
