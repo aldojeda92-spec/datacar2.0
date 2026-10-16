@@ -44,19 +44,26 @@ service cloud.firestore {
     }
 
     // ¿La marca (por id) está en la lista de marcas permitidas de la concesionaria?
+    function brandNameAllowed(bName) {
+      return bName in myBrands() || bName.upper() in myBrands() || bName.lower() in myBrands();
+    }
+
     function brandAllowed(brandId) {
       return isAdmin() || (
         isConcesionaria() &&
         exists(/databases/$(database)/documents/brands/$(brandId)) &&
-        get(/databases/$(database)/documents/brands/$(brandId)).data.name in myBrands()
+        brandNameAllowed(get(/databases/$(database)/documents/brands/$(brandId)).data.name)
       );
     }
 
     function modelBrandAllowed(modelId) {
       return isAdmin() || (
-        isConcesionaria() &&
-        exists(/databases/$(database)/documents/models/$(modelId)) &&
-        brandAllowed(get(/databases/$(database)/documents/models/$(modelId)).data.brandId)
+        isConcesionaria() && (
+          (exists(/databases/$(database)/documents/models/$(modelId)) &&
+           brandAllowed(get(/databases/$(database)/documents/models/$(modelId)).data.brandId)) ||
+          (existsAfter(/databases/$(database)/documents/models/$(modelId)) &&
+           brandAllowed(getAfter(/databases/$(database)/documents/models/$(modelId)).data.brandId))
+        )
       );
     }
 
@@ -71,7 +78,8 @@ service cloud.firestore {
     // ---------------- brands ----------------
     match /brands/{brandId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isConcesionaria() && brandAllowed(brandId));
     }
 
     // ---------------- models ----------------
@@ -84,7 +92,8 @@ service cloud.firestore {
         brandAllowed(resource.data.brandId) &&
         brandAllowed(request.resource.data.brandId)
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() ||
+        (isConcesionaria() && brandAllowed(resource.data.brandId));
     }
 
     // ---------------- versions ----------------
@@ -95,10 +104,10 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isConcesionaria() &&
         modelBrandAllowed(resource.data.modelId) &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['price', 'promocion', 'url_auto', 'updatedAt'])
+        modelBrandAllowed(request.resource.data.modelId)
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() ||
+        (isConcesionaria() && modelBrandAllowed(resource.data.modelId));
     }
 
     // ---------------- campaigns (ads) ----------------
