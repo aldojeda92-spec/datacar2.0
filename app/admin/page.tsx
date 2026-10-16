@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc, limit, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
@@ -342,21 +342,31 @@ export default function AdminDashboardPage() {
       const qBlog = query(collection(db, 'blog_posts'), limit(50));
       const qVideos = query(collection(db, 'video_reviews'), limit(20));
 
+      // Carga resiliente por colección: un fallo puntual en una sub-colección nunca bloquea el panel central
+      const safeFetch = async (queryOrCol: any, name: string): Promise<QuerySnapshot<DocumentData, DocumentData>> => {
+        try {
+          return await getDocs(queryOrCol);
+        } catch (err: any) {
+          console.warn(`Aviso de lectura en ${name}:`, err);
+          return { docs: [] } as unknown as QuerySnapshot<DocumentData, DocumentData>;
+        }
+      };
+
       const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap, newsSnap, newsSubSnap, wizSnap] = await Promise.all([
-        getDocs(collection(db, 'brands')),
-        getDocs(collection(db, 'models')),
-        getDocs(collection(db, 'versions')),
-        getDocs(collection(db, 'campaigns')),
-        getDocs(qLeads),
-        getDocs(collection(db, 'concesionarias')),
-        getDocs(collection(db, 'users')),
-        getDocs(qReqs),
-        getDocs(collection(db, 'comparison_stats')),
-        getDocs(qBlog),
-        getDocs(qVideos),
-        getDocs(collection(db, 'newsletter')),
-        getDocs(collection(db, 'newsletter_subscribers')),
-        getDocs(collection(db, 'wizard_stats')),
+        safeFetch(collection(db, 'brands'), 'brands'),
+        safeFetch(collection(db, 'models'), 'models'),
+        safeFetch(collection(db, 'versions'), 'versions'),
+        safeFetch(collection(db, 'campaigns'), 'campaigns'),
+        safeFetch(qLeads, 'leads'),
+        safeFetch(collection(db, 'concesionarias'), 'concesionarias'),
+        safeFetch(collection(db, 'users'), 'users'),
+        safeFetch(qReqs, 'dealership_requests'),
+        safeFetch(collection(db, 'comparison_stats'), 'comparison_stats'),
+        safeFetch(qBlog, 'blog_posts'),
+        safeFetch(qVideos, 'video_reviews'),
+        safeFetch(collection(db, 'newsletter'), 'newsletter'),
+        safeFetch(collection(db, 'newsletter_subscribers'), 'newsletter_subscribers'),
+        safeFetch(collection(db, 'wizard_stats'), 'wizard_stats'),
       ]);
       
       setMarcasList(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -438,7 +448,13 @@ export default function AdminDashboardPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
-          const isCoreAdminEmail = ['aldojeda92@gmail.com', 'adairojeda.adm@gmail.com', 'antoninovazquezjara@gmail.com'].includes(currentUser.email?.toLowerCase().trim() || '');
+          const userEm = currentUser.email?.toLowerCase().trim() || '';
+          const isCoreAdminEmail = [
+            'aldojeda92@gmail.com',
+            'adairojeda.adm@gmail.com',
+            'antoninovazquezjara@gmail.com',
+            'aldo.ojeda@datacarpy.com'
+          ].includes(userEm) || userEm.endsWith('@datacarpy.com');
           
           let isAuthorized = false;
           try {
