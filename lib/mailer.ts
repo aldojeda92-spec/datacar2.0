@@ -186,3 +186,58 @@ export const sendDealershipRequestEmail = async (params: DealershipRequestParams
     return false;
   }
 };
+
+// ==========================================
+// 6. MAILING PARA DIFUSIÓN DE NEWSLETTER (ADMIN)
+// ==========================================
+export interface NewsletterBroadcastParams {
+  subject: string;
+  headline?: string;
+  contentHtml: string;
+  buttonText?: string;
+  buttonUrl?: string;
+  destinatarios: string[];
+}
+
+export interface NewsletterBroadcastResult {
+  success: boolean;
+  simulated?: boolean;
+  message?: string;
+  previewUrl?: string;
+  destinatariosCount?: number;
+  error?: string;
+}
+
+export const sendNewsletterBroadcast = async (params: NewsletterBroadcastParams): Promise<NewsletterBroadcastResult> => {
+  try {
+    const response = await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'newsletter_broadcast',
+        destinatarios: params.destinatarios,
+        data: {
+          subject: params.subject,
+          headline: params.headline,
+          contentHtml: params.contentHtml,
+          buttonText: params.buttonText,
+          buttonUrl: params.buttonUrl,
+        },
+      }),
+    });
+
+    const resJson = await response.json();
+    if (!response.ok) {
+      throw new Error(resJson.error || resJson.details || 'Fallo en el envío del newsletter');
+    }
+
+    return resJson;
+  } catch (error: any) {
+    console.error("❌ Error enviando difusión de newsletter:", error);
+    return {
+      success: false,
+      error: error.message || 'Error de conexión con el servidor de correo'
+    };
+  }
+};
+

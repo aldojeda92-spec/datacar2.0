@@ -1,0 +1,92 @@
+Campaign,Campaign Daily Budget,Campaign Type,Campaign Status,Networks,Languages,Bid Strategy Type,Ad Group,Ad Group Status,Max CPC,Keyword,Criterion Type,Headline 1,Headline 2,Headline 3,Headline 4,Headline 5,Headline 6,Headline 7,Headline 8,Headline 9,Headline 10,Description 1,Description 2,Description 3,Description 4,Path 1,Path 2,Final URL,Status
+DATACAR_Search_SUVs_NuevasEnergias,8.25,Search,Paused,Google search,es,Maximize clicks,,,,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,5.00,Search,Paused,Google search,es,Maximize clicks,,,,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,3.25,Search,Paused,Google search,es,Maximize clicks,,,,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,Max CPC,Nuevas_Energias_Hibridos_Electricos,Enabled,0.20,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,Max CPC,SUVs_Masivas_Populares,Enabled,0.20,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,Max CPC,Modelos_Destacados_BYD_Song_Plus,Enabled,0.25,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,Max CPC,Recomendador_Inteligente,Enabled,0.18,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,Max CPC,Comparador_Versiones,Enabled,0.18,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,Max CPC,Precios_Presupuesto_0km,Enabled,0.18,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,Max CPC,Calculadora_Financiacion,Enabled,0.18,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,auto hibrido paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,suv hibrida paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,comprar auto electrico paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,suv electrica 0km,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,autos hibridos en paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,camioneta hibrida paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,[auto hibrido paraguay],Exact,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,[suv hibrida paraguay],Exact,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,suv 0km paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,comprar suv paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,camionetas 0km paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,suvs paraguay precios,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,chevrolet tracker paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,hyundai creta paraguay precio,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,nissan kicks paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,volkswagen t-cross paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,[suv 0km paraguay],Exact,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Modelos_Destacados_BYD_Song_Plus,,,byd song plus paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Modelos_Destacados_BYD_Song_Plus,,,byd song plus precio,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Modelos_Destacados_BYD_Song_Plus,,,byd song plus dm-i,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Modelos_Destacados_BYD_Song_Plus,,,byd paraguay precios,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Modelos_Destacados_BYD_Song_Plus,,,byd diesa paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Modelos_Destacados_BYD_Song_Plus,,,[byd song plus dm-i],Exact,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Recomendador_Inteligente,,,que auto comprar paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Recomendador_Inteligente,,,recomendador de autos paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Recomendador_Inteligente,,,cual es la mejor suv paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Recomendador_Inteligente,,,test que auto comprar,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Recomendador_Inteligente,,,asesor autos 0km paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Recomendador_Inteligente,,,[que auto comprar paraguay],Exact,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Comparador_Versiones,,,comparar autos paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Comparador_Versiones,,,comparativa suv paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Comparador_Versiones,,,diferencia versiones autos,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Comparador_Versiones,,,comparador de vehiculos 0km,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Comparador_Versiones,,,comparar fichas tecnicas autos,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Comparador_Versiones,,,[comparar autos paraguay],Exact,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Precios_Presupuesto_0km,,,autos 0km baratos paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Precios_Presupuesto_0km,,,autos 0km hasta 20000 dolares,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Precios_Presupuesto_0km,,,suv mas barata paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Precios_Presupuesto_0km,,,promociones autos 0km paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Precios_Presupuesto_0km,,,precios de autos 0km paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Calculadora_Financiacion,,,calcular cuota auto paraguay,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Calculadora_Financiacion,,,simulador cuotas autos 0km,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Calculadora_Financiacion,,,financiacion de autos 0km,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Calculadora_Financiacion,,,plan financiamiento autos,Phrase,,,,,,,,,,,,,,,,,,,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,usado,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,usados,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,chile,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,via chile,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,vía chile,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,desarmadero,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,repuesto,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,repuestos,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,taller,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,mecanico,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,alquiler,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,rent a car,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,clasipar,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,hendyla,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,,,,cedula verde,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,usado,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,usados,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,chile,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,via chile,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,repuestos,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,taller,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,clasipar,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Herramientas_Decision,,,,,,,,,,hendyla,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,,,,,,usado,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,,,,,,usados,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,,,,,,chile,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,,,,,,via chile,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,,,,,,repuestos,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,,,,,,clasipar,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_Oportunidad_Precios,,,,,,,,,,hendyla,Negative Phrase,,,,,,,,,,,,,,,,,,
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Nuevas_Energias_Hibridos_Electricos,,,,,Autos Hibridos en Paraguay,Precios Oficiales 0km,SUVs y Autos Hibridos,100% Sin Comisiones,Precios Contado Directos,Hablás con Concesionaria,Gama Hibrida y Electrica,Calculá tu Cuota Mensual,Catálogo Oficial DATACAR,Conocé Versiones y Precios,Compará SUVs y vehículos híbridos sin costo. Precios directos de concesionaria oficial.,Elegí tu 0km en Paraguay con total transparencia. Contacto directo con el asesor oficial.,Ficha técnica completa, equipamiento ADAS de seguridad y cálculo de cuotas estimadas.,Toda la oferta 0km de Paraguay en un solo lugar. Sin intermediarios ni cargos extras.,Hibridos,0km,https://datacarpy.com/catalogo,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,SUVs_Masivas_Populares,,,,,SUVs 0km en Paraguay,Precios Oficiales 0km,Catálogo Completo de SUVs,100% Sin Comisiones,Precios Contado Directos,Hablás con Concesionaria,Compará Modelos y Versiones,Simulá Cuotas Mensuales,Equipamiento y Seguridad,Entrega y Financiación,Compará las SUVs 0km más vendidas de Paraguay sin costo. Precios directos de concesionaria.,Elegí tu 0km en Paraguay con total transparencia. Contacto directo con el asesor oficial.,Ficha técnica completa, equipamiento ADAS de seguridad y cálculo de cuotas estimadas.,Toda la oferta 0km de Paraguay en un solo lugar. Sin intermediarios ni cargos extras.,SUVs,Paraguay,https://datacarpy.com/catalogo,Enabled
+DATACAR_Search_SUVs_NuevasEnergias,,,,,,,Modelos_Destacados_BYD_Song_Plus,,,,,BYD Song Plus DM-I 0km,Precios Oficiales Diesa,SUV Hibrida Enchufable,Hablás Directo con Diesa,Precio Contado Verificado,100% Sin Comisiones Extras,Conocé la Glory y GS,Simulá tu Cuota Mensual,Autonomía y Confort 2026,Ficha Tecnica Oficial,Conocé el BYD Song Plus DM-I con precios oficiales de Diesa. Contacto directo sin comisión.,Elegí tu 0km en Paraguay con total transparencia. Contacto directo con el asesor oficial.,Ficha técnica completa, equipamiento ADAS de seguridad y cálculo de cuotas estimadas.,Toda la oferta 0km de Paraguay en un solo lugar. Sin intermediarios ni cargos extras.,BYD,SongPlus,https://datacarpy.com/catalogo/byd/song-plus-dm-i,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Recomendador_Inteligente,,,,,¿Qué Auto Comprar 0km?,Test Inteligente de Autos,Tu Auto Ideal en 1 Minuto,Recomendador DATACAR,100% Sin Costo,Analizá Seguridad y Consumo,Filtro de Presupuesto Real,Evaluá Todas las Marcas,Decidí con Datos Exactos,Asesoría Digital Neutral,Respondé 4 preguntas y descubrí el auto 0km ideal para tu presupuesto y necesidades.,Análisis neutral y 100% gratuito entre todas las marcas y concesionarias de Paraguay.,Ficha técnica completa, equipamiento ADAS de seguridad y cálculo de cuotas estimadas.,Toda la oferta 0km de Paraguay en un solo lugar. Sin intermediarios ni cargos extras.,Recomienda,Autos,https://datacarpy.com/recomendador,Enabled
+DATACAR_Search_Herramientas_Decision,,,,,,,Comparador_Versiones,,,,,Comparador de Autos 0km,Compará Fichas y Precios,Analizá Hasta 3 Autos Juntos,Compará Sin Costo Alguno,Diferencias de Versiones,Equipamiento ADAS y Motor,Precios Contado Oficiales,Decidí de Forma Neutral,DATACAR Comparador 0km,Sin Comisiones Ocultas,Poné 2 o 3 modelos cara a cara. Compará equipamiento de seguridad, motor y precio contado.,La herramienta más completa para decidir tu compra de 0km en Paraguay sin costo alguno.,Ficha técnica completa, equipamiento ADAS de seguridad y cálculo de cuotas estimadas.,Toda la oferta 0km de Paraguay en un solo lugar. Sin intermediarios ni cargos extras.,Comparar,Versiones,https://datacarpy.com/comparador,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Precios_Presupuesto_0km,,,,,Autos 0km al Mejor Precio,Precios Contado de Concesionaria,Modelos Desde US$ 12.000,100% Sin Comisiones Extras,Oportunidades y Promociones,Encontrá Autos por Precio,Fichas Técnicas Verificadas,Hablás con Concesionarias,Compra Segura y Transparente,Garantía Oficial de Marca,Filtrá por presupuesto y carrocería. Precios oficiales transparentes sin intermediación.,Elegí tu 0km en Paraguay con total transparencia. Contacto directo con el asesor oficial.,Ficha técnica completa, equipamiento ADAS de seguridad y cálculo de cuotas estimadas.,Toda la oferta 0km de Paraguay en un solo lugar. Sin intermediarios ni cargos extras.,Precios,Ocasión,https://datacarpy.com/catalogo,Enabled
+DATACAR_Search_Oportunidad_Precios,,,,,,,Calculadora_Financiacion,,,,,Calculá tu Cuota de 0km,Simulador Financiero Autos,Planes de 12 a 60 Meses,Cuotas Referenciales,Precios Contado Oficiales,Financiá tu Próximo 0km,100% Sin Costo ni Recargos,Hablás con la Concesionaria,Entrega Inicial a tu Medida,Simulación en Segundos,Simulá planes de 12 a 60 meses con cuotas y tasas referenciales del mercado paraguayo.,Elegí tu 0km en Paraguay con total transparencia. Contacto directo con el asesor oficial.,Ficha técnica completa, equipamiento ADAS de seguridad y cálculo de cuotas estimadas.,Toda la oferta 0km de Paraguay en un solo lugar. Sin intermediarios ni cargos extras.,Calcula,Cuotas,https://datacarpy.com/calculadora,Enabled

@@ -108,6 +108,9 @@ interface AdCampaign {
   location: string; 
   isActive: boolean; 
   targetCategory?: string; 
+  modelId?: string;
+  modelName?: string;
+  brandName?: string;
   startDate?: string;
   endDate?: string;
   ctaEnabled?: boolean;
@@ -146,6 +149,7 @@ export default function RecomendadorPage() {
 
   const [topMatches, setTopMatches] = useState<ScoredModel[]>([]);
   const [otherMatches, setOtherMatches] = useState<ScoredModel[]>([]);
+  const [relaxationInfo, setRelaxationInfo] = useState<{ level: number; message: string } | null>(null);
 
   // "¿Ya tenés un modelo en mente?" -- se compara aparte de las recomendaciones
   const [wantsReference, setWantsReference] = useState<boolean | null>(null);
@@ -491,7 +495,7 @@ export default function RecomendadorPage() {
       ? { ...answers, ...derivarPreferenciasNovato(answers) }
       : answers;
 
-    // DEAL-BREAKERS (Filtros Excluyentes Estrictos):
+    // DEAL-BREAKERS (Filtros con Cascada de Flexibilización Inteligente):
     // 1. Rango de Presupuesto
     const budgetKey = src['presupuesto'];
     const budgetRange = budgetKey ? BUDGET_RANGES[budgetKey] : null;
@@ -499,7 +503,7 @@ export default function RecomendadorPage() {
     // 2. Cantidad de Plazas Requerida
     const reqPlazas = (src['plazas'] && src['plazas'] !== 'any') ? Number(src['plazas']) : null;
 
-    // 3. Tipo de Carrocería
+    // 3. Tipo de Carrocería / "Para qué lo voy a usar"
     const ansCarroceria = src['carroceria'] || [];
     const carroceriaEsFiltroDuro = !ansCarroceria.includes('any') && ansCarroceria.length > 0;
 
@@ -510,40 +514,103 @@ export default function RecomendadorPage() {
     const isComfortPriority = prioridad === 'tecnologia';
     const isSafetyPriority = prioridad === 'seguridad' || uso === 'familia';
 
-    const scoreModel = (model: ModelData, opts?: { bypassHardFilters?: boolean }): ScoredModel | null => {
-      const bypass = !!opts?.bypassHardFilters;
+    interface ScoringOpts {
+      bypassHardFilters?: boolean;
+      relaxationLevel?: number; // 0: Estricto, 1: Flexibilizar plazas, 2: Flexibilizar uso/carrocería, 3: Flexibilizar terreno, 4: Flexibilizar presupuesto, 5: Catálogo completo
+      allow5SeatsFor1or2?: boolean;
+    }
 
-      // FILTRO DURO 1: Carrocería
-      if (!bypass && carroceriaEsFiltroDuro && !ansCarroceria.some((c: string) => model.tipo_carroceria === c)) {
-        return null;
+    const scoreModel = (model: ModelData, opts?: ScoringOpts): ScoredModel | null => {
+      const bypass = !!opts?.bypassHardFilters;
+      const rLevel = opts?.relaxationLevel ?? 0;
+
+      // =========================================================================
+      // 1. FILTRO DE CARROCERÍA / "PARA QUÉ LO VOY A USAR" (Flexibilizado en Level >= 2)
+      // =========================================================================
+      if (!bypass && carroceriaEsFiltroDuro && rLevel < 2) {
+        if (!ansCarroceria.some((c: string) => model.tipo_carroceria === c)) {
+          return null;
+        }
       }
 
       const mVersions = rawVersions.filter(v => v.modelId === model.id);
       if (mVersions.length === 0) return null;
 
-      // FILTRO DURO 2: Presupuesto Estricto (Evita mostrar modelos fuera del rango de precios)
+      // =========================================================================
+      // 2. FILTRO DE PRESUPUESTO (Flexibilizado en Level >= 4, catálogo completo en Level 5)
+      // =========================================================================
       let passingVersions = mVersions;
-      if (!bypass && budgetRange) {
-        // Tolerancia de borde máxima del 5% para capturar precios psicológicos (ej: $17.990)
-        const minAllowed = budgetRange.min > 0 ? budgetRange.min * 0.95 : 0;
-        const maxAllowed = budgetRange.max < 90000000 ? budgetRange.max * 1.05 : Infinity;
+      if (!bypass && budgetRange && rLevel < 5) {
+        let minAllowed = budgetRange.min > 0 ? budgetRange.min * 0.95 : 0;
+        let maxAllowed = budgetRange.max < 90000000 ? budgetRange.max * 1.05 : Infinity;
+
+        if (rLevel === 4) {
+          // Nivel 4: Amplía el rango de presupuesto
+          if (budgetKey === '18000') {
+            maxAllowed = 26250; // Amplía al escalón de 25k (+ 5% tolerancia)
+          } else if (budgetKey === '25000') {
+            minAllowed = 15000;
+            maxAllowed = 42000;
+          } else if (budgetKey === '40000') {
+            minAllowed = 20000;
+            maxAllowed = 55000;
+          } else {
+            minAllowed = 30000;
+          }
+        }
+
         passingVersions = mVersions.filter(v => v.price >= minAllowed && v.price <= maxAllowed);
         if (passingVersions.length === 0) {
-          return null; // Ninguna versión de este modelo entra en el presupuesto seleccionado
+          return null;
         }
       }
 
-      // FILTRO DURO 3: Plazas (SI el usuario elige cantidad de pasajeros, descarta los que tengan más o menos)
-      if (!bypass && reqPlazas !== null) {
-        if (reqPlazas <= 2) {
-          passingVersions = passingVersions.filter(v => v.plazas <= 2);
-        } else if (reqPlazas === 4 || reqPlazas === 5) {
-          // Si eligió 4 o 5 plazas, descarta los vehículos de 7 o más plazas
-          passingVersions = passingVersions.filter(v => v.plazas <= 5);
-        } else if (reqPlazas >= 7) {
-          // Si necesita 7 plazas, descarta los que tengan menos de 7 plazas
-          passingVersions = passingVersions.filter(v => v.plazas >= 7);
+      // =========================================================================
+      // 3. FILTRO DE TERRENO / "POR DÓNDE MANEJÁS" (Flexibilizado en Level >= 3)
+      // =========================================================================
+      const reqOffroad = src['terreno'] === 'offroad' || (src['features'] || []).includes('4x4');
+      if (!bypass && reqOffroad && rLevel < 3) {
+        passingVersions = passingVersions.filter(v => {
+          return ALIAS.TRACCION_4X4.some(alias => v.features_raw.includes(alias) || v.traccion.includes(alias));
+        });
+        if (passingVersions.length === 0) {
+          return null;
         }
+      }
+
+      // =========================================================================
+      // 4. FILTRO DE PLAZAS / CANTIDAD DE PERSONAS (Flexibilizado en Level >= 1)
+      // =========================================================================
+      if (!bypass && reqPlazas !== null && rLevel < 2) {
+        if (rLevel === 0) {
+          // Nivel 0 (Filtro Estricto):
+          if (reqPlazas <= 2) {
+            passingVersions = passingVersions.filter(v => v.plazas <= 2);
+          } else if (reqPlazas === 4) {
+            passingVersions = passingVersions.filter(v => v.plazas <= 4);
+          } else if (reqPlazas === 5) {
+            passingVersions = passingVersions.filter(v => v.plazas <= 5);
+          } else if (reqPlazas >= 7) {
+            passingVersions = passingVersions.filter(v => v.plazas >= 7);
+          }
+        } else if (rLevel === 1) {
+          // Nivel 1 (Flexibiliza Cantidad de Personas):
+          if (reqPlazas <= 2) {
+            // Para 1 o 2 personas: busca autos de 4 plazas; si allow5SeatsFor1or2 está activo, permite 5 plazas
+            if (opts?.allow5SeatsFor1or2) {
+              passingVersions = passingVersions.filter(v => v.plazas <= 5);
+            } else {
+              passingVersions = passingVersions.filter(v => v.plazas <= 4);
+            }
+          } else if (reqPlazas === 4) {
+            passingVersions = passingVersions.filter(v => v.plazas <= 5);
+          } else if (reqPlazas === 5) {
+            passingVersions = passingVersions.filter(v => v.plazas >= 4 && v.plazas <= 7);
+          } else if (reqPlazas >= 7) {
+            passingVersions = passingVersions.filter(v => v.plazas >= 5);
+          }
+        }
+
         if (passingVersions.length === 0) {
           return null;
         }
@@ -585,26 +652,64 @@ export default function RecomendadorPage() {
 
       // Confirmación de Carrocería
       if (carroceriaEsFiltroDuro) {
-        matchReasons.push({ label: 'Tipo de carrocería', matched: true });
+        maxScore += 20;
+        const matched = ansCarroceria.some((c: string) => model.tipo_carroceria === c);
+        if (matched) score += 20;
+        matchReasons.push({
+          label: matched ? `Carrocería ${model.tipo_carroceria}` : `Alternativa: ${model.tipo_carroceria}`,
+          matched
+        });
       }
 
       // Confirmación de Presupuesto
       if (budgetRange) {
         maxScore += 25;
-        score += 25;
-        matchReasons.push({ label: `Presupuesto (${budgetRange.label})`, matched: true });
+        const withinOriginalBudget = repVersion.price >= (budgetRange.min * 0.95) && repVersion.price <= (budgetRange.max * 1.05);
+        if (withinOriginalBudget) {
+          score += 25;
+          matchReasons.push({ label: `Presupuesto (${budgetRange.label})`, matched: true });
+        } else {
+          score += 10;
+          matchReasons.push({ label: `Precio aproximado: US$ ${repVersion.price.toLocaleString('es-PY')}`, matched: false });
+        }
       }
 
       // Evaluación de Plazas
       if (reqPlazas !== null) {
         maxScore += 20;
         const exactMatch = (reqPlazas <= 2 && repVersion.plazas <= 2) ||
-                           (reqPlazas === 4 && (repVersion.plazas === 4 || repVersion.plazas === 5)) ||
+                           (reqPlazas === 4 && repVersion.plazas === 4) ||
                            (reqPlazas === 5 && repVersion.plazas === 5) ||
                            (reqPlazas >= 7 && repVersion.plazas >= 7);
-        if (exactMatch) score += 20;
-        else score += 10;
-        matchReasons.push({ label: `Capacidad de ${repVersion.plazas} plazas`, matched: exactMatch });
+        const compatibleMatch = (reqPlazas <= 2 && (repVersion.plazas === 4 || repVersion.plazas === 5)) ||
+                                (reqPlazas === 4 && repVersion.plazas === 5) ||
+                                (reqPlazas === 5 && (repVersion.plazas === 4 || repVersion.plazas === 7));
+
+        if (exactMatch) {
+          score += 20;
+          matchReasons.push({ label: `Capacidad de ${repVersion.plazas} plazas`, matched: true });
+        } else if (compatibleMatch) {
+          score += 16;
+          const label = (reqPlazas <= 2 && repVersion.plazas === 4)
+            ? 'Capacidad de 4 plazas (ideal 1-2 personas)'
+            : (reqPlazas <= 2 && repVersion.plazas === 5)
+            ? 'Capacidad de 5 plazas (óptimo 1-2 personas)'
+            : `Capacidad de ${repVersion.plazas} plazas (compatible)`;
+          matchReasons.push({ label, matched: true });
+        } else {
+          score += 6;
+          matchReasons.push({ label: `Capacidad de ${repVersion.plazas} plazas`, matched: false });
+        }
+      }
+
+      // Terreno / Tracción (Por dónde manejás)
+      if (reqOffroad) {
+        maxScore += 25;
+        if (has4x4) score += 25;
+        matchReasons.push({
+          label: has4x4 ? 'Tracción 4x4 / integral para todo terreno' : 'Tracción simple (caminos urbanos/mixtos)',
+          matched: has4x4
+        });
       }
 
       // 1. PRIORIDAD: ECONOMÍA Y NUEVAS ENERGÍAS
@@ -734,21 +839,113 @@ export default function RecomendadorPage() {
     const referenceMatch = referenceModel ? scoreModel(referenceModel, { bypassHardFilters: true }) : null;
     setReferenceMatch(referenceMatch);
 
-    const scoredList = rawModels
-      .filter(model => model.id !== referenceModelId)
-      .map(model => scoreModel(model))
-      .filter((a): a is ScoredModel => a !== null);
+    // =========================================================================
+    // RECORRIDO DE FLEXIBILIZACIÓN EN CASCADA (WATERFALL)
+    // 0: Filtro estricto
+    // 1: Flexibilizar cantidad de personas (4 plazas, y luego 5 plazas)
+    // 2: Flexibilizar para qué lo voy a usar (carrocería / uso)
+    // 3: Flexibilizar por dónde manejás (terreno / 4x4)
+    // 4: Flexibilizar presupuesto (ampliar rango de precios)
+    // 5: Catálogo general por afinidad (nunca "sin resultados")
+    // =========================================================================
+    let validMatches: ScoredModel[] = [];
+    let appliedLevel = 0;
 
-    // Ordenamiento por Score y afinidad real
-    let validMatches = scoredList.sort((a, b) => b.score - a.score || b.matchPercentage - a.matchPercentage || a.startingPrice - b.startingPrice);
+    const stages: Array<{ level: number; allow5Seats?: boolean }> = [
+      { level: 0 },
+      { level: 1, allow5Seats: false }, // Flexibiliza a 4 plazas para 1-2 personas
+      { level: 1, allow5Seats: true },  // Si no hay 3 de 4 plazas, permite 5 plazas
+      { level: 2 },                     // Flexibiliza carrocería / uso
+      { level: 3 },                     // Flexibiliza terreno / 4x4
+      { level: 4 },                     // Flexibiliza presupuesto
+      { level: 5 },                     // Catálogo completo
+    ];
 
-    // Filtrar para evitar modelos con match deficiente si hay suficientes candidatos
-    const highQualityMatches = validMatches.filter(m => m.matchPercentage >= 50);
-    if (highQualityMatches.length >= 3) {
-      validMatches = highQualityMatches;
+    for (const stg of stages) {
+      appliedLevel = stg.level;
+      const candidates = rawModels
+        .filter(model => model.id !== referenceModelId)
+        .map(model => scoreModel(model, { relaxationLevel: stg.level, allow5SeatsFor1or2: stg.allow5Seats }))
+        .filter((a): a is ScoredModel => a !== null);
+
+      const sorted = candidates.sort((a, b) => b.score - a.score || b.matchPercentage - a.matchPercentage || a.startingPrice - b.startingPrice);
+
+      if (sorted.length >= 3) {
+        // Preferir candidatos de calidad (>= 40% match) si hay al menos 3
+        const highMatch = sorted.filter(m => m.matchPercentage >= 40);
+        validMatches = highMatch.length >= 3 ? highMatch : sorted;
+        break;
+      }
+
+      if (sorted.length > validMatches.length) {
+        validMatches = sorted;
+      }
     }
 
-    // Categorización inteligente de Pestañas Top 3
+    // Configuración del mensaje explicativo para el usuario según la etapa que resolvió
+    if (appliedLevel === 0) {
+      setRelaxationInfo(null);
+    } else if (appliedLevel === 1) {
+      if (reqPlazas !== null && reqPlazas <= 2) {
+        setRelaxationInfo({
+          level: 1,
+          message: 'Ampliamos la búsqueda de pasajeros a vehículos de 4 y 5 plazas, ideales y compactos para 1 o 2 ocupantes dentro de tu presupuesto.'
+        });
+      } else {
+        setRelaxationInfo({
+          level: 1,
+          message: 'Flexibilizamos la cantidad de plazas para mostrarte las mejores opciones viables dentro de tu presupuesto.'
+        });
+      }
+    } else if (appliedLevel === 2) {
+      setRelaxationInfo({
+        level: 2,
+        message: 'Ampliamos los tipos de carrocería y uso para encontrarte opciones dentro de tu rango de presupuesto.'
+      });
+    } else if (appliedLevel === 3) {
+      setRelaxationInfo({
+        level: 3,
+        message: 'Flexibilizamos la exigencia de tracción 4x4 para ofrecerte los modelos 0km más accesibles y convenientes.'
+      });
+    } else if (appliedLevel >= 4) {
+      setRelaxationInfo({
+        level: 4,
+        message: 'Ampliamos el rango de presupuesto para mostrarte los vehículos 0km más convenientes y cercanos a tu búsqueda.'
+      });
+    }
+
+    // 0. VERIFICACIÓN DEL SLOT PATROCINADO (CAMPANAS B2B PARA RECOMENDADOR)
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const sponsoredCampaign = ads.find(c => {
+      if (c.isActive === false) return false;
+      const loc = (c.location || '').toLowerCase();
+      const isValidLoc = loc === 'recomendador' || loc === 'ambos' || loc === 'recomendador_slot';
+      if (!isValidLoc) return false;
+      if (!c.modelId) return false;
+      if (c.startDate && c.startDate > localToday) return false;
+      if (c.endDate && c.endDate < localToday) return false;
+      return true;
+    });
+
+    let sponsoredOption: ScoredModel | null = null;
+    if (sponsoredCampaign && sponsoredCampaign.modelId) {
+      const sponsoredModel = rawModels.find(m => m.id === sponsoredCampaign.modelId);
+      if (sponsoredModel) {
+        const scoredSponsored = scoreModel(sponsoredModel, { bypassHardFilters: true });
+        if (scoredSponsored) {
+          scoredSponsored.badge = '⭐ Opción Patrocinada';
+          if (sponsoredCampaign.sponsor) {
+            scoredSponsored.dealershipStatus = `Pauta Oficial: ${sponsoredCampaign.sponsor}`;
+          }
+          sponsoredOption = scoredSponsored;
+          // Excluimos este modelo del grupo orgánico para garantizar 4 modelos únicos
+          validMatches = validMatches.filter(m => m.id !== sponsoredModel.id);
+        }
+      }
+    }
+
+    // Categorización inteligente de Pestañas Top 3 Orgánicas
     let finalTop3: ScoredModel[] = [];
 
     if (validMatches.length >= 3) {
@@ -775,23 +972,28 @@ export default function RecomendadorPage() {
       finalTop3 = validMatches;
     }
 
-    setTopMatches(finalTop3);
+    // Ensamble final: Si hay opción patrocinada activa, se agrega como 4ta opción ("⭐ Opción Patrocinada")
+    // Si no hay opción patrocinada, siguen saliendo 3 opciones sin dejar ningún slot vacío
+    const finalMatches: ScoredModel[] = sponsoredOption ? [...finalTop3, sponsoredOption] : finalTop3;
+
+    setTopMatches(finalMatches);
     setOtherMatches(validMatches.slice(0, 4));
 
-    // Selección Inteligente y Contextual de Ads en el Recomendador
+    // Selección Inteligente y Contextual de Ads de Banner en el Recomendador (solo campañas de banner sin modelId)
+    const bannerCandidates = ads.filter(a => !a.modelId);
     const winningBrand = finalTop3[0]?.brandName?.toLowerCase() || '';
     const winningCategory = finalTop3[0]?.tipo_carroceria?.toLowerCase() || '';
 
-    // 1. Prioridad: Coincidencia por marca del sponsor (ej: Vicar SA / Honda, o nombre de marca)
-    let selectedAd = ads.find(a => {
+    // 1. Prioridad: Coincidencia por marca del sponsor
+    let selectedAd = bannerCandidates.find(a => {
       if (!a.sponsor) return false;
       const sp = a.sponsor.toLowerCase();
       return winningBrand && (sp === winningBrand || sp.includes(winningBrand) || winningBrand.includes(sp));
     });
 
-    // 2. Prioridad: Coincidencia por categoría específica (ej: SUV, Sedan)
+    // 2. Prioridad: Coincidencia por categoría específica
     if (!selectedAd && winningCategory) {
-      selectedAd = ads.find(a => {
+      selectedAd = bannerCandidates.find(a => {
         if (!a.targetCategory) return false;
         const cat = a.targetCategory.toLowerCase();
         return cat !== 'todas' && cat !== 'todos' && cat === winningCategory;
@@ -800,7 +1002,7 @@ export default function RecomendadorPage() {
 
     // 3. Prioridad: Campañas dirigidas a "Todas" las categorías o generales para Recomendador
     if (!selectedAd) {
-      selectedAd = ads.find(a => {
+      selectedAd = bannerCandidates.find(a => {
         if (!a.targetCategory) return true;
         const cat = a.targetCategory.toLowerCase();
         return cat === 'todas' || cat === 'todos';
@@ -808,14 +1010,12 @@ export default function RecomendadorPage() {
     }
 
     // 4. Prioridad: Cualquier otra campaña activa para el recomendador
-    if (!selectedAd && ads.length > 0) {
-      selectedAd = ads[0];
+    if (!selectedAd && bannerCandidates.length > 0) {
+      selectedAd = bannerCandidates[0];
     }
 
-    // Si hay campaña de un anunciante activa, se guarda en smartAd (y apaga automáticamente el banner de DATACAR).
-    // Si no hay pauta activa (null), se mostrará el banner institucional de DATACAR.
     setSmartAd(selectedAd || null);
-    return finalTop3;
+    return finalMatches;
   };
 
   // ==========================================
@@ -859,6 +1059,27 @@ export default function RecomendadorPage() {
         concesionaria_destino_norm: 'A DESIGNAR',
         createdAt: serverTimestamp()
       });
+
+      // Telemetría de preferencias del recomendador para el panel de analítica B2B
+      try {
+        const effectiveAnswers = perfilNovato ? { ...answers, ...derivarPreferenciasNovato(answers) } : answers;
+        await addDoc(collection(db, 'wizard_stats'), {
+          answers,
+          effectiveAnswers,
+          perfil: answers['conocimiento'] || (perfilNovato ? 'novato' : 'experto'),
+          presupuesto: effectiveAnswers['presupuesto'] || answers['presupuesto'] || null,
+          carroceria: effectiveAnswers['carroceria'] || answers['carroceria'] || answers['uso'] || null,
+          combustible: effectiveAnswers['combustible'] || answers['combustible'] || null,
+          plazas: effectiveAnswers['plazas'] || answers['plazas'] || answers['personas'] || null,
+          transmision: effectiveAnswers['transmision'] || answers['transmision'] || null,
+          prioridad: answers['prioridad'] || null,
+          uso: answers['uso'] || null,
+          terreno: answers['terreno'] || null,
+          createdAt: serverTimestamp()
+        });
+      } catch (telemetryErr) {
+        console.warn('Error registrando telemetría en wizard_stats:', telemetryErr);
+      }
 
       track('lead_submit_success', { origen: 'Recomendador Interactivo', canal: 'wizard' });
 
@@ -1254,8 +1475,16 @@ export default function RecomendadorPage() {
               </div>
             )}
 
-            {/* ALERTA DE CONTINGENCIA (Flat Design) */}
-            {topMatches.length > 0 && topMatches[0].matchPercentage < 80 && (
+            {/* ALERTA DE FLEXIBILIZACIÓN INTELIGENTE / CONTINGENCIA */}
+            {relaxationInfo ? (
+              <div className="bg-[#F5FBFF] border border-[#00BFFF] p-5 mb-8 flex gap-4 items-start shadow-none rounded-none">
+                <div className="w-6 h-6 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-none shrink-0 text-xs">ℹ️</div>
+                <div>
+                  <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">Búsqueda Optimizada con Flexibilidad Inteligente</p>
+                  <p className="text-xs text-[#3A3A3C]">{relaxationInfo.message}</p>
+                </div>
+              </div>
+            ) : (topMatches.length > 0 && topMatches[0].matchPercentage < 80 ? (
               <div className="bg-[#F5FBFF] border border-[#00BFFF] p-6 mb-8 flex gap-4 items-start shadow-none rounded-none">
                 <div className="w-6 h-6 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-none shrink-0">!</div>
                 <div>
@@ -1263,24 +1492,32 @@ export default function RecomendadorPage() {
                   <p className="text-xs text-[#3A3A3C]">No encontramos vehículos que cumplan exactamente con el 100% de tus combinaciones excluyentes. Te mostramos las mejores alternativas viables en el país.</p>
                 </div>
               </div>
-            )}
+            ) : null)}
 
-            {/* MATCHES PRINCIPALES CON BADGES B2B */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-              {topMatches.map((model) => (
-                <article key={model.id} className="bg-[#FFFFFF] border border-[#C0C0C0] border-t-4 border-t-[#0A1F33] flex flex-col hover:border-[#00BFFF] transition-colors relative group rounded-none shadow-none">
-                  
-                  {/* % Match Box */}
-                  <div className="absolute top-4 left-4 bg-[#F8F9FA] border border-[#C0C0C0] text-[#3A3A3C] font-black text-[10px] uppercase tracking-widest px-3 py-1.5 z-10 flex items-center gap-2">
-                    <span className="text-[#00BFFF]">•</span> {model.matchPercentage}% Match
-                  </div>
-
-                  {/* INSIGNIA B2B INTELIGENTE */}
-                  {model.badge && (
-                    <div className="absolute top-4 right-4 bg-[#0A1F33] text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest px-3 py-1.5 z-10">
-                      {model.badge}
+            {/* MATCHES PRINCIPALES CON BADGES B2B (3 orgánicos o 4 con patrocinado) */}
+            <div className={`grid grid-cols-1 ${topMatches.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-6 mb-12`}>
+              {topMatches.map((model) => {
+                const isSponsored = model.badge?.includes('Patrocinada');
+                return (
+                  <article
+                    key={model.id}
+                    className={`bg-[#FFFFFF] border ${
+                      isSponsored
+                        ? 'border-[#00BFFF] border-t-4 border-t-[#00BFFF]'
+                        : 'border-[#C0C0C0] border-t-4 border-t-[#0A1F33]'
+                    } flex flex-col hover:border-[#00BFFF] transition-colors relative group rounded-none shadow-none`}
+                  >
+                    {/* % Match Box */}
+                    <div className="absolute top-4 left-4 bg-[#F8F9FA] border border-[#C0C0C0] text-[#3A3A3C] font-black text-[10px] uppercase tracking-widest px-3 py-1.5 z-10 flex items-center gap-2">
+                      <span className="text-[#00BFFF]">•</span> {isSponsored ? 'Patrocinado' : `${model.matchPercentage}% Match`}
                     </div>
-                  )}
+
+                    {/* INSIGNIA B2B INTELIGENTE */}
+                    {model.badge && (
+                      <div className={`absolute top-4 right-4 ${isSponsored ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#0A1F33] text-[#FFFFFF]'} font-bold text-[9px] uppercase tracking-widest px-3 py-1.5 z-10`}>
+                        {model.badge}
+                      </div>
+                    )}
 
                   <div className="relative p-4 h-56 border-b border-[#C0C0C0]/20 bg-[#F8F9FA]">
                     {isValidImageSrc(model.imgUrl) ? (
@@ -1361,7 +1598,8 @@ export default function RecomendadorPage() {
                     </div>
                   </div>
                 </article>
-              ))}
+              );
+            })}
             </div>
 
             {/* ESPACIO #4: BANNER RECOMENDADOR (1200x400 de anunciante o pauta automática DATACAR) */}

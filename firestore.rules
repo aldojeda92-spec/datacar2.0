@@ -164,19 +164,30 @@ service cloud.firestore {
       allow get, list, update, delete: if isAdmin();
     }
 
-    // ---------------- newsletter_subscribers ----------------
+    // ---------------- newsletter_subscribers & newsletter ----------------
     match /newsletter_subscribers/{subId} {
       allow create: if
         request.resource.data.email is string &&
         request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$') &&
         request.resource.data.estado == 'Activo';
-      // Solo se permite chequear duplicado (una consulta puntual, no exportar la lista)
-      allow list: if request.query.limit <= 1;
+      allow list: if isAdmin() || request.query.limit <= 1;
       allow get, update, delete: if isAdmin();
+    }
+
+    match /newsletter/{subId} {
+      allow create: if request.resource.data.email is string;
+      allow read, write: if isAdmin();
     }
 
     // ---------------- comparison_stats (telemetría) ----------------
     match /comparison_stats/{statId} {
+      allow create: if true;
+      allow read: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------------- wizard_stats (telemetría de preferencias del recomendador) ----------------
+    match /wizard_stats/{statId} {
       allow create: if true;
       allow read: if true;
       allow update, delete: if isAdmin();

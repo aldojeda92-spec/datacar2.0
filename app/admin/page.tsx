@@ -18,6 +18,7 @@ import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarChec
 import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { useToast } from '../context/ToastContext';
 import { DEFAULT_REELS } from '../components/InstagramReelsSection';
+import { sendNewsletterBroadcast } from '../../lib/mailer';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
@@ -34,6 +35,7 @@ interface LeadData {
   origen: string;
   concesionaria_destino: string;
   estado: string;
+  preferencias_wizard?: any;
   createdAt: Date;
 }
 
@@ -171,7 +173,7 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<User | null>(null);
 
   // Pestañas del Sistema
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'financiero' | 'accesos' | 'analitica' | 'blog'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'financiero' | 'accesos' | 'analitica' | 'blog' | 'newsletter'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -187,6 +189,25 @@ export default function AdminDashboardPage() {
   const [blogPostsList, setBlogPostsList] = useState<any[]>([]);
   const [videoReviewsList, setVideoReviewsList] = useState<any[]>([]);
   const [blogSubTab, setBlogSubTab] = useState<'posts' | 'videos'>('posts');
+
+  // Estados Newsletter & Telemetría Recomendador
+  const [newsletterSubscribers, setNewsletterSubscribers] = useState<Array<{ id: string; email: string; origen: string; estado: string; colName: string; createdAt?: any }>>([]);
+  const [wizardStatsList, setWizardStatsList] = useState<any[]>([]);
+  const [broadcastForm, setBroadcastForm] = useState({
+    subject: '',
+    headline: '',
+    contentHtml: '',
+    buttonText: '',
+    buttonUrl: '',
+    sendTestEmail: 'aldo.ojeda@datacarpy.com',
+  });
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastStatus, setBroadcastStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string; previewUrl?: string; destinatariosCount?: number } | null>(null);
+  const [subscriberSearch, setSubscriberSearch] = useState('');
+  const [subscriberFilterStatus, setSubscriberFilterStatus] = useState<'Todos' | 'Activo' | 'Inactivo'>('Todos');
+  const [showAddSubModal, setShowAddSubModal] = useState(false);
+  const [newSubEmail, setNewSubEmail] = useState('');
+  const [newSubOrigen, setNewSubOrigen] = useState('Admin Manual');
 
   // Formularios de Blog y Videos
   const [blogPostForm, setBlogPostForm] = useState({
@@ -321,7 +342,7 @@ export default function AdminDashboardPage() {
       const qBlog = query(collection(db, 'blog_posts'), limit(50));
       const qVideos = query(collection(db, 'video_reviews'), limit(20));
 
-      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap] = await Promise.all([
+      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap, newsSnap, newsSubSnap, wizSnap] = await Promise.all([
         getDocs(collection(db, 'brands')),
         getDocs(collection(db, 'models')),
         getDocs(collection(db, 'versions')),
@@ -333,6 +354,9 @@ export default function AdminDashboardPage() {
         getDocs(collection(db, 'comparison_stats')),
         getDocs(qBlog),
         getDocs(qVideos),
+        getDocs(collection(db, 'newsletter')),
+        getDocs(collection(db, 'newsletter_subscribers')),
+        getDocs(collection(db, 'wizard_stats')),
       ]);
       
       setMarcasList(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -348,6 +372,41 @@ export default function AdminDashboardPage() {
       setUsuariosSistemaList(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setSolicitudesList(reqsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
+      // Procesar suscriptores de newsletter deduplicados por email (consultando ambas colecciones)
+      const subsMap = new Map<string, any>();
+      newsSubSnap.docs.forEach(docSnap => {
+        const d = docSnap.data();
+        const em = (d.email || '').toLowerCase().trim();
+        if (em) {
+          subsMap.set(em, {
+            id: docSnap.id,
+            colName: 'newsletter_subscribers',
+            email: em,
+            origen: d.origen || 'Footer Web',
+            estado: d.estado || 'Activo',
+            createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : (d.createdAt ? new Date(d.createdAt) : new Date())
+          });
+        }
+      });
+      newsSnap.docs.forEach(docSnap => {
+        const d = docSnap.data();
+        const em = (d.email || '').toLowerCase().trim();
+        if (em && !subsMap.has(em)) {
+          subsMap.set(em, {
+            id: docSnap.id,
+            colName: 'newsletter',
+            email: em,
+            origen: d.origen || 'Portal DATACAR',
+            estado: d.estado || 'Activo',
+            createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : (d.createdAt ? new Date(d.createdAt) : new Date())
+          });
+        }
+      });
+      setNewsletterSubscribers(Array.from(subsMap.values()).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+
+      // Telemetría del Recomendador
+      setWizardStatsList(wizSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
       const loadedLeads = leadsSnap.docs.map(doc => {
         const data = doc.data();
         return {
@@ -359,7 +418,8 @@ export default function AdminDashboardPage() {
           origen: data.origen || 'Desconocido',
           concesionaria_destino: data.concesionaria_destino || 'A designar',
           estado: data.estado || 'Nuevo',
-          createdAt: data.createdAt?.toDate() || new Date()
+          preferencias_wizard: data.preferencias_wizard || null,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date())
         };
       });
       setLeadsList(loadedLeads);
@@ -1878,11 +1938,13 @@ export default function AdminDashboardPage() {
     }
 
     const isComparador = adForm.location === 'comparador';
+    const isRecomendadorSlot = adForm.location === 'recomendador';
+    const isModelSponsor = isComparador || isRecomendadorSlot;
     const isCatalogoFiltros = adForm.location === 'catalogo_filtros';
 
-    if (isComparador) {
+    if (isModelSponsor) {
       if (!adForm.modelId) {
-        setFeedback({ type: 'error', message: 'Para el espacio Comparador, debés elegir un modelo del listado.' });
+        setFeedback({ type: 'error', message: `Para el espacio ${isRecomendadorSlot ? 'Recomendador (Slot Modelo)' : 'Comparador'}, debés elegir un modelo del listado.` });
         return;
       }
     } else {
@@ -1904,14 +1966,14 @@ export default function AdminDashboardPage() {
     try {
       let finalHeadline = adForm.headline.trim();
       let finalImg = adForm.img.trim();
-      let finalLink = isComparador ? '' : adForm.link.trim();
-      let finalModelId = isComparador ? adForm.modelId : '';
+      let finalLink = isModelSponsor ? '' : adForm.link.trim();
+      let finalModelId = isModelSponsor ? adForm.modelId : '';
       let finalTargetCategory = isCatalogoFiltros ? adForm.targetCategory : 'Todas';
       let finalTargetCombustible = isCatalogoFiltros ? adForm.targetCombustible : 'Todas';
       let modelName = '';
       let brandName = '';
 
-      if (isComparador && finalModelId) {
+      if (isModelSponsor && finalModelId) {
         const selectedModel = modelosList.find(m => m.id === finalModelId);
         if (selectedModel) {
           const brand = marcasList.find(b => b.id === selectedModel.brandId);
@@ -1970,6 +2032,10 @@ export default function AdminDashboardPage() {
       loc = 'catalogo_filtros';
     } else if (camp.modelId && (loc === 'ambos' || loc === 'comparador')) {
       loc = 'comparador';
+    } else if (camp.modelId && loc === 'recomendador') {
+      loc = 'recomendador';
+    } else if (!camp.modelId && (loc === 'recomendador' || loc === 'recomendador_banner')) {
+      loc = 'recomendador_banner';
     }
     setAdForm({
       id: camp.id || '',
@@ -2005,6 +2071,326 @@ export default function AdminDashboardPage() {
     setAdModelFilterConcesionaria('Todas');
     setAdModelFilterMarca('Todas');
   };
+
+  // ==========================================
+  // OPERACIONES DE NEWSLETTER & BROADCASTING
+  // ==========================================
+  const handleSendTestEmail = async () => {
+    if (!broadcastForm.sendTestEmail.trim()) {
+      showToast('Ingresá una dirección de correo para el test.');
+      return;
+    }
+    if (!broadcastForm.subject.trim()) {
+      showToast('Ingresá el asunto del correo.');
+      return;
+    }
+    setBroadcastSending(true);
+    setBroadcastStatus({ type: 'idle', message: 'Enviando correo de prueba...' });
+    try {
+      const res = await sendNewsletterBroadcast({
+        subject: `[TEST] ${broadcastForm.subject}`,
+        headline: broadcastForm.headline,
+        contentHtml: broadcastForm.contentHtml,
+        buttonText: broadcastForm.buttonText,
+        buttonUrl: broadcastForm.buttonUrl,
+        destinatarios: [broadcastForm.sendTestEmail.trim()],
+      });
+      if (res.success) {
+        setBroadcastStatus({
+          type: 'success',
+          message: res.simulated
+            ? `Prueba simulada con éxito. Previsualizá en: ${res.previewUrl}`
+            : `Correo de prueba enviado con éxito a ${broadcastForm.sendTestEmail}.`,
+          previewUrl: res.previewUrl
+        });
+        showToast('Correo de prueba despachado.');
+      } else {
+        setBroadcastStatus({ type: 'error', message: res.error || 'Error al enviar correo de prueba.' });
+      }
+    } catch (err: any) {
+      setBroadcastStatus({ type: 'error', message: err.message || 'Error de conexión.' });
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
+
+  const handleBroadcastNewsletter = async () => {
+    const activeEmails = newsletterSubscribers
+      .filter(s => s.estado !== 'Inactivo')
+      .map(s => s.email.trim());
+
+    if (activeEmails.length === 0) {
+      showToast('No hay suscriptores activos para enviar la campaña.');
+      return;
+    }
+    if (!broadcastForm.subject.trim()) {
+      showToast('El asunto del correo es obligatorio.');
+      return;
+    }
+    if (!broadcastForm.contentHtml.trim()) {
+      showToast('El contenido HTML del correo no puede estar vacío.');
+      return;
+    }
+
+    const confirmSend = window.confirm(`¿Confirmás el envío masivo a ${activeEmails.length} suscriptores activos?`);
+    if (!confirmSend) return;
+
+    setBroadcastSending(true);
+    setBroadcastStatus({ type: 'idle', message: `Transmitiendo difusión masiva a ${activeEmails.length} suscriptores...` });
+
+    try {
+      const res = await sendNewsletterBroadcast({
+        subject: broadcastForm.subject.trim(),
+        headline: broadcastForm.headline.trim(),
+        contentHtml: broadcastForm.contentHtml,
+        buttonText: broadcastForm.buttonText.trim(),
+        buttonUrl: broadcastForm.buttonUrl.trim(),
+        destinatarios: activeEmails,
+      });
+
+      if (res.success) {
+        setBroadcastStatus({
+          type: 'success',
+          message: res.simulated
+            ? `Campaña procesada en modo simulación para ${res.destinatariosCount || activeEmails.length} suscriptores. Previsualizá en: ${res.previewUrl}`
+            : `¡Campaña transmitida con éxito a ${res.destinatariosCount || activeEmails.length} suscriptores!`,
+          previewUrl: res.previewUrl,
+          destinatariosCount: res.destinatariosCount || activeEmails.length
+        });
+        showToast('Difusión de newsletter ejecutada con éxito.');
+      } else {
+        setBroadcastStatus({ type: 'error', message: res.error || 'Fallo en la pasarela de envío.' });
+      }
+    } catch (err: any) {
+      setBroadcastStatus({ type: 'error', message: err.message || 'Error enviando newsletter.' });
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
+
+  const handleToggleSubscriberStatus = async (sub: any) => {
+    const newStatus = sub.estado === 'Activo' ? 'Inactivo' : 'Activo';
+    try {
+      await updateDoc(doc(db, sub.colName, sub.id), { estado: newStatus, updatedAt: serverTimestamp() });
+      setNewsletterSubscribers(prev => prev.map(s => s.id === sub.id ? { ...s, estado: newStatus } : s));
+      showToast(`Suscriptor marcado como ${newStatus}`);
+    } catch (err: any) {
+      showToast('Error al actualizar suscriptor: ' + err.message);
+    }
+  };
+
+  const handleDeleteSubscriber = async (sub: any) => {
+    if (!window.confirm(`¿Eliminar definitivamente a ${sub.email} del newsletter?`)) return;
+    try {
+      await deleteDoc(doc(db, sub.colName, sub.id));
+      setNewsletterSubscribers(prev => prev.filter(s => s.id !== sub.id));
+      showToast('Suscriptor eliminado.');
+    } catch (err: any) {
+      showToast('Error al eliminar suscriptor: ' + err.message);
+    }
+  };
+
+  const handleAddSubscriber = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = newSubEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      showToast('Ingresá un correo electrónico válido.');
+      return;
+    }
+    const alreadyExists = newsletterSubscribers.some(s => s.email === cleanEmail);
+    if (alreadyExists) {
+      showToast('Este correo ya está registrado en la base de datos.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const docRef = doc(collection(db, 'newsletter'));
+      await setDoc(docRef, {
+        email: cleanEmail,
+        origen: newSubOrigen.trim() || 'Admin Manual',
+        estado: 'Activo',
+        createdAt: serverTimestamp()
+      });
+      setNewsletterSubscribers(prev => [
+        {
+          id: docRef.id,
+          colName: 'newsletter',
+          email: cleanEmail,
+          origen: newSubOrigen.trim() || 'Admin Manual',
+          estado: 'Activo',
+          createdAt: new Date()
+        },
+        ...prev
+      ]);
+      setNewSubEmail('');
+      setShowAddSubModal(false);
+      showToast('Suscriptor agregado a la colección newsletter.');
+    } catch (err: any) {
+      showToast('Error al agregar suscriptor: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  // TELEMETRÍA DE DEMANDA DEL RECOMENDADOR
+  // ==========================================
+  const recomendadorDemandStats = useMemo(() => {
+    const allEntries: any[] = [];
+    const seenSignatures = new Set<string>();
+
+    wizardStatsList.forEach(ws => {
+      const sig = JSON.stringify(ws.answers || ws);
+      if (!seenSignatures.has(sig)) {
+        seenSignatures.add(sig);
+        allEntries.push({
+          answers: ws.answers || {},
+          effectiveAnswers: ws.effectiveAnswers || ws.answers || {},
+          perfil: ws.perfil || 'general',
+          createdAt: ws.createdAt?.toDate ? ws.createdAt.toDate() : (ws.createdAt ? new Date(ws.createdAt) : null)
+        });
+      }
+    });
+
+    leadsList.forEach(l => {
+      if (l.preferencias_wizard) {
+        const sig = JSON.stringify(l.preferencias_wizard);
+        if (!seenSignatures.has(sig)) {
+          seenSignatures.add(sig);
+          allEntries.push({
+            answers: l.preferencias_wizard,
+            effectiveAnswers: l.preferencias_wizard,
+            perfil: l.preferencias_wizard?.conocimiento || 'general',
+            createdAt: l.createdAt
+          });
+        }
+      }
+    });
+
+    const total = allEntries.length;
+
+    // Presupuestos
+    const budgetMap: Record<string, { label: string; count: number; color: string }> = {
+      '18000': { label: 'Hasta US$ 18.000', count: 0, color: '#1E8E3E' },
+      '25000': { label: 'US$ 18k a 25k', count: 0, color: '#00BFFF' },
+      '40000': { label: 'US$ 25k a 40k', count: 0, color: '#0A1F33' },
+      '999999': { label: 'Más de US$ 40.000', count: 0, color: '#F2994A' }
+    };
+
+    // Carrocerías
+    const carroceriaMap: Record<string, number> = {};
+
+    // Combustibles
+    let countNuevasEnergias = 0;
+    let countCombustion = 0;
+    const combustibleMap: Record<string, number> = {};
+
+    // Plazas
+    const plazasMap: Record<string, number> = { '1-2 Plazas': 0, '4-5 Plazas': 0, '7+ Plazas': 0 };
+
+    // Prioridades
+    const prioridadMap: Record<string, number> = {
+      'Economía / Consumo': 0,
+      'Seguridad / ADAS': 0,
+      'Tecnología / Confort': 0,
+      'Precio más bajo': 0,
+    };
+
+    // Transmisión
+    let transAuto = 0;
+    let transManual = 0;
+
+    allEntries.forEach(item => {
+      const a = item.answers || {};
+      const eff = item.effectiveAnswers || a;
+
+      // Presupuesto
+      const bKey = eff.presupuesto || a.presupuesto;
+      if (bKey && budgetMap[bKey]) {
+        budgetMap[bKey].count++;
+      }
+
+      // Carrocería
+      let cVal = eff.carroceria || a.carroceria;
+      if (!cVal && a.uso) {
+        if (a.uso === 'ciudad') cVal = ['HATCHBACK', 'SUV'];
+        else if (a.uso === 'familia') cVal = ['SUV', 'MINIVAN'];
+        else if (a.uso === 'carga') cVal = ['PICKUP'];
+        else if (a.uso === 'ruta') cVal = ['SEDÁN', 'SUV'];
+        else if (a.uso === 'aventura') cVal = ['SUV', 'PICKUP'];
+      }
+      const addCarroceria = (c: string) => {
+        if (!c || c === 'any') return;
+        const norm = c.toUpperCase().trim();
+        carroceriaMap[norm] = (carroceriaMap[norm] || 0) + 1;
+      };
+      if (Array.isArray(cVal)) cVal.forEach(addCarroceria);
+      else if (typeof cVal === 'string') addCarroceria(cVal);
+
+      // Combustible
+      let combVal = eff.combustible || a.combustible;
+      const addComb = (c: string) => {
+        if (!c || c === 'any') return;
+        const norm = c.toUpperCase().trim();
+        if (['HEV', 'MHEV', 'EV', 'PHEV', 'REEV', 'ELECTRICO', 'HIBRIDO'].includes(norm)) {
+          countNuevasEnergias++;
+        } else if (['NAFTA', 'DIESEL', 'FLEX'].includes(norm)) {
+          countCombustion++;
+        }
+        combustibleMap[norm] = (combustibleMap[norm] || 0) + 1;
+      };
+      if (Array.isArray(combVal)) combVal.forEach(addComb);
+      else if (typeof combVal === 'string') addComb(combVal);
+
+      // Plazas
+      const pVal = eff.plazas || a.plazas || a.personas;
+      if (pVal && pVal !== 'any') {
+        const num = Number(pVal);
+        if (num <= 2) plazasMap['1-2 Plazas']++;
+        else if (num >= 6) plazasMap['7+ Plazas']++;
+        else plazasMap['4-5 Plazas']++;
+      }
+
+      // Prioridad
+      const prio = a.prioridad || '';
+      if (prio === 'consumo') prioridadMap['Economía / Consumo']++;
+      else if (prio === 'seguridad' || a.uso === 'familia') prioridadMap['Seguridad / ADAS']++;
+      else if (prio === 'tecnologia') prioridadMap['Tecnología / Confort']++;
+      else if (prio === 'precio') prioridadMap['Precio más bajo']++;
+
+      // Transmisión
+      const tr = (eff.transmision || a.transmision || '').toLowerCase();
+      if (tr.includes('auto') || tr.includes('at')) transAuto++;
+      else if (tr.includes('man') || tr.includes('mt')) transManual++;
+    });
+
+    const totalEnergy = countNuevasEnergias + countCombustion;
+    const newEnergyPct = totalEnergy > 0 ? Math.round((countNuevasEnergias / totalEnergy) * 100) : 0;
+
+    const sortedCarrocerias = Object.entries(carroceriaMap)
+      .sort((a, b) => b[1] - a[1]);
+    const topCarroceria = sortedCarrocerias[0]?.[0] || 'SUV';
+
+    const totalPlazas = (plazasMap['1-2 Plazas'] + plazasMap['4-5 Plazas'] + plazasMap['7+ Plazas']) || 1;
+    const sevenSeatsPct = Math.round((plazasMap['7+ Plazas'] / totalPlazas) * 100);
+
+    return {
+      total,
+      budgetMap,
+      sortedCarrocerias,
+      topCarroceria,
+      countNuevasEnergias,
+      countCombustion,
+      newEnergyPct,
+      combustibleMap,
+      plazasMap,
+      sevenSeatsPct,
+      prioridadMap,
+      transAuto,
+      transManual,
+    };
+  }, [wizardStatsList, leadsList]);
 
   const handleToggleAd = async (id: string, currentStatus: boolean) => {
     setLoading(true);
@@ -2226,7 +2612,13 @@ export default function AdminDashboardPage() {
         <nav className="flex flex-col flex-grow py-6 text-[10px] font-bold uppercase tracking-widest overflow-y-auto custom-scrollbar" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <span className="text-[#C0C0C0] px-6 mb-3">CRM & Operaciones</span>
           <button onClick={() => { setActiveTab('dashboard'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'dashboard' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Dashboard Leads</button>
-          <button onClick={() => { setActiveTab('analitica'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'analitica' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Analítica Comparaciones</button>
+          <button onClick={() => { setActiveTab('newsletter'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 flex items-center justify-between ${activeTab === 'newsletter' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>
+            <span>Newsletter & Emailing</span>
+            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-none ${activeTab === 'newsletter' ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#FFFFFF]/15 text-white'}`}>
+              {newsletterSubscribers.length}
+            </span>
+          </button>
+          <button onClick={() => { setActiveTab('analitica'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'analitica' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Analítica & Demanda</button>
           
           <button onClick={() => { setActiveTab('accesos'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'accesos' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Accesos y Permisos</button>
 
@@ -3208,6 +3600,268 @@ export default function AdminDashboardPage() {
                     </p>
                   </div>
                 )}
+              </div>
+
+              {/* ================================================================ */}
+              {/* 6. TELEMETRÍA DE DEMANDA: PREFERENCIAS DEL RECOMENDADOR B2B       */}
+              {/* ================================================================ */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-6 shadow-none">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#C0C0C0]/50 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="w-2.5 h-2.5 bg-[#00BFFF] inline-block" />
+                      <h3 className="text-xs font-black uppercase tracking-widest text-[#0A1F33]">
+                        Inteligencia de Demanda: Preferencias del Recomendador DATACAR
+                      </h3>
+                      <span className="bg-[#00BFFF]/15 text-[#0A1F33] border border-[#00BFFF] px-2 py-0.5 text-[8px] font-black uppercase">
+                        Demanda Real de Mercado
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#3A3A3C]">
+                      Análisis agregado de los atributos, presupuestos y prioridades elegidos por compradores al perfilar su 0km ideal en Paraguay.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-[#F8F9FA] border border-[#C0C0C0] text-[#0A1F33] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider">
+                      Muestra Total: <strong className="text-[#00BFFF] font-black">{recomendadorDemandStats.total}</strong> sesiones analizadas
+                    </span>
+                  </div>
+                </div>
+
+                {/* KPI HIGHLIGHT CARDS */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-4">
+                    <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">Muestra de Compradores</span>
+                    <span className="font-black text-2xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                      {recomendadorDemandStats.total}
+                    </span>
+                    <span className="text-[8px] text-[#1E8E3E] font-bold uppercase block mt-1">✓ Leads & Sesiones Wizard</span>
+                  </div>
+
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-4">
+                    <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">Preferencia Nuevas Energías</span>
+                    <span className="font-black text-2xl text-[#00BFFF]" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                      {recomendadorDemandStats.newEnergyPct}%
+                    </span>
+                    <span className="text-[8px] text-[#3A3A3C] font-semibold uppercase block mt-1">HEV / PHEV / EV / MHEV</span>
+                  </div>
+
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-4">
+                    <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">Carrocería #1 Más Buscada</span>
+                    <span className="font-black text-2xl text-[#0A1F33] truncate block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                      {recomendadorDemandStats.topCarroceria}
+                    </span>
+                    <span className="text-[8px] text-[#00BFFF] font-bold uppercase block mt-1">Líder en Intención de Compra</span>
+                  </div>
+
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-4">
+                    <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">Demanda 7 Plazas (Familiar)</span>
+                    <span className="font-black text-2xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                      {recomendadorDemandStats.sevenSeatsPct}%
+                    </span>
+                    <span className="text-[8px] text-[#3A3A3C] font-semibold uppercase block mt-1">Vehículos con 3 Filas</span>
+                  </div>
+                </div>
+
+                {/* MATRIZ DE 6 TARJETAS GRÁFICAS DE DEMANDA */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* 1. PRESUPUESTO DECLARADO */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/40 pb-2 mb-3">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
+                          1. Rango de Presupuesto
+                        </span>
+                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase">USD</span>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {Object.entries(recomendadorDemandStats.budgetMap).map(([key, item]) => {
+                          const totalPres = Object.values(recomendadorDemandStats.budgetMap).reduce((acc, curr) => acc + curr.count, 0) || 1;
+                          const pct = Math.round((item.count / totalPres) * 100);
+                          return (
+                            <div key={key}>
+                              <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                <span>{item.label}</span>
+                                <span className="font-mono text-[11px]">{pct}% ({item.count})</span>
+                              </div>
+                              <div className="w-full bg-[#E0E0E0] h-2 rounded-none overflow-hidden">
+                                <div className="h-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: item.color }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-[#C0C0C0] uppercase mt-4 block">Distribución de capacidad de pago declarada</span>
+                  </div>
+
+                  {/* 2. CARROCERÍAS / SILUETAS MÁS DEMANDADAS */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/40 pb-2 mb-3">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
+                          2. Carrocerías Más Buscadas
+                        </span>
+                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase">Ranking</span>
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        {recomendadorDemandStats.sortedCarrocerias.slice(0, 5).map(([carroc, count], idx) => {
+                          const totalCarroc = recomendadorDemandStats.sortedCarrocerias.reduce((acc, curr) => acc + curr[1], 0) || 1;
+                          const pct = Math.round((count / totalCarroc) * 100);
+                          return (
+                            <div key={carroc}>
+                              <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className="text-[8px] bg-[#0A1F33] text-white px-1 font-mono">#{idx + 1}</span>
+                                  {carroc}
+                                </span>
+                                <span className="font-mono text-[11px] text-[#0A1F33]">{pct}% ({count})</span>
+                              </div>
+                              <div className="w-full bg-[#E0E0E0] h-2 rounded-none overflow-hidden">
+                                <div className="h-full bg-[#0A1F33] transition-all duration-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-[#C0C0C0] uppercase mt-4 block">Top siluetas seleccionadas en el recomendador</span>
+                  </div>
+
+                  {/* 3. MOTORIZACIÓN Y EFICIENCIA ENERGÉTICA */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/40 pb-2 mb-3">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
+                          3. Transición Energética
+                        </span>
+                        <span className="text-[9px] text-[#00BFFF] font-bold uppercase">⚡ Mix</span>
+                      </div>
+
+                      {/* Barra Bipolar */}
+                      <div className="mb-4">
+                        <div className="flex justify-between text-[10px] font-black uppercase mb-1">
+                          <span className="text-[#00BFFF]">⚡ Nuevas Energías {recomendadorDemandStats.newEnergyPct}%</span>
+                          <span className="text-[#3A3A3C]">⛽ Combustión {100 - recomendadorDemandStats.newEnergyPct}%</span>
+                        </div>
+                        <div className="w-full h-3 bg-[#3A3A3C] flex overflow-hidden">
+                          <div className="bg-[#00BFFF] h-full transition-all duration-500" style={{ width: `${recomendadorDemandStats.newEnergyPct}%` }} />
+                        </div>
+                      </div>
+
+                      {/* Desglose de tipos */}
+                      <div className="flex flex-col gap-1.5 mt-2">
+                        {Object.entries(recomendadorDemandStats.combustibleMap).slice(0, 4).map(([comb, cnt]) => (
+                          <div key={comb} className="flex justify-between items-center text-[9px] font-semibold text-[#3A3A3C]">
+                            <span>{comb}</span>
+                            <span className="font-mono text-[#0A1F33] font-bold">{cnt} elecciones</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-[#C0C0C0] uppercase mt-4 block">HEV, PHEV, EV vs Nafta y Diésel</span>
+                  </div>
+
+                  {/* 4. PLAZAS Y PASAJEROS */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/40 pb-2 mb-3">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
+                          4. Cantidad de Plazas
+                        </span>
+                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase">Asientos</span>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {Object.entries(recomendadorDemandStats.plazasMap).map(([label, count]) => {
+                          const tot = (recomendadorDemandStats.plazasMap['1-2 Plazas'] + recomendadorDemandStats.plazasMap['4-5 Plazas'] + recomendadorDemandStats.plazasMap['7+ Plazas']) || 1;
+                          const pct = Math.round((count / tot) * 100);
+                          return (
+                            <div key={label}>
+                              <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                <span>{label}</span>
+                                <span className="font-mono text-[11px]">{pct}% ({count})</span>
+                              </div>
+                              <div className="w-full bg-[#E0E0E0] h-2 rounded-none overflow-hidden">
+                                <div className="h-full bg-[#00BFFF] transition-all duration-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-[#C0C0C0] uppercase mt-4 block">Requerimientos de espacio interior</span>
+                  </div>
+
+                  {/* 5. FACTOR DECISIVO DE COMPRA */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/40 pb-2 mb-3">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
+                          5. Prioridad Principal
+                        </span>
+                        <span className="text-[9px] text-[#1E8E3E] font-bold uppercase">Driver</span>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {Object.entries(recomendadorDemandStats.prioridadMap).map(([prioName, cnt]) => {
+                          const tot = Object.values(recomendadorDemandStats.prioridadMap).reduce((a, b) => a + b, 0) || 1;
+                          const pct = Math.round((cnt / tot) * 100);
+                          return (
+                            <div key={prioName}>
+                              <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                <span>{prioName}</span>
+                                <span className="font-mono text-[11px]">{pct}% ({cnt})</span>
+                              </div>
+                              <div className="w-full bg-[#E0E0E0] h-2 rounded-none overflow-hidden">
+                                <div className="h-full bg-[#1E8E3E] transition-all duration-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <span className="text-[8px] text-[#C0C0C0] uppercase mt-4 block">Motivador clave para desempatar el modelo</span>
+                  </div>
+
+                  {/* 6. PREFERENCIA DE TRANSMISIÓN */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/40 pb-2 mb-3">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
+                          6. Tipo de Transmisión
+                        </span>
+                        <span className="text-[9px] text-[#C0C0C0] font-bold uppercase">Caja</span>
+                      </div>
+                      {(() => {
+                        const totalTrans = recomendadorDemandStats.transAuto + recomendadorDemandStats.transManual || 1;
+                        const autoPct = Math.round((recomendadorDemandStats.transAuto / totalTrans) * 100);
+                        const manualPct = 100 - autoPct;
+                        return (
+                          <div className="flex flex-col gap-4 mt-2">
+                            <div>
+                              <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                <span>Automática (AT / CVT / DCT)</span>
+                                <span className="font-mono text-[11px]">{autoPct}% ({recomendadorDemandStats.transAuto})</span>
+                              </div>
+                              <div className="w-full bg-[#E0E0E0] h-2 rounded-none overflow-hidden">
+                                <div className="h-full bg-[#0A1F33] transition-all duration-500" style={{ width: `${autoPct}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                <span>Manual (MT)</span>
+                                <span className="font-mono text-[11px]">{manualPct}% ({recomendadorDemandStats.transManual})</span>
+                              </div>
+                              <div className="w-full bg-[#E0E0E0] h-2 rounded-none overflow-hidden">
+                                <div className="h-full bg-[#C0C0C0] transition-all duration-500" style={{ width: `${manualPct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <span className="text-[8px] text-[#C0C0C0] uppercase mt-4 block">Preferencia de caja del conductor</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -4239,8 +4893,9 @@ export default function AdminDashboardPage() {
                         { id: 'home', num: '1', title: 'Home', badge: '1200x400 px', desc: 'Banner principal en la portada de DATACAR.' },
                         { id: 'catalogo', num: '2', title: 'Catálogo General', badge: '1200x400 px', desc: 'Banner general en el listado del catálogo.' },
                         { id: 'catalogo_filtros', num: '3', title: 'Catálogo Filtros', badge: '1200x400 px', desc: 'Banner según filtro de Carrocería y/o Movilidad.' },
-                        { id: 'recomendador', num: '4', title: 'Banner Recomendador', badge: '1200x400 px', desc: 'Debajo de recomendados (apaga auto-pauta DATACAR).' },
-                        { id: 'comparador', num: '5', title: 'Comparador', badge: 'Sin dimensiones', desc: 'Resalta el modelo en pauta con su CTA nativo.' },
+                        { id: 'recomendador', num: '4', title: 'Recomendador (Slot Modelo)', badge: 'Sin dimensiones', desc: 'Inyecta el modelo como 4ta opción "⭐ Opción Patrocinada" con su CTA nativo.' },
+                        { id: 'comparador', num: '5', title: 'Comparador (Slot Modelo)', badge: 'Sin dimensiones', desc: 'Resalta el modelo como "⭐ Opción Patrocinada" con su CTA nativo.' },
+                        { id: 'recomendador_banner', num: '6', title: 'Banner Recomendador', badge: '1200x400 px', desc: 'Banner inferior debajo de los resultados (apaga auto-pauta DATACAR).' },
                       ].map(space => {
                         const isSelected = adForm.location === space.id;
                         return (
@@ -4296,10 +4951,13 @@ export default function AdminDashboardPage() {
                         <p><strong>3. Catálogo Filtros (1200x400):</strong> Se activa cuando el usuario filtra por <strong>Tipo de Carrocería</strong> y/o <strong>Tipo de Movilidad</strong> (HEV, PHEV, EV, MHEV, Nafta, Diésel, etc.).</p>
                       )}
                       {adForm.location === 'recomendador' && (
-                        <p><strong>4. Banner Recomendador (1200x400):</strong> Se ubica en el Recomendador luego de mostrar las opciones recomendadas. <strong>Lógica automática:</strong> Mientras esta campaña esté activa y en fecha, <strong>apaga automáticamente</strong> el banner institucional de DATACAR. Si no hay pauta activa, vuelve a aparecer el aviso de DATACAR.</p>
+                        <p><strong>4. Recomendador (Slot Modelo Patrocinado):</strong> Inyecta el modelo elegido con filtros de Marca y Concesionaria como <strong>4ta opción &ldquo;⭐ Opción Patrocinada&rdquo;</strong> en el recomendador, con su botón CTA de cotización. Si no hay pauta activa, salen 3 opciones orgánicas sin dejar espacio vacío.</p>
                       )}
                       {adForm.location === 'comparador' && (
-                        <p><strong>5. Comparador (Sin dimensiones):</strong> Resalta el modelo elegido como <strong>&ldquo;⭐ Opción Patrocinada&rdquo;</strong> en el comparador de versiones. No requiere imagen de banner ni enlace externo (usa el botón CTA propio del comparador).</p>
+                        <p><strong>5. Comparador (Slot Modelo Patrocinado):</strong> Resalta el modelo elegido como <strong>&ldquo;⭐ Opción Patrocinada&rdquo;</strong> en el comparador de versiones. No requiere imagen de banner ni enlace externo (usa el botón CTA propio del comparador).</p>
+                      )}
+                      {adForm.location === 'recomendador_banner' && (
+                        <p><strong>6. Banner Recomendador (1200x400):</strong> Se ubica debajo de las opciones recomendadas. Mientras esté activa, apaga el banner institucional de DATACAR.</p>
                       )}
                     </div>
                   </div>
@@ -4352,11 +5010,11 @@ export default function AdminDashboardPage() {
                     </div>
                   )}
 
-                  {/* CONFIGURACIÓN ESPECÍFICA PARA #5 COMPARADOR (FILTROS CONCESIONARIA / MARCA -> MODELO) */}
-                  {adForm.location === 'comparador' && (
+                  {/* CONFIGURACIÓN ESPECÍFICA PARA #4 RECOMENDADOR Y #5 COMPARADOR (FILTROS CONCESIONARIA / MARCA -> MODELO) */}
+                  {(adForm.location === 'comparador' || adForm.location === 'recomendador') && (
                     <div className="bg-[#F8F9FA] border border-[#00BFFF] p-3.5 flex flex-col gap-3">
                       <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block border-b border-[#C0C0C0]/60 pb-1.5">
-                        ⭐ Selección del Modelo en Pauta (Comparador)
+                        ⭐ Selección del Modelo en Pauta ({adForm.location === 'recomendador' ? 'Recomendador' : 'Comparador'})
                       </span>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -4421,7 +5079,7 @@ export default function AdminDashboardPage() {
                               sponsor: adForm.sponsor || suggestedSponsor
                             });
                           }}
-                          required={adForm.location === 'comparador'}
+                          required={adForm.location === 'comparador' || adForm.location === 'recomendador'}
                         >
                           <option value="">-- Seleccioná un modelo ({modelosParaAds.length} disponibles) --</option>
                           {modelosParaAds.map(m => {
@@ -4435,7 +5093,7 @@ export default function AdminDashboardPage() {
                           })}
                         </select>
                         <span className="text-[9px] text-[#3A3A3C] block mt-1 leading-tight">
-                          No requiere subir imagen ni enlace externo: el comparador resaltará automáticamente la tarjeta del modelo como <strong>&ldquo;Opción Patrocinada&rdquo;</strong> con su botón CTA de cotización.
+                          No requiere subir imagen ni enlace externo: {adForm.location === 'recomendador' ? 'el recomendador inyectará la tarjeta del modelo como 4ta "⭐ Opción Patrocinada"' : 'el comparador resaltará automáticamente la tarjeta del modelo como "Opción Patrocinada"'} con su botón CTA de cotización.
                         </span>
                       </div>
                     </div>
@@ -4457,8 +5115,8 @@ export default function AdminDashboardPage() {
                     />
                   </div>
 
-                  {/* PASO 3: IMAGEN 1200x400 Y ENLACE DE REDIRECCIÓN (SOLO ESPACIOS 1, 2, 3 Y 4) */}
-                  {adForm.location !== 'comparador' && (
+                  {/* PASO 3: IMAGEN 1200x400 Y ENLACE DE REDIRECCIÓN (SOLO BANNERS 1, 2, 3 Y 6) */}
+                  {adForm.location !== 'comparador' && adForm.location !== 'recomendador' && (
                     <div className="border border-[#C0C0C0] p-3.5 bg-[#F8F9FA] flex flex-col gap-3">
                       <div className="flex items-center justify-between border-b border-[#C0C0C0]/60 pb-1.5">
                         <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
@@ -4487,7 +5145,7 @@ export default function AdminDashboardPage() {
                           className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] bg-white"
                           value={adForm.link}
                           onChange={e => setAdForm({ ...adForm, link: e.target.value })}
-                          required={adForm.location !== 'comparador'}
+                          required={adForm.location !== 'comparador' && adForm.location !== 'recomendador'}
                         />
                         <span className="text-[9px] text-[#3A3A3C] block mt-1">
                           Web a la que será dirigido el usuario al hacer clic en el banner.
@@ -4499,7 +5157,7 @@ export default function AdminDashboardPage() {
                   {/* PASO 4: VIGENCIA DE LA CAMPAÑA (INICIO / FIN) */}
                   <div className="border border-[#C0C0C0] p-3.5 bg-[#FFFFFF]">
                     <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block mb-2">
-                      {adForm.location === 'comparador' ? '3. Inicio y Fin de la Campaña *' : '4. Inicio y Fin de la Campaña *'}
+                      {(adForm.location === 'comparador' || adForm.location === 'recomendador') ? '3. Inicio y Fin de la Campaña *' : '4. Inicio y Fin de la Campaña *'}
                     </span>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -4565,8 +5223,9 @@ export default function AdminDashboardPage() {
                       { id: 'home', label: '1. Home' },
                       { id: 'catalogo', label: '2. Catálogo General' },
                       { id: 'catalogo_filtros', label: '3. Catálogo Filtros' },
-                      { id: 'recomendador', label: '4. Recomendador' },
-                      { id: 'comparador', label: '5. Comparador' },
+                      { id: 'recomendador', label: '4. Recomendador (Slot Modelo)' },
+                      { id: 'comparador', label: '5. Comparador (Slot Modelo)' },
+                      { id: 'recomendador_banner', label: '6. Banner Recomendador' },
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -4589,11 +5248,11 @@ export default function AdminDashboardPage() {
                     const now = new Date();
                     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-                    // Verificar si hay alguna campaña vigente en el Recomendador para mostrar el estado del banner DATACAR
+                    // Verificar si hay alguna campaña de banner vigente en el Recomendador para mostrar el estado del banner DATACAR
                     const recomendadorHasActiveSponsor = campaignsList.some((c: any) => {
                       if (c.isActive === false) return false;
                       const loc = (c.location || '').toLowerCase();
-                      if (loc !== 'recomendador' && loc !== 'ambos') return false;
+                      if (loc !== 'recomendador_banner' && (loc !== 'recomendador' || c.modelId)) return false;
                       if (c.startDate && c.startDate > today) return false;
                       if (c.endDate && c.endDate < today) return false;
                       return true;
@@ -4604,14 +5263,18 @@ export default function AdminDashboardPage() {
                       const isFilterAd = camp.location === 'catalogo_filtros' || (camp.location === 'catalogo' && ((camp.targetCategory && camp.targetCategory !== 'Todas') || (camp.targetCombustible && camp.targetCombustible !== 'Todas')));
                       if (adVaultFilterLocation === 'catalogo_filtros') return isFilterAd;
                       if (adVaultFilterLocation === 'catalogo') return (camp.location === 'catalogo' && !isFilterAd) || camp.location === 'ambos';
-                      if (adVaultFilterLocation === 'comparador') return camp.location === 'comparador' || Boolean(camp.modelId);
+                      const isRecomendadorModel = (camp.location === 'recomendador' || camp.location === 'recomendador_slot') && Boolean(camp.modelId);
+                      const isRecomendadorBanner = camp.location === 'recomendador_banner' || (camp.location === 'recomendador' && !camp.modelId);
+                      if (adVaultFilterLocation === 'recomendador') return isRecomendadorModel;
+                      if (adVaultFilterLocation === 'recomendador_banner') return isRecomendadorBanner;
+                      if (adVaultFilterLocation === 'comparador') return camp.location === 'comparador' || (Boolean(camp.modelId) && !isRecomendadorModel);
                       return camp.location === adVaultFilterLocation || camp.location === 'ambos';
                     });
 
                     return (
                       <>
                         {/* INDICADOR DE ESTADO AUTOMÁTICO DEL BANNER RECOMENDADOR (DATACAR VS ANUNCIANTE) */}
-                        {(adVaultFilterLocation === 'todos' || adVaultFilterLocation === 'recomendador') && (
+                        {(adVaultFilterLocation === 'todos' || adVaultFilterLocation === 'recomendador_banner') && (
                           <div className={`p-3 border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
                             recomendadorHasActiveSponsor
                               ? 'bg-[#ECFDF5] border-[#6EE7B7] text-[#065F46]'
@@ -4619,7 +5282,7 @@ export default function AdminDashboardPage() {
                           }`}>
                             <div className="text-[10px]">
                               <span className="font-black uppercase tracking-wider block">
-                                Estado Espacio #4 (Banner Recomendador):
+                                Estado Espacio #6 (Banner Recomendador):
                               </span>
                               <span>
                                 {recomendadorHasActiveSponsor
@@ -4649,14 +5312,16 @@ export default function AdminDashboardPage() {
                             const isPausada = camp.isActive === false;
 
                             const isFilterAd = camp.location === 'catalogo_filtros' || (camp.location === 'catalogo' && ((camp.targetCategory && camp.targetCategory !== 'Todas') || (camp.targetCombustible && camp.targetCombustible !== 'Todas')));
-                            const isCompAd = camp.location === 'comparador' || (Boolean(camp.modelId) && camp.location !== 'home' && camp.location !== 'catalogo' && camp.location !== 'recomendador');
+                            const isRecomendadorModel = (camp.location === 'recomendador' || camp.location === 'recomendador_slot') && Boolean(camp.modelId);
+                            const isCompAd = camp.location === 'comparador' || (Boolean(camp.modelId) && !isRecomendadorModel && camp.location !== 'home' && camp.location !== 'catalogo');
 
                             const locationLabel = (() => {
+                              if (isRecomendadorModel) return '4. Recomendador (Slot Modelo Patrocinado)';
                               if (isCompAd) return '5. Comparador (Modelo Patrocinado • Sin dimensiones)';
                               if (isFilterAd) return '3. Catálogo Filtros (1200x400)';
                               if (camp.location === 'home') return '1. Home (1200x400)';
                               if (camp.location === 'catalogo') return '2. Catálogo General (1200x400)';
-                              if (camp.location === 'recomendador') return '4. Banner Recomendador (1200x400)';
+                              if (camp.location === 'recomendador_banner' || (camp.location === 'recomendador' && !camp.modelId)) return '6. Banner Recomendador (1200x400)';
                               return `Multiespacio (${camp.location})`;
                             })();
 
@@ -5219,6 +5884,678 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* MÓDULO NEWSLETTER & DIFUSIÓN CORPORATIVA CON ESTILO DATACAR */}
+          {/* ========================================================= */}
+          {activeTab === 'newsletter' && (
+            <div className="flex flex-col gap-6">
+              {(() => {
+                const totalCount = newsletterSubscribers.length;
+                const activeCount = newsletterSubscribers.filter(s => s.estado !== 'Inactivo').length;
+                const inactiveCount = totalCount - activeCount;
+
+                const filteredSubscribers = newsletterSubscribers.filter(sub => {
+                  if (subscriberFilterStatus === 'Activo' && sub.estado === 'Inactivo') return false;
+                  if (subscriberFilterStatus === 'Inactivo' && sub.estado !== 'Inactivo') return false;
+                  if (subscriberSearch.trim()) {
+                    const q = subscriberSearch.toLowerCase();
+                    const matchesEmail = sub.email.toLowerCase().includes(q);
+                    const matchesOrigen = (sub.origen || '').toLowerCase().includes(q);
+                    if (!matchesEmail && !matchesOrigen) return false;
+                  }
+                  return true;
+                });
+
+                const formatSubDate = (dateVal: any) => {
+                  if (!dateVal) return '—';
+                  if (typeof dateVal?.toDate === 'function') {
+                    return dateVal.toDate().toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' });
+                  }
+                  if (dateVal instanceof Date) {
+                    return dateVal.toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' });
+                  }
+                  if (typeof dateVal === 'string' || typeof dateVal === 'number') {
+                    const d = new Date(dateVal);
+                    if (!isNaN(d.getTime())) {
+                      return d.toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' });
+                    }
+                  }
+                  return '—';
+                };
+
+                const loadPresetTemplate = () => {
+                  setBroadcastForm(prev => ({
+                    ...prev,
+                    subject: 'Boletín DATACAR: Novedades del Mercado Automotor y Nuevas Energías en Paraguay',
+                    headline: 'Lo Último en SUVs Híbridos y Eléctricos 2026',
+                    contentHtml: `<p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #334155;">Estimado lector de <strong>DATACAR</strong>,</p>
+<p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #334155;">Esta semana analizamos la aceleración del mercado de vehículos híbridos y eléctricos en Paraguay, las nuevas opciones de financiamiento y los modelos más destacados de las principales concesionarias oficiales del país.</p>
+<div style="background-color: #F0F9FF; border-left: 4px solid #00BFFF; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #0A1F33;">
+  <strong>Dato Destacado del Mes:</strong> Más del 38% de las búsquedas en nuestro Recomendador Inteligente se concentran en tecnologías HEV y PHEV.
+</div>
+<h2 style="margin: 24px 0 12px 0; font-size: 18px; font-weight: 800; color: #0A1F33; text-transform: uppercase;">Puntos Clave para tu Próxima Compra:</h2>
+<ul style="margin: 0 0 16px 20px; padding: 0; color: #334155; font-size: 14px; line-height: 1.6;">
+  <li><strong>Autonomía Real:</strong> Los nuevos PHEV superan los 80 km de rango 100% eléctrico urbano.</li>
+  <li><strong>Equipamiento de Seguridad:</strong> Paquetes ADAS nivel 2 ya disponibles en segmentos masivos.</li>
+  <li><strong>Precios al Contado vs Financiado:</strong> Compará versiones y cuotas actualizadas en nuestra web.</li>
+</ul>
+<p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #334155;">Explorá las fichas técnicas completas y solicitá asesoría oficial directamente desde nuestra plataforma.</p>`,
+                    buttonText: 'Explorar Catálogo y Recomendador',
+                    buttonUrl: 'https://datacarpy.com/catalogo',
+                  }));
+                };
+
+                const insertSnippet = (snippet: string) => {
+                  setBroadcastForm(prev => ({
+                    ...prev,
+                    contentHtml: prev.contentHtml ? `${prev.contentHtml}\n${snippet}` : snippet
+                  }));
+                };
+
+                return (
+                  <>
+                    {/* TARJETA DE AUDIENCIA & ESTADO GENERAL */}
+                    <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 shadow-none">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#C0C0C0]">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-sm font-black text-[#0A1F33] uppercase tracking-wider">
+                              Difusión de Newsletter & Comunicaciones DATACAR
+                            </h2>
+                            <span className="bg-[#0A1F33] text-[#00BFFF] text-[9px] font-black px-2 py-0.5 uppercase tracking-widest">
+                              Colección Firebase
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#3A3A3C] mt-1">
+                            Emití correos electrónicos con formato HTML y diseño corporativo DATACAR a toda tu base de suscriptores vía copia oculta (BCC).
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddSubModal(true)}
+                            className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#0A1F33] hover:text-[#FFFFFF] text-xs font-bold uppercase px-4 py-2.5 transition-colors border border-[#00BFFF]"
+                          >
+                            + Agregar Suscriptor
+                          </button>
+                          <button
+                            type="button"
+                            onClick={fetchAllData}
+                            className="bg-[#F8F9FA] hover:bg-[#E2E8F0] text-[#0A1F33] text-xs font-bold uppercase px-3 py-2.5 transition-colors border border-[#C0C0C0]"
+                            title="Recargar datos de Firebase"
+                          >
+                            🔄 Actualizar
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 4 KPIs DE AUDIENCIA */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0] p-3.5">
+                          <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest block">
+                            Audiencia Total Única
+                          </span>
+                          <span className="text-2xl font-black text-[#0A1F33] block mt-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                            {totalCount}
+                          </span>
+                          <span className="text-[9px] text-[#3A3A3C] block mt-0.5">
+                            Deduplicados en Firestore
+                          </span>
+                        </div>
+
+                        <div className="bg-[#F8F9FA] border border-[#00BFFF] p-3.5">
+                          <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-widest block flex items-center justify-between">
+                            <span>Suscriptores Activos</span>
+                            <span className="w-2 h-2 rounded-full bg-[#059669]"></span>
+                          </span>
+                          <span className="text-2xl font-black text-[#0A1F33] block mt-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                            {activeCount}
+                          </span>
+                          <span className="text-[9px] text-[#059669] font-bold block mt-0.5">
+                            Destinatarios de cada envío
+                          </span>
+                        </div>
+
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0] p-3.5">
+                          <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest block">
+                            Inactivos / Pausados
+                          </span>
+                          <span className="text-2xl font-black text-[#64748B] block mt-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                            {inactiveCount}
+                          </span>
+                          <span className="text-[9px] text-[#64748B] block mt-0.5">
+                            Excluidos de la difusión
+                          </span>
+                        </div>
+
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0] p-3.5">
+                          <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest block">
+                            Gateway de Salida
+                          </span>
+                          <span className="text-xs font-black text-[#0A1F33] block mt-2 uppercase">
+                            /api/mail (SMTP DATACAR)
+                          </span>
+                          <span className="text-[9px] text-[#059669] font-bold block mt-1 flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#059669]"></span>
+                            Listo para transmisión masiva
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ALERTA DE ESTADO DE ENVÍO */}
+                    {broadcastStatus && (
+                      <div className={`p-4 border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                        broadcastStatus.type === 'success'
+                          ? 'bg-[#ECFDF5] border-[#6EE7B7] text-[#065F46]'
+                          : broadcastStatus.type === 'error'
+                          ? 'bg-[#FEF2F2] border-[#FCA5A5] text-[#991B1B]'
+                          : 'bg-[#EFF6FF] border-[#93C5FD] text-[#1E40AF]'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-bold">
+                            {broadcastStatus.type === 'success' ? '✅' : broadcastStatus.type === 'error' ? '❌' : '⏳'}
+                          </span>
+                          <span className="font-semibold">{broadcastStatus.message}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {broadcastStatus.previewUrl && (
+                            <a
+                              href={broadcastStatus.previewUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-white border border-current px-3 py-1 font-bold uppercase text-[9px] hover:bg-black/5"
+                            >
+                              Ver Preview de Email ↗
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setBroadcastStatus(null)}
+                            className="text-[10px] font-bold uppercase opacity-70 hover:opacity-100"
+                          >
+                            Cerrar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SECCIÓN PRINCIPAL: REDACTOR HTML + PREVISUALIZACIÓN EN VIVO */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
+                      {/* COLUMNA IZQUIERDA: FORMULARIO REDACTOR */}
+                      <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 shadow-none flex flex-col gap-5">
+                        <div className="flex items-center justify-between border-b border-[#C0C0C0] pb-3">
+                          <div>
+                            <h3 className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">
+                              1. Redactor de Campaña HTML
+                            </h3>
+                            <span className="text-[10px] text-[#3A3A3C]">
+                              Configurá los encabezados y el contenido enriquecido del boletín.
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={loadPresetTemplate}
+                            className="text-[9px] font-black uppercase text-[#0A1F33] bg-[#E2E8F0] hover:bg-[#00BFFF] px-2.5 py-1.5 transition-colors border border-[#C0C0C0]"
+                            title="Cargar texto de ejemplo listo para usar"
+                          >
+                            ⚡ Cargar Plantilla Ejemplo
+                          </button>
+                        </div>
+
+                        {/* ASUNTO DEL CORREO */}
+                        <div>
+                          <label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Asunto del Correo (Subject) *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={broadcastForm.subject}
+                            onChange={e => setBroadcastForm({ ...broadcastForm, subject: e.target.value })}
+                            placeholder="Ej: Novedades del Mercado Automotor | Especial Híbridos 2026"
+                            className="w-full border border-[#C0C0C0] p-2.5 text-xs font-semibold focus:outline-none focus:border-[#00BFFF]"
+                          />
+                        </div>
+
+                        {/* TITULAR INTERNO */}
+                        <div>
+                          <label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Titular Destacado (Encabezado dentro del correo)
+                          </label>
+                          <input
+                            type="text"
+                            value={broadcastForm.headline}
+                            onChange={e => setBroadcastForm({ ...broadcastForm, headline: e.target.value })}
+                            placeholder="Ej: Los 5 SUVs Híbridos más eficientes para este año"
+                            className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF]"
+                          />
+                        </div>
+
+                        {/* BARRA DE HERRAMIENTAS RÁPIDAS DE HTML */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-[10px] font-bold text-[#0A1F33] uppercase">
+                              Cuerpo del Mensaje (HTML enriquecido) *
+                            </label>
+                            <span className="text-[9px] text-[#64748B]">
+                              Soporta párrafos, listas, enlaces y estilos inline
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1 mb-2 p-1.5 bg-[#F8F9FA] border border-[#C0C0C0]">
+                            <button
+                              type="button"
+                              onClick={() => insertSnippet('<p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.6; color: #334155;">Escribí aquí tu párrafo...</p>')}
+                              className="text-[9px] font-bold uppercase bg-white border border-[#CBD5E1] px-2 py-1 hover:border-[#0A1F33]"
+                            >
+                              + Párrafo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertSnippet('<h2 style="margin: 24px 0 12px 0; font-size: 18px; font-weight: 800; color: #0A1F33; text-transform: uppercase;">Subtítulo</h2>')}
+                              className="text-[9px] font-bold uppercase bg-white border border-[#CBD5E1] px-2 py-1 hover:border-[#0A1F33]"
+                            >
+                              + Subtítulo H2
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertSnippet('<div style="background-color: #F0F9FF; border-left: 4px solid #00BFFF; padding: 14px 18px; margin: 18px 0; font-size: 14px; color: #0A1F33;"><strong>Dato Clave:</strong> Información relevante...</div>')}
+                              className="text-[9px] font-bold uppercase bg-[#F0F9FF] border border-[#00BFFF]/40 text-[#0A1F33] px-2 py-1 hover:border-[#00BFFF]"
+                            >
+                              + Alerta DATACAR
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertSnippet('<ul style="margin: 0 0 16px 20px; padding: 0; color: #334155; font-size: 14px; line-height: 1.6;">\n  <li>Punto destacado 1</li>\n  <li>Punto destacado 2</li>\n</ul>')}
+                              className="text-[9px] font-bold uppercase bg-white border border-[#CBD5E1] px-2 py-1 hover:border-[#0A1F33]"
+                            >
+                              + Lista
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertSnippet('<a href="https://datacarpy.com" style="color: #00BFFF; font-weight: bold; text-decoration: underline;">Enlace de ejemplo</a>')}
+                              className="text-[9px] font-bold uppercase bg-white border border-[#CBD5E1] px-2 py-1 hover:border-[#0A1F33]"
+                            >
+                              + Enlace Web
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertSnippet('<hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 24px 0;" />')}
+                              className="text-[9px] font-bold uppercase bg-white border border-[#CBD5E1] px-2 py-1 hover:border-[#0A1F33]"
+                            >
+                              + Separador
+                            </button>
+                          </div>
+
+                          <textarea
+                            rows={12}
+                            required
+                            value={broadcastForm.contentHtml}
+                            onChange={e => setBroadcastForm({ ...broadcastForm, contentHtml: e.target.value })}
+                            placeholder="Escribí aquí el cuerpo del correo en HTML..."
+                            className="w-full border border-[#C0C0C0] p-3 text-xs font-mono focus:outline-none focus:border-[#00BFFF] leading-relaxed custom-scrollbar bg-white"
+                          />
+                        </div>
+
+                        {/* BOTÓN CTA PRINCIPAL (OPCIONAL) */}
+                        <div className="p-3.5 bg-[#F8F9FA] border border-[#C0C0C0]">
+                          <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block mb-2">
+                            Botón de Acción Principal (Opcional)
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                                Texto del Botón
+                              </label>
+                              <input
+                                type="text"
+                                value={broadcastForm.buttonText}
+                                onChange={e => setBroadcastForm({ ...broadcastForm, buttonText: e.target.value })}
+                                placeholder="Ej: Explorar Catálogo 2026"
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                                URL de Destino (Enlace)
+                              </label>
+                              <input
+                                type="url"
+                                value={broadcastForm.buttonUrl}
+                                onChange={e => setBroadcastForm({ ...broadcastForm, buttonUrl: e.target.value })}
+                                placeholder="https://datacarpy.com/catalogo"
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-mono"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ACCIONES DE ENVÍO: TEST DISPATCH Y BROADCAST */}
+                        <div className="border-t border-[#C0C0C0] pt-4 flex flex-col gap-4">
+                          {/* ENVÍO DE TEST INDIVIDUAL */}
+                          <div className="bg-[#F8F9FA] border border-[#C0C0C0] p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            <div className="flex-1">
+                              <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                                Correo para Envío de Prueba (Test)
+                              </label>
+                              <input
+                                type="email"
+                                value={broadcastForm.sendTestEmail}
+                                onChange={e => setBroadcastForm({ ...broadcastForm, sendTestEmail: e.target.value })}
+                                placeholder="aldo.ojeda@datacarpy.com"
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-white"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleSendTestEmail}
+                              disabled={broadcastSending}
+                              className="bg-white hover:bg-[#0A1F33] text-[#0A1F33] hover:text-[#FFFFFF] border border-[#0A1F33] text-xs font-bold uppercase px-4 py-2.5 transition-colors self-end sm:self-auto shrink-0"
+                            >
+                              {broadcastSending ? 'Enviando...' : 'Enviar Prueba (Test)'}
+                            </button>
+                          </div>
+
+                          {/* BOTÓN BROADCAST MASIVO */}
+                          <button
+                            type="button"
+                            onClick={handleBroadcastNewsletter}
+                            disabled={broadcastSending || activeCount === 0 || !broadcastForm.subject.trim() || !broadcastForm.contentHtml.trim()}
+                            className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] hover:text-[#0A1F33] text-xs font-black uppercase py-4 transition-colors tracking-widest disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                          >
+                            {broadcastSending
+                              ? 'Transmitiendo Campaña Masiva...'
+                              : `🚀 Transmitir Campaña a ${activeCount} Suscriptores Activos`}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* COLUMNA DERECHA: PREVISUALIZACIÓN EN VIVO (MOCKUP CLIENTE DE CORREO) */}
+                      <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-full shadow-none overflow-hidden">
+                        <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex items-center justify-between shrink-0">
+                          <div>
+                            <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33] block">
+                              2. Previsualización del Email en Tiempo Real
+                            </span>
+                            <span className="text-[10px] text-[#3A3A3C]">
+                              Visualización exacta del formato corporativo DATACAR.
+                            </span>
+                          </div>
+                          <span className="text-[9px] font-black uppercase px-2.5 py-1 bg-[#0A1F33] text-[#00BFFF] tracking-wider">
+                            Formato DATACAR
+                          </span>
+                        </div>
+
+                        <div className="p-4 sm:p-6 bg-[#E2E8F0]/50 flex-1 overflow-y-auto custom-scrollbar">
+                          {/* SHELL CLIENTE DE CORREO */}
+                          <div className="max-w-[560px] mx-auto bg-white border border-[#CBD5E1] shadow-md overflow-hidden">
+                            {/* CABECERA METADATOS DE CLIENTE */}
+                            <div className="bg-[#F8F9FA] border-b border-[#E2E8F0] px-4 py-2.5 text-[10px] text-[#475569] space-y-1">
+                              <div><strong className="text-[#0A1F33]">De:</strong> DATACAR &lt;notificaciones@datacarpy.com&gt;</div>
+                              <div><strong className="text-[#0A1F33]">Para:</strong> suscriptores@datacarpy.com <span className="text-[9px] text-[#94A3B8]">(Copia Oculta CCO)</span></div>
+                              <div className="truncate"><strong className="text-[#0A1F33]">Asunto:</strong> <span className="font-semibold text-[#0A1F33]">{broadcastForm.subject || '(Sin asunto definido)'}</span></div>
+                            </div>
+
+                            {/* CABECERA CORPORATIVA DATACAR */}
+                            <div className="bg-[#0A1F33] px-6 py-6 text-center border-b-4 border-[#00BFFF]">
+                              <h1 className="text-2xl font-black tracking-widest text-white m-0" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                                DATA<span className="text-[#00BFFF]">CAR</span>
+                              </h1>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#94A3B8] mt-1 m-0">
+                                Plataforma Automotriz de Paraguay
+                              </p>
+                            </div>
+
+                            {/* CUERPO DEL CORREO */}
+                            <div className="p-6 sm:p-8 bg-white">
+                              {broadcastForm.headline ? (
+                                <h2 className="text-lg font-black text-[#0A1F33] uppercase tracking-wide border-b-2 border-[#00BFFF] pb-3 mb-5" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                                  {broadcastForm.headline}
+                                </h2>
+                              ) : null}
+
+                              {broadcastForm.contentHtml ? (
+                                <div
+                                  className="text-sm text-[#334155] leading-relaxed break-words space-y-3"
+                                  dangerouslySetInnerHTML={{ __html: broadcastForm.contentHtml }}
+                                />
+                              ) : (
+                                <div className="py-12 text-center text-xs text-[#94A3B8] italic">
+                                  El contenido formateado en HTML se previsualizará aquí en tiempo real...
+                                </div>
+                              )}
+
+                              {/* BOTÓN CTA */}
+                              {broadcastForm.buttonText ? (
+                                <div className="mt-8 text-center pt-2">
+                                  <span className="inline-block bg-[#00BFFF] text-[#0A1F33] text-xs font-black uppercase tracking-widest py-3 px-8 shadow-sm">
+                                    {broadcastForm.buttonText}
+                                  </span>
+                                  {broadcastForm.buttonUrl && (
+                                    <p className="text-[9px] text-[#94A3B8] mt-2 truncate">
+                                      Enlace: {broadcastForm.buttonUrl}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            {/* FOOTER CORPORATIVO DATACAR */}
+                            <div className="bg-[#0A1F33] px-6 py-6 text-center text-[10px] text-[#94A3B8] border-t border-[#1E293B]">
+                              <p className="m-0 font-bold text-white/90">
+                                DATACAR Paraguay • El Comparador Inteligente de Autos 0km
+                              </p>
+                              <p className="m-0 text-[9px] text-[#64748B] mt-1">
+                                Asunción, Paraguay • <span className="text-[#00BFFF]">datacarpy.com</span>
+                              </p>
+                              <div className="mt-3 pt-3 border-t border-[#1E293B] text-[8px] text-[#64748B] leading-relaxed">
+                                Recibís este correo porque te suscribiste al newsletter de DATACAR. Para darte de baja, podés hacerlo en cualquier momento desde el pie del correo.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* DIRECTORIO Y GESTIÓN DE SUSCRIPTORES */}
+                    <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 shadow-none flex flex-col gap-4 mt-2">
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-[#C0C0C0] pb-3">
+                        <div>
+                          <h3 className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">
+                            3. Directorio de Suscriptores Registrados
+                          </h3>
+                          <span className="text-[10px] text-[#3A3A3C]">
+                            Mostrando {filteredSubscribers.length} de {totalCount} suscriptores únicos en las colecciones <code className="bg-[#F1F5F9] px-1 text-[9px]">newsletter</code> y <code className="bg-[#F1F5F9] px-1 text-[9px]">newsletter_subscribers</code>.
+                          </span>
+                        </div>
+
+                        {/* CONTROLES DE FILTRO Y BÚSQUEDA */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Buscar por email u origen..."
+                            value={subscriberSearch}
+                            onChange={e => setSubscriberSearch(e.target.value)}
+                            className="border border-[#C0C0C0] px-3 py-1.5 text-xs focus:outline-none focus:border-[#0A1F33] w-48 sm:w-64"
+                          />
+
+                          <div className="flex border border-[#C0C0C0]">
+                            {(['Todos', 'Activo', 'Inactivo'] as const).map(st => (
+                              <button
+                                key={st}
+                                type="button"
+                                onClick={() => setSubscriberFilterStatus(st)}
+                                className={`px-2.5 py-1 text-[10px] font-bold uppercase transition-colors ${
+                                  subscriberFilterStatus === st
+                                    ? 'bg-[#0A1F33] text-[#FFFFFF]'
+                                    : 'bg-white text-[#3A3A3C] hover:bg-[#F5F5F5]'
+                                }`}
+                              >
+                                {st}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* TABLA DE SUSCRIPTORES */}
+                      <div className="overflow-x-auto border border-[#C0C0C0]">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-[#0A1F33] text-white text-[9px] uppercase tracking-wider">
+                              <th className="p-3">Correo Electrónico</th>
+                              <th className="p-3">Canal / Origen</th>
+                              <th className="p-3">Colección Firebase</th>
+                              <th className="p-3">Estado</th>
+                              <th className="p-3">Fecha Registro</th>
+                              <th className="p-3 text-right">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#C0C0C0]">
+                            {filteredSubscribers.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="p-8 text-center text-[#94A3B8] text-xs font-bold uppercase tracking-wider">
+                                  No se encontraron suscriptores con los filtros seleccionados.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredSubscribers.map((sub) => {
+                                const isActivo = sub.estado !== 'Inactivo';
+                                return (
+                                  <tr key={`${sub.colName}_${sub.id}`} className="hover:bg-[#F8F9FA] transition-colors">
+                                    <td className="p-3 font-semibold text-[#0A1F33]">
+                                      {sub.email}
+                                    </td>
+                                    <td className="p-3 text-[#3A3A3C]">
+                                      <span className="bg-[#F1F5F9] border border-[#CBD5E1] px-2 py-0.5 text-[9px] font-bold uppercase">
+                                        {sub.origen || 'General'}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-[#64748B] font-mono text-[10px]">
+                                      {sub.colName}
+                                    </td>
+                                    <td className="p-3">
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase border ${
+                                        isActivo
+                                          ? 'bg-[#ECFDF5] border-[#6EE7B7] text-[#065F46]'
+                                          : 'bg-[#F1F5F9] border-[#CBD5E1] text-[#64748B]'
+                                      }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${isActivo ? 'bg-[#059669]' : 'bg-[#94A3B8]'}`} />
+                                        {isActivo ? 'Activo' : 'Inactivo'}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-[#64748B] text-[10px]">
+                                      {formatSubDate(sub.createdAt)}
+                                    </td>
+                                    <td className="p-3 text-right">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleSubscriberStatus(sub)}
+                                          className={`border px-2 py-1 text-[9px] font-bold uppercase transition-colors ${
+                                            isActivo
+                                              ? 'border-[#C0C0C0] text-[#3A3A3C] hover:bg-[#F1F5F9]'
+                                              : 'border-[#059669] text-[#059669] hover:bg-[#ECFDF5]'
+                                          }`}
+                                          title={isActivo ? 'Pausar recepción de correos' : 'Activar recepción de correos'}
+                                        >
+                                          {isActivo ? 'Pausar' : 'Activar'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteSubscriber(sub)}
+                                          className="border border-[#DC2626] text-[#DC2626] hover:bg-[#DC2626] hover:text-white px-2 py-1 text-[9px] font-bold uppercase transition-colors"
+                                          title="Eliminar suscriptor definitivamente"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* MODAL PARA AGREGAR SUSCRIPTOR MANUAL */}
+          {showAddSubModal && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-[#FFFFFF] border-t-4 border-[#0A1F33] border-l border-r border-b border-[#C0C0C0] w-full max-w-md p-6 shadow-2xl">
+                <div className="flex justify-between items-center mb-4 border-b border-[#C0C0C0] pb-3">
+                  <h3 className="font-black text-[#0A1F33] text-sm uppercase">
+                    + Agregar Suscriptor al Newsletter
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSubModal(false)}
+                    className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleAddSubscriber} className="flex flex-col gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                      Correo Electrónico *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={newSubEmail}
+                      onChange={e => setNewSubEmail(e.target.value)}
+                      placeholder="usuario@ejemplo.com"
+                      className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                      Canal u Origen
+                    </label>
+                    <select
+                      value={newSubOrigen}
+                      onChange={e => setNewSubOrigen(e.target.value)}
+                      className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                    >
+                      <option value="Admin Manual">Admin Manual</option>
+                      <option value="Lead B2B">Lead B2B / Concesionaria</option>
+                      <option value="Evento / Expo">Evento / Expo Automotriz</option>
+                      <option value="Campaña Externa">Campaña Externa</option>
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSubModal(false)}
+                      className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-2.5 hover:bg-[#F5F5F5]"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-2.5 hover:bg-[#00BFFF] hover:text-[#0A1F33] transition-colors"
+                    >
+                      {loading ? 'Guardando...' : 'Guardar Suscriptor'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
 

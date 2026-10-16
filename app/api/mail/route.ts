@@ -242,6 +242,54 @@ function buildRecommendationResultsHtml(d: any): string {
   `;
 }
 
+function buildNewsletterBroadcastHtml(d: any): string {
+  const headline = d?.headline
+    ? `<h2 style="color: #0A1F33; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 20px; font-weight: 900; text-transform: uppercase; margin-top: 0; margin-bottom: 20px; letter-spacing: 0.5px; border-bottom: 2px solid #00BFFF; padding-bottom: 10px;">${escapeHtml(d.headline)}</h2>`
+    : '';
+
+  const buttonHtml = (d?.buttonText && d?.buttonUrl)
+    ? `
+      <div style="margin-top: 36px; margin-bottom: 24px; text-align: center;">
+        <a href="${escapeHtml(d.buttonUrl)}" style="background-color: #00BFFF; color: #FFFFFF; padding: 16px 36px; text-decoration: none; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; display: inline-block;">
+          ${escapeHtml(d.buttonText)}
+        </a>
+      </div>
+    `
+    : '';
+
+  const bodyContent = d?.contentHtml || '<p>Información y novedades del mercado automotriz en Paraguay.</p>';
+
+  return `
+    <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #FFFFFF;">
+      <!-- CABECERA CORPORATIVA DATACAR -->
+      <div style="background-color: #0A1F33; border-bottom: 4px solid #00BFFF; padding: 32px 24px; text-align: center;">
+        <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 28px; font-weight: 900; letter-spacing: 2px; margin: 0;">
+          DATA<span style="font-weight: 300;">CAR</span>
+        </h1>
+        <p style="color: #00BFFF; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; margin-top: 8px; margin-bottom: 0;">
+          NOVEDADES & MERCADO AUTOMOTRIZ 0KM
+        </p>
+      </div>
+
+      <!-- CUERPO PRINCIPAL FORMATEADO -->
+      <div style="padding: 40px 32px; color: #3A3A3C; font-size: 14px; line-height: 1.65;">
+        ${headline}
+        <div style="color: #3A3A3C; font-size: 14px; line-height: 1.65;">
+          ${bodyContent}
+        </div>
+        ${buttonHtml}
+      </div>
+
+      <!-- FOOTER INSTITUCIONAL -->
+      <div style="background-color: #F8F9FA; padding: 24px; text-align: center; font-size: 10px; color: #71717A; border-top: 1px solid #C0C0C0; line-height: 1.6;">
+        Recibís este email porque formás parte de la comunidad de suscriptores de DATACAR Paraguay.<br>
+        Información de precios reales, análisis de equipamiento y lanzamientos oficiales 0km.<br><br>
+        © ${new Date().getFullYear()} DATACAR Paraguay. Todos los derechos reservados.
+      </div>
+    </div>
+  `;
+}
+
 export async function POST(request: Request) {
   const origin = request.headers.get('origin') || request.headers.get('referer') || '';
   const isDev = process.env.NODE_ENV !== 'production';
@@ -251,13 +299,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Origen no permitido' }, { status: 403 });
   }
 
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 });
-  }
-
   const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > 50_000) {
+  if (contentLength > 300_000) {
     return NextResponse.json({ error: 'Payload demasiado grande' }, { status: 413 });
   }
 
@@ -269,6 +312,14 @@ export async function POST(request: Request) {
   }
 
   const { type, destinatarios, data } = body || {};
+
+  // Rate limit para peticiones públicas ordinarias (se exceptúa newsletter_broadcast emitido desde Admin)
+  if (type !== 'newsletter_broadcast') {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 });
+    }
+  }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   // Sanitizar y validar lista de destinatarios
@@ -303,6 +354,9 @@ export async function POST(request: Request) {
   } else if (type === 'recommendation_results') {
     subject = 'Tus resultados del Recomendador - DATACAR';
     html = buildRecommendationResultsHtml(data);
+  } else if (type === 'newsletter_broadcast') {
+    subject = data?.subject ? String(data.subject).trim() : 'Novedades y Oportunidades 0km - DATACAR';
+    html = buildNewsletterBroadcastHtml(data);
   } else {
     return NextResponse.json({ error: 'Tipo de correo no soportado' }, { status: 400 });
   }
@@ -317,7 +371,7 @@ export async function POST(request: Request) {
     console.log('\n==========================================');
     console.log('📨 [API MAIL - MODO SIMULACIÓN DEV]');
     console.log(`Tipo: ${type}`);
-    console.log(`Para: ${cleanDestinatarios.join(', ')}`);
+    console.log(`Destinatarios (${cleanDestinatarios.length}): ${cleanDestinatarios.slice(0, 5).join(', ')}${cleanDestinatarios.length > 5 ? '...' : ''}`);
     console.log(`Asunto: ${subject}`);
 
     try {
@@ -340,6 +394,7 @@ export async function POST(request: Request) {
       simulated: true,
       message: 'Correo procesado y previsualizado con éxito en modo desarrollo.',
       previewUrl: '/emails-preview/latest.html',
+      destinatariosCount: cleanDestinatarios.length,
       destinatarios: cleanDestinatarios,
       subject,
     });
@@ -357,15 +412,31 @@ export async function POST(request: Request) {
   });
 
   try {
-    const info = await transporter.sendMail({
-      from: `"DATACAR CRM" <${process.env.EMAIL_USER}>`,
-      to: cleanDestinatarios.join(', '),
+    const isBroadcast = type === 'newsletter_broadcast';
+    const mailOptions: any = {
+      from: `"DATACAR" <${process.env.EMAIL_USER}>`,
       subject,
       html,
+    };
+
+    if (isBroadcast) {
+      // Para privacidad de suscriptores: se envía con copia oculta (BCC)
+      mailOptions.to = process.env.EMAIL_USER;
+      mailOptions.bcc = cleanDestinatarios;
+    } else {
+      mailOptions.to = cleanDestinatarios.join(', ');
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    return NextResponse.json({
+      success: true,
+      message: 'Correo enviado con éxito.',
+      id: info.messageId,
+      destinatariosCount: cleanDestinatarios.length
     });
-    return NextResponse.json({ success: true, message: 'Correo enviado.', id: info.messageId });
   } catch (error: any) {
     console.error('❌ [API MAIL] Error crítico de SMTP:', error);
     return NextResponse.json({ error: 'Error interno de envío SMTP', details: error.message }, { status: 500 });
   }
 }
+
