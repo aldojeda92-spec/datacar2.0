@@ -78,6 +78,13 @@ interface VersionData {
   airbags: number;
   adasCount: number;
   confortScore: number;
+  hasAdas: boolean;
+  hasCuero: boolean;
+  hasTecho: boolean;
+  hasCamara: boolean;
+  has4x4: boolean;
+  despejeSuelo: number;
+  bauleraLitros: number;
 }
 
 interface MatchReason { label: string; matched: boolean; }
@@ -95,6 +102,11 @@ interface ScoredModel {
   hasTecho: boolean;
   hasCamara: boolean;
   matchReasons: MatchReason[];
+  fuelTier?: number;
+  bodyTier?: number;
+  budgetTier?: number;
+  plazasTier?: number;
+  terrainTier?: number;
 }
 
 interface AdCampaign { 
@@ -197,6 +209,8 @@ export default function RecomendadorPage() {
         const modelsList: ModelData[] = modelsData.map((data) => {
           const cleanTipo = normalizeCarroceria(data.tipo_carroceria);
           tempTipos.add(cleanTipo);
+          const modelOrigen = data.origen || brandsMap[data.brandId]?.origen || 'Desconocido';
+          if (data.origen) tempOrigenes.add(data.origen);
 
           return {
             id: data.id,
@@ -205,7 +219,7 @@ export default function RecomendadorPage() {
             name: data.name,
             tipo_carroceria: cleanTipo,
             imgUrl: data.imgUrl || '',
-            origen: brandsMap[data.brandId]?.origen || 'Desconocido'
+            origen: modelOrigen
           };
         });
 
@@ -213,21 +227,62 @@ export default function RecomendadorPage() {
         const tempCombustibles = new Set<string>();
 
         const versionsList: VersionData[] = versionsData.map((v) => {
-          const adasStr = v.features?.adas?.join(' ') || '';
-          const confortStr = v.features?.confort_conveniencia?.join(' ') || '';
-          const rawString = `${adasStr} ${v.features?.asiento_cuero} ${v.features?.techo_panoramico} ${v.specs?.camaras} ${v.specs?.traccion}`.toLowerCase();
+          // Filtrar ADAS reales (excluyendo "Sin ADAS", "No", "-", etc.)
+          const rawAdasList: string[] = Array.isArray(v.features?.adas)
+            ? v.features.adas
+            : (typeof v.features?.adas === 'string' ? v.features.adas.split('|') : []);
+          const cleanAdasList = rawAdasList
+            .map(item => String(item || '').trim())
+            .filter(item => {
+              const low = item.toLowerCase();
+              return low.length > 0 && low !== 'sin adas' && low !== 'no' && low !== 'no aplica' && low !== '-';
+            });
 
-          const equipScore = adasStr.length + confortStr.length;
+          const adasStr = cleanAdasList.join(' ');
+          const confortArr: string[] = Array.isArray(v.features?.confort_conveniencia)
+            ? v.features.confort_conveniencia
+            : (typeof v.features?.confort_conveniencia === 'string' ? v.features.confort_conveniencia.split(';') : []);
+          const confortStr = confortArr.join(' ');
+          const segArr: string[] = Array.isArray(v.features?.seguridad_standard)
+            ? v.features.seguridad_standard
+            : (typeof v.features?.seguridad_standard === 'string' ? v.features.seguridad_standard.split(';') : []);
+          const segStr = segArr.join(' ');
+
+          const cueroRaw = String(v.features?.asiento_cuero || '').toLowerCase().trim();
+          const techoRaw = String(v.features?.techo_panoramico || '').toLowerCase().trim();
+          const camarasRaw = String(v.specs?.camaras || '').toLowerCase().trim();
+          const traccionRaw = String(v.specs?.traccion || '').toLowerCase().trim();
+
+          const rawString = `${adasStr} ${confortStr} ${segStr} ${cueroRaw} ${techoRaw} ${camarasRaw} ${traccionRaw}`.toLowerCase();
+
+          const hasAdas = cleanAdasList.length > 0 || ALIAS.ADAS.some(alias => alias !== 'adas' && rawString.includes(alias));
+          const hasCuero = ['sí', 'si', 'yes', 'true'].includes(cueroRaw) || ALIAS.CUERO.some(alias => cueroRaw.includes(alias) || confortStr.toLowerCase().includes(alias));
+          const hasTecho = ['sí', 'si', 'yes', 'true'].includes(techoRaw) || ALIAS.TECHO.some(alias => techoRaw.includes(alias) || confortStr.toLowerCase().includes(alias));
+          const hasCamara = (camarasRaw.length > 0 && !['no', '-', 'sin camara', 'sin cámara', 'sensores traseros sin cámara', 'sensores traseros sin camara'].includes(camarasRaw)) ||
+            ALIAS.CAMARA.some(alias => camarasRaw.includes(alias) || confortStr.toLowerCase().includes(alias));
+          const hasCamara360 = camarasRaw.includes('360') || camarasRaw.includes('540') || camarasRaw.includes('periférica') || camarasRaw.includes('topview');
+          const has4x4 = ALIAS.TRACCION_4X4.some(alias => traccionRaw.includes(alias));
 
           const plazas = Number(v.specs?.plazas) || 5;
           const combustible = normalizeCombustible(v.specs?.combustible);
 
-          const airbagsNum = parseInt(String(v.specs?.airbags || '0').replace(/\D/g, ''), 10) || 
-            (Array.isArray(v.features?.seguridad_standard) && v.features.seguridad_standard.length ? 2 : 2);
-          const adasCount = Array.isArray(v.features?.adas) && v.features.adas.length > 0 && v.features.adas[0] !== '' ? v.features.adas.length : 0;
-          const confortScore = (Array.isArray(v.features?.confort_conveniencia) ? v.features.confort_conveniencia.length : 0) +
-            (v.features?.asiento_cuero && v.features.asiento_cuero !== '-' ? 2 : 0) +
-            (v.features?.techo_panoramico && v.features.techo_panoramico !== '-' ? 2 : 0);
+          const airbagsNum = parseInt(String(v.specs?.airbags || '0').replace(/\D/g, ''), 10) || (segArr.length ? 2 : 2);
+          const adasCount = cleanAdasList.length;
+          const pantallaNum = parseFloat(String(v.specs?.tamanho_pantalla || '0').replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
+          const despejeSuelo = Number(v.dimensiones?.despeje_suelo || v.despeje_suelo) || 0;
+          const bauleraLitros = Number(v.dimensiones?.baulera_litros || v.baulera_litros) || 0;
+
+          const confortScore = confortArr.length + (hasCuero ? 3 : 0) + (hasTecho ? 3 : 0);
+
+          // Puntaje objetivo de equipamiento real (Seguridad + ADAS + Tecnología + Confort)
+          const equipScore =
+            (adasCount * 35) +
+            (airbagsNum * 15) +
+            (hasCuero ? 30 : 0) +
+            (hasTecho ? 30 : 0) +
+            (hasCamara360 ? 35 : (hasCamara ? 20 : 0)) +
+            Math.round(pantallaNum * 4) +
+            Math.min(75, confortArr.length * 5);
 
           tempPlazas.add(plazas);
           if (combustible) tempCombustibles.add(combustible);
@@ -237,13 +292,20 @@ export default function RecomendadorPage() {
             combustible: combustible,
             transmision: (v.specs?.transmision || '').toLowerCase(),
             plazas: plazas,
-            traccion: (v.specs?.traccion || '').toLowerCase(),
+            traccion: traccionRaw,
             features_raw: rawString,
             equipScore: equipScore,
             concesionaria: v.concesionaria || '',
             airbags: airbagsNum,
             adasCount: adasCount,
-            confortScore: confortScore
+            confortScore: confortScore,
+            hasAdas,
+            hasCuero,
+            hasTecho,
+            hasCamara,
+            has4x4,
+            despejeSuelo,
+            bauleraLitros
           };
         });
 
@@ -485,153 +547,413 @@ export default function RecomendadorPage() {
   };
 
   // ==========================================
-  // 4. ALGORITMO B2B DE RANKING Y ETIQUETADO
+  // 4. ALGORITMO MULTIDIMENSIONAL DE PROXIMIDAD Y CASCADA (VEROSIMILITUD AUTOMOTRIZ)
   // ==========================================
   const runAlgorithm = (): ScoredModel[] => {
-    // Perfil novato: sus respuestas de estilo de vida se traducen a las mismas
-    // claves que usa el resto del algoritmo. `src` es el set efectivo de
-    // preferencias (para el perfil experto es directamente `answers`).
     const src = perfilNovato
       ? { ...answers, ...derivarPreferenciasNovato(answers) }
       : answers;
 
-    // DEAL-BREAKERS (Filtros con Cascada de Flexibilización Inteligente):
-    // 1. Rango de Presupuesto
     const budgetKey = src['presupuesto'];
     const budgetRange = budgetKey ? BUDGET_RANGES[budgetKey] : null;
-
-    // 2. Cantidad de Plazas Requerida
     const reqPlazas = (src['plazas'] && src['plazas'] !== 'any') ? Number(src['plazas']) : null;
 
-    // 3. Tipo de Carrocería / "Para qué lo voy a usar"
-    const ansCarroceria = src['carroceria'] || [];
-    const carroceriaEsFiltroDuro = !ansCarroceria.includes('any') && ansCarroceria.length > 0;
+    const ansCarroceria: string[] = Array.isArray(src['carroceria']) ? src['carroceria'] : [];
+    const hasBodyPref = !ansCarroceria.includes('any') && ansCarroceria.length > 0;
 
-    // Prioridades explícitas (de novato o de experto)
+    const ansComb: string[] = Array.isArray(src['combustible']) ? src['combustible'] : [];
+    const hasFuelPref = !ansComb.includes('any') && ansComb.length > 0;
+
+    const ansMarcas: string[] = Array.isArray(src['marcas']) ? src['marcas'] : [];
+    const hasBrandPref = !ansMarcas.includes('any') && ansMarcas.length > 0;
+
+    const ansOrigen: string[] = Array.isArray(src['origen']) ? src['origen'] : [];
+    const hasOriginPref = !ansOrigen.includes('any') && ansOrigen.length > 0;
+
+    const ansFeat: string[] = Array.isArray(src['features']) ? src['features'] : [];
+    const hasFeatPref = !ansFeat.includes('any') && ansFeat.length > 0;
+
     const prioridad = src['prioridad'] || '';
     const uso = src['uso'] || '';
+    const terreno = src['terreno'] || '';
     const isEconomyPriority = prioridad === 'consumo' || prioridad === 'precio';
     const isComfortPriority = prioridad === 'tecnologia';
     const isSafetyPriority = prioridad === 'seguridad' || uso === 'familia';
+    const reqOffroad = terreno === 'offroad' || ansFeat.includes('4x4');
 
-    interface ScoringOpts {
-      bypassHardFilters?: boolean;
-      relaxationLevel?: number; // 0: Estricto, 1: Flexibilizar plazas, 2: Flexibilizar uso/carrocería, 3: Flexibilizar terreno, 4: Flexibilizar presupuesto, 5: Catálogo completo
-      allow5SeatsFor1or2?: boolean;
-    }
+    // -------------------------------------------------------------------------
+    // A. MATRIZ DE PROXIMIDAD ENERGÉTICA (Combustible / Motorización)
+    // -------------------------------------------------------------------------
+    const evaluateFuelProximity = (vFuel: string): { ratio: number; tier: number; label: string; matched: boolean } => {
+      const f = (vFuel || '').toUpperCase().trim();
+      const labelName = combustibleLabel(f) || f || 'Convencional';
 
-    const scoreModel = (model: ModelData, opts?: ScoringOpts): ScoredModel | null => {
-      const bypass = !!opts?.bypassHardFilters;
-      const rLevel = opts?.relaxationLevel ?? 0;
+      if (!hasFuelPref && !isEconomyPriority) {
+        return { ratio: 1.0, tier: 1, label: `Motorización ${labelName}`, matched: true };
+      }
 
-      // =========================================================================
-      // 1. FILTRO DE CARROCERÍA / "PARA QUÉ LO VOY A USAR" (Flexibilizado en Level >= 2)
-      // =========================================================================
-      if (!bypass && carroceriaEsFiltroDuro && rLevel < 2) {
-        if (!ansCarroceria.some((c: string) => model.tipo_carroceria === c)) {
-          return null;
+      if (hasFuelPref) {
+        // Nivel 1: Coincidencia exacta (o REEV dentro de EV/PHEV)
+        const wantsPlugIn = ansComb.includes('EV') || ansComb.includes('PHEV') || ansComb.includes('REEV');
+        if (ansComb.includes(f) || (wantsPlugIn && f === 'REEV')) {
+          return { ratio: 1.0, tier: 1, label: `Motorización ${labelName} (Exacta)`, matched: true };
+        }
+
+        // Si el usuario pidió EV / PHEV (Nuevas Energías enchufables / 100% eléctricas)
+        if (wantsPlugIn && !ansComb.includes('HEV') && !ansComb.includes('MHEV')) {
+          if (f === 'HEV') {
+            return { ratio: 0.80, tier: 2, label: `Alternativa Híbrida Autorrecargable (${labelName})`, matched: true };
+          }
+          if (f === 'MHEV') {
+            return { ratio: 0.58, tier: 3, label: `Alternativa Microhíbrida (${labelName})`, matched: true };
+          }
+          if (f === 'FLEX' || f === 'NAFTA') {
+            return { ratio: 0.10, tier: 4, label: `Motor tradicional (${labelName})`, matched: false };
+          }
+          return { ratio: 0.0, tier: 5, label: `Motorización ${labelName}`, matched: false };
+        }
+
+        // Si el usuario pidió HEV / MHEV (Híbridos)
+        const wantsHybrid = ansComb.includes('HEV') || ansComb.includes('MHEV');
+        if (wantsHybrid) {
+          if (['HEV', 'MHEV', 'PHEV', 'REEV'].includes(f)) {
+            return { ratio: 0.85, tier: 2, label: `Tecnología Híbrida Compatible (${labelName})`, matched: true };
+          }
+          if (f === 'EV') {
+            return { ratio: 0.72, tier: 2, label: `100% Eléctrico (${labelName})`, matched: true };
+          }
+          if (f === 'FLEX' || f === 'NAFTA') {
+            return { ratio: 0.25, tier: 4, label: `Motor tradicional (${labelName})`, matched: false };
+          }
+          return { ratio: 0.05, tier: 5, label: `Motorización ${labelName}`, matched: false };
+        }
+
+        // Si el usuario pidió NAFTA / FLEX
+        const wantsGas = ansComb.includes('NAFTA') || ansComb.includes('FLEX');
+        if (wantsGas) {
+          if (f === 'NAFTA' || f === 'FLEX') {
+            return { ratio: 0.92, tier: 1, label: `Motorización ${labelName}`, matched: true };
+          }
+          if (f === 'MHEV') {
+            return { ratio: 0.82, tier: 2, label: `Nafta/Flex con asistencia MHEV`, matched: true };
+          }
+          if (f === 'HEV') {
+            return { ratio: 0.72, tier: 2, label: `Híbrido de bajo consumo (${labelName})`, matched: true };
+          }
+          if (f === 'PHEV' || f === 'REEV') {
+            return { ratio: 0.55, tier: 3, label: `Híbrido enchufable (${labelName})`, matched: false };
+          }
+          return { ratio: 0.15, tier: 4, label: `Motorización ${labelName}`, matched: false };
+        }
+
+        // Si el usuario pidió DIESEL
+        if (ansComb.includes('DIESEL')) {
+          if (f === 'HEV' || f === 'PHEV') {
+            return { ratio: 0.55, tier: 3, label: `Alto torque híbrido (${labelName})`, matched: false };
+          }
+          if (f === 'NAFTA' || f === 'FLEX') {
+            return { ratio: 0.45, tier: 3, label: `Alternativa Nafta/Flex`, matched: false };
+          }
+          return { ratio: 0.10, tier: 4, label: `Motorización ${labelName}`, matched: false };
         }
       }
 
+      // Modo Prioridad Economía (Novato)
+      const eRank = ENERGY_ECONOMY_RANK[f] || 2;
+      if (eRank >= 5) return { ratio: 1.0, tier: 1, label: `Máxima Eficiencia (${labelName})`, matched: true };
+      if (eRank === 4) return { ratio: 0.82, tier: 2, label: `Eficiencia Microhíbrida (${labelName})`, matched: true };
+      if (eRank >= 2) return { ratio: 0.55, tier: 3, label: `Consumo Urbano (${labelName})`, matched: true };
+      return { ratio: 0.25, tier: 4, label: `Motorización ${labelName}`, matched: false };
+    };
+
+    // -------------------------------------------------------------------------
+    // B. MATRIZ DE PROXIMIDAD DE CARROCERÍA (Siluetas y Sustitutos Naturales)
+    // -------------------------------------------------------------------------
+    const evaluateBodyProximity = (modelBody: string, despeje: number, has4x4Flag: boolean): { ratio: number; tier: number; label: string; matched: boolean } => {
+      const b = (modelBody || '').toUpperCase().trim();
+      if (!hasBodyPref) {
+        return { ratio: 1.0, tier: 1, label: `Carrocería ${b}`, matched: true };
+      }
+
+      if (ansCarroceria.includes(b)) {
+        return { ratio: 1.0, tier: 1, label: `Carrocería ${b}`, matched: true };
+      }
+
+      const wantsSuvOrCross = ansCarroceria.includes('SUV') || ansCarroceria.includes('CROSSOVER');
+      const wantsSedan = ansCarroceria.includes('SEDÁN');
+      const wantsHatch = ansCarroceria.includes('HATCHBACK');
+      const wantsPickup = ansCarroceria.some(c => c.includes('PICKUP'));
+      const wantsFurgon = ansCarroceria.some(c => c.includes('FURGÓN') || c.includes('MINIVAN'));
+
+      if (wantsSuvOrCross) {
+        if (b === 'SUV' || b === 'CROSSOVER') {
+          return { ratio: 0.96, tier: 1, label: `Silueta ${b} (Equivalente)`, matched: true };
+        }
+        if (b === 'HATCHBACK') {
+          const isElevated = despeje >= 175;
+          return {
+            ratio: isElevated ? 0.72 : 0.55,
+            tier: 2,
+            label: isElevated ? `Hatchback de buen despeje (${despeje} mm)` : `Alternativa compacta: Hatchback`,
+            matched: isElevated
+          };
+        }
+        if (b === 'MINIVAN') {
+          return { ratio: 0.60, tier: 2, label: `Alternativa familiar: Minivan`, matched: false };
+        }
+        if (b === 'SEDÁN') {
+          return { ratio: 0.35, tier: 3, label: `Alternativa: Sedán`, matched: false };
+        }
+        return { ratio: 0.0, tier: 4, label: `Segmento ${b}`, matched: false };
+      }
+
+      if (wantsSedan) {
+        if (b === 'HATCHBACK') return { ratio: 0.75, tier: 2, label: `Alternativa cercana: Hatchback`, matched: true };
+        if (b === 'CROSSOVER' || b === 'SUV') return { ratio: 0.65, tier: 2, label: `Alternativa: ${b}`, matched: false };
+        return { ratio: 0.05, tier: 4, label: `Segmento ${b}`, matched: false };
+      }
+
+      if (wantsHatch) {
+        if (b === 'CROSSOVER' || b === 'SUV') return { ratio: 0.75, tier: 2, label: `Alternativa cercana: ${b}`, matched: true };
+        if (b === 'SEDÁN') return { ratio: 0.65, tier: 2, label: `Alternativa: Sedán`, matched: false };
+        return { ratio: 0.05, tier: 4, label: `Segmento ${b}`, matched: false };
+      }
+
+      if (wantsPickup) {
+        if (b.includes('PICKUP')) return { ratio: 0.95, tier: 1, label: `Carrocería ${b}`, matched: true };
+        if (b === 'SUV' && (has4x4Flag || despeje >= 200)) return { ratio: 0.65, tier: 2, label: `SUV Todoterreno Robusto`, matched: false };
+        if (b.includes('FURGÓN')) return { ratio: 0.55, tier: 2, label: `Utilitario de trabajo (${b})`, matched: false };
+        return { ratio: 0.05, tier: 4, label: `Segmento ${b}`, matched: false };
+      }
+
+      if (wantsFurgon) {
+        if (b.includes('FURGÓN') || b === 'MINIVAN' || b === 'MINIBÚS') return { ratio: 0.92, tier: 1, label: `Capacidad utilitaria (${b})`, matched: true };
+        if (b.includes('PICKUP')) return { ratio: 0.70, tier: 2, label: `Alternativa de carga (${b})`, matched: true };
+        if (b === 'SUV') return { ratio: 0.50, tier: 3, label: `Alternativa de espacio: SUV`, matched: false };
+        return { ratio: 0.10, tier: 4, label: `Segmento ${b}`, matched: false };
+      }
+
+      return { ratio: 0.30, tier: 3, label: `Alternativa: ${b}`, matched: false };
+    };
+
+    // -------------------------------------------------------------------------
+    // C. MATRIZ DE PROXIMIDAD DE PRESUPUESTO (Tolerancia Comercial y Escalones)
+    // -------------------------------------------------------------------------
+    const evaluateBudgetProximity = (price: number): { ratio: number; tier: number; label: string; matched: boolean } => {
+      if (!budgetRange) {
+        return { ratio: 1.0, tier: 1, label: `US$ ${price.toLocaleString('es-PY')}`, matched: true };
+      }
+
+      const minExact = budgetRange.min > 0 ? budgetRange.min * 0.96 : 0;
+      const maxExact = budgetRange.max < 90000000 ? budgetRange.max * 1.02 : Infinity;
+
+      // Nivel 1: Dentro del rango objetivo exacto
+      if (price >= minExact && price <= maxExact) {
+        return { ratio: 1.0, tier: 1, label: `En tu presupuesto (${budgetRange.label})`, matched: true };
+      }
+
+      // Nivel 2: Zona de Tolerancia Comercial (-8% a +8% del rango)
+      const minTol = budgetRange.min > 0 ? budgetRange.min * 0.91 : 0;
+      const maxTol = budgetRange.max < 90000000 ? budgetRange.max * 1.08 : Infinity;
+      if (price >= minTol && price <= maxTol) {
+        return {
+          ratio: 0.85,
+          tier: 2,
+          label: `En margen comercial (US$ ${price.toLocaleString('es-PY')})`,
+          matched: true
+        };
+      }
+
+      // Nivel 3: Escalón Adyacente Próximo
+      let minAdj = 0;
+      let maxAdj = Infinity;
+      if (budgetKey === '18000') {
+        maxAdj = 23500;
+      } else if (budgetKey === '25000') {
+        minAdj = 14000;
+        maxAdj = 31000;
+      } else if (budgetKey === '40000') {
+        minAdj = 19500;
+        maxAdj = 52000;
+      } else {
+        minAdj = 28000;
+      }
+
+      if (price >= minAdj && price <= maxAdj) {
+        return {
+          ratio: 0.55,
+          tier: 3,
+          label: `Escalón cercano: US$ ${price.toLocaleString('es-PY')}`,
+          matched: false
+        };
+      }
+
+      // Nivel 4: Fuera de escalón adyacente
+      return {
+        ratio: 0.15,
+        tier: 4,
+        label: `Precio de lista: US$ ${price.toLocaleString('es-PY')}`,
+        matched: false
+      };
+    };
+
+    // -------------------------------------------------------------------------
+    // D. MATRIZ DE PROXIMIDAD DE PLAZAS / PASAJEROS
+    // -------------------------------------------------------------------------
+    const evaluatePlazasProximity = (plazas: number, baulera: number): { ratio: number; tier: number; label: string; matched: boolean } => {
+      if (reqPlazas === null) {
+        return { ratio: 1.0, tier: 1, label: `Capacidad de ${plazas} plazas`, matched: true };
+      }
+
+      if (reqPlazas <= 2) {
+        if (plazas <= 4) {
+          return { ratio: 1.0, tier: 1, label: `Formato ágil de ${plazas} plazas`, matched: true };
+        }
+        if (plazas === 5) {
+          return { ratio: 0.95, tier: 1, label: `Capacidad versátil de 5 plazas (ideal 1-2 personas)`, matched: true };
+        }
+        return { ratio: 0.30, tier: 3, label: `Vehículo grande (${plazas} plazas)`, matched: false };
+      }
+
+      if (reqPlazas === 4) {
+        if (plazas === 4 || plazas === 5) {
+          return { ratio: 1.0, tier: 1, label: `Capacidad de ${plazas} plazas`, matched: true };
+        }
+        if (plazas >= 7) {
+          return { ratio: 0.72, tier: 2, label: `Amplio de ${plazas} plazas`, matched: true };
+        }
+        return { ratio: 0.0, tier: 4, label: `Solo ${plazas} plazas`, matched: false };
+      }
+
+      if (reqPlazas === 5) {
+        if (plazas === 5) {
+          return { ratio: 1.0, tier: 1, label: `Capacidad de 5 plazas`, matched: true };
+        }
+        if (plazas >= 7) {
+          return { ratio: 0.90, tier: 1, label: `Capacidad familiar de ${plazas} plazas`, matched: true };
+        }
+        if (plazas === 4) {
+          return { ratio: 0.45, tier: 2, label: `Capacidad de 4 plazas`, matched: false };
+        }
+        return { ratio: 0.0, tier: 4, label: `Solo ${plazas} plazas`, matched: false };
+      }
+
+      // reqPlazas >= 7 (6 o más personas)
+      if (plazas >= 7) {
+        return { ratio: 1.0, tier: 1, label: `3 filas / ${plazas} plazas reales`, matched: true };
+      }
+      if (plazas === 5 && baulera >= 470) {
+        return { ratio: 0.58, tier: 2, label: `5 plazas de gran habitabilidad (${baulera}L baúl)`, matched: false };
+      }
+      if (plazas === 5) {
+        return { ratio: 0.35, tier: 3, label: `Capacidad estándar de 5 plazas`, matched: false };
+      }
+      return { ratio: 0.0, tier: 4, label: `Capacidad de ${plazas} plazas`, matched: false };
+    };
+
+    // -------------------------------------------------------------------------
+    // E. MATRIZ DE PROXIMIDAD DE TERRENO / DESPEJE
+    // -------------------------------------------------------------------------
+    const evaluateTerrainProximity = (has4x4Flag: boolean, despeje: number, rawFeatures: string): { ratio: number; tier: number; label: string; matched: boolean } => {
+      if (reqOffroad) {
+        if (has4x4Flag) {
+          return { ratio: 1.0, tier: 1, label: 'Tracción 4x4 / AWD para todo terreno', matched: true };
+        }
+        const hasGrip = rawFeatures.includes('grip control') || rawFeatures.includes('descenso');
+        if (despeje >= 190 || hasGrip) {
+          return {
+            ratio: 0.75,
+            tier: 2,
+            label: despeje >= 190 ? `Buen despeje del suelo (${despeje} mm)` : 'Asistencia de tracción en terrenos difíciles',
+            matched: true
+          };
+        }
+        if (despeje >= 175) {
+          return { ratio: 0.45, tier: 3, label: `Tracción 4x2 con despeje de ${despeje} mm`, matched: false };
+        }
+        return { ratio: 0.15, tier: 4, label: 'Tracción simple urbana', matched: false };
+      }
+
+      if (terreno === 'mixto') {
+        if (has4x4Flag || despeje >= 180) {
+          return { ratio: 1.0, tier: 1, label: despeje >= 180 ? `Despeje apto para tierra/ripio (${despeje} mm)` : 'Tracción integral', matched: true };
+        }
+        return { ratio: 0.80, tier: 1, label: 'Apto para asfalto y caminos mixtos', matched: true };
+      }
+
+      return { ratio: 1.0, tier: 1, label: 'Óptimo para asfalto y ciudad', matched: true };
+    };
+
+    // -------------------------------------------------------------------------
+    // FUNCIÓN EVALUADORA INTEGRAL POR MODELO
+    // -------------------------------------------------------------------------
+    const scoreModel = (model: ModelData): ScoredModel | null => {
       const mVersions = rawVersions.filter(v => v.modelId === model.id);
       if (mVersions.length === 0) return null;
 
-      // =========================================================================
-      // 2. FILTRO DE PRESUPUESTO (Flexibilizado en Level >= 4, catálogo completo en Level 5)
-      // =========================================================================
-      let passingVersions = mVersions;
-      if (!bypass && budgetRange && rLevel < 5) {
-        let minAllowed = budgetRange.min > 0 ? budgetRange.min * 0.95 : 0;
-        let maxAllowed = budgetRange.max < 90000000 ? budgetRange.max * 1.05 : Infinity;
+      // Evaluamos cada versión del modelo para elegir la versión representativa
+      // que mejor responda a la motorización, presupuesto, plazas y caja buscados
+      const scoredVersions = mVersions.map(v => {
+        const fuelEval = evaluateFuelProximity(v.combustible);
+        const budgetEval = evaluateBudgetProximity(v.price);
+        const plazasEval = evaluatePlazasProximity(v.plazas, v.bauleraLitros);
+        const terrainEval = evaluateTerrainProximity(v.has4x4, v.despejeSuelo, v.features_raw);
 
-        if (rLevel === 4) {
-          // Nivel 4: Amplía el rango de presupuesto
-          if (budgetKey === '18000') {
-            maxAllowed = 26250; // Amplía al escalón de 25k (+ 5% tolerancia)
-          } else if (budgetKey === '25000') {
-            minAllowed = 15000;
-            maxAllowed = 42000;
-          } else if (budgetKey === '40000') {
-            minAllowed = 20000;
-            maxAllowed = 55000;
-          } else {
-            minAllowed = 30000;
-          }
+        let transScore = 1.0;
+        if (src['transmision'] && src['transmision'] !== 'any') {
+          const isAuto = ALIAS.AUTO.some(a => v.transmision.includes(a));
+          const isMan = ALIAS.MANUAL.some(a => v.transmision.includes(a));
+          if (src['transmision'] === 'Automatica') transScore = isAuto ? 1.0 : 0.2;
+          if (src['transmision'] === 'Manual') transScore = isMan ? 1.0 : 0.2;
         }
 
-        passingVersions = mVersions.filter(v => v.price >= minAllowed && v.price <= maxAllowed);
-        if (passingVersions.length === 0) {
-          return null;
-        }
-      }
+        const versionAffinity =
+          (fuelEval.ratio * 40) +
+          (budgetEval.ratio * 35) +
+          (plazasEval.ratio * 15) +
+          (terrainEval.ratio * 10) +
+          (transScore * 10);
 
-      // =========================================================================
-      // 3. FILTRO DE TERRENO / "POR DÓNDE MANEJÁS" (Flexibilizado en Level >= 3)
-      // =========================================================================
-      const reqOffroad = src['terreno'] === 'offroad' || (src['features'] || []).includes('4x4');
-      if (!bypass && reqOffroad && rLevel < 3) {
-        passingVersions = passingVersions.filter(v => {
-          return ALIAS.TRACCION_4X4.some(alias => v.features_raw.includes(alias) || v.traccion.includes(alias));
-        });
-        if (passingVersions.length === 0) {
-          return null;
-        }
-      }
+        return {
+          v,
+          fuelEval,
+          budgetEval,
+          plazasEval,
+          terrainEval,
+          versionAffinity
+        };
+      });
 
-      // =========================================================================
-      // 4. FILTRO DE PLAZAS / CANTIDAD DE PERSONAS (Flexibilizado en Level >= 1)
-      // =========================================================================
-      if (!bypass && reqPlazas !== null && rLevel < 2) {
-        if (rLevel === 0) {
-          // Nivel 0 (Filtro Estricto):
-          if (reqPlazas <= 2) {
-            passingVersions = passingVersions.filter(v => v.plazas <= 2);
-          } else if (reqPlazas === 4) {
-            passingVersions = passingVersions.filter(v => v.plazas <= 4);
-          } else if (reqPlazas === 5) {
-            passingVersions = passingVersions.filter(v => v.plazas <= 5);
-          } else if (reqPlazas >= 7) {
-            passingVersions = passingVersions.filter(v => v.plazas >= 7);
-          }
-        } else if (rLevel === 1) {
-          // Nivel 1 (Flexibiliza Cantidad de Personas):
-          if (reqPlazas <= 2) {
-            // Para 1 o 2 personas: busca autos de 4 plazas; si allow5SeatsFor1or2 está activo, permite 5 plazas
-            if (opts?.allow5SeatsFor1or2) {
-              passingVersions = passingVersions.filter(v => v.plazas <= 5);
-            } else {
-              passingVersions = passingVersions.filter(v => v.plazas <= 4);
-            }
-          } else if (reqPlazas === 4) {
-            passingVersions = passingVersions.filter(v => v.plazas <= 5);
-          } else if (reqPlazas === 5) {
-            passingVersions = passingVersions.filter(v => v.plazas >= 4 && v.plazas <= 7);
-          } else if (reqPlazas >= 7) {
-            passingVersions = passingVersions.filter(v => v.plazas >= 5);
-          }
+      // Ordenar versiones: mayor afinidad primero; a igual afinidad, la de mejor tier de presupuesto y menor precio
+      scoredVersions.sort((a, b) => {
+        if (Math.abs(b.versionAffinity - a.versionAffinity) > 2) {
+          return b.versionAffinity - a.versionAffinity;
         }
-
-        if (passingVersions.length === 0) {
-          return null;
+        if (a.budgetEval.tier !== b.budgetEval.tier) {
+          return a.budgetEval.tier - b.budgetEval.tier;
         }
-      }
+        return a.v.price - b.v.price;
+      });
 
-      // Versión representativa: la versión que mejor se ajusta al presupuesto viable
-      const repVersion = [...passingVersions].sort((a, b) => a.price - b.price)[0] || passingVersions[0];
-      const maxEquipScore = Math.max(...passingVersions.map(v => v.equipScore));
+      const best = scoredVersions[0];
+      const repVersion = best.v;
+
+      // Para equipamiento máximo del modelo, considerar las versiones dentro del mismo o mejor tier de presupuesto
+      const viableVersions = scoredVersions
+        .filter(sv => sv.budgetEval.tier <= best.budgetEval.tier && sv.fuelEval.tier <= best.fuelEval.tier)
+        .map(sv => sv.v);
+      const maxEquipScore = Math.max(...(viableVersions.length ? viableVersions : [repVersion]).map(v => v.equipScore));
+
+      const bodyEval = evaluateBodyProximity(model.tipo_carroceria, repVersion.despejeSuelo, repVersion.has4x4);
+      const { fuelEval, budgetEval, plazasEval, terrainEval } = best;
 
       const fuels = Array.from(new Set(mVersions.map(v => v.combustible)));
       const trans = Array.from(new Set(mVersions.map(v => v.transmision)));
       const maxPlazas = Math.max(...mVersions.map(v => v.plazas));
 
-      const hasAdas = ALIAS.ADAS.some(alias => repVersion.features_raw.includes(alias)) || repVersion.adasCount > 0;
-      const hasCuero = ALIAS.CUERO.some(alias => repVersion.features_raw.includes(alias));
-      const hasTecho = ALIAS.TECHO.some(alias => repVersion.features_raw.includes(alias));
-      const hasCamara = ALIAS.CAMARA.some(alias => repVersion.features_raw.includes(alias));
-      const has4x4 = ALIAS.TRACCION_4X4.some(alias => repVersion.features_raw.includes(alias) || repVersion.traccion.includes(alias));
+      const { hasAdas, hasCuero, hasTecho, hasCamara, has4x4 } = repVersion;
 
-      // Extracción de Píldoras para UI
-      const extractedFeatures = [];
+      const extractedFeatures: string[] = [];
       if (hasAdas) extractedFeatures.push('ADAS');
       if (hasCuero) extractedFeatures.push('Tapizado de Cuero');
       if (hasCamara) extractedFeatures.push('Cámara 360/Reversa');
@@ -643,177 +965,117 @@ export default function RecomendadorPage() {
       const primaryDealership = repVersion.concesionaria || (validDealers.length > 0 ? validDealers[0] : '');
       const dealershipStatus = dealershipCount > 1 ? `${dealershipCount} concesionarias compiten` : '1 concesionaria disponible';
 
-      // ==========================================
-      // EVALUACIÓN DE AFINIDAD (SCORE & MATCH)
-      // ==========================================
-      let score = 10;
-      let maxScore = 10;
+      // =======================================================================
+      // CÁLCULO DE PUNTAJE MULTIDIMENSIONAL PONDERADO
+      // =======================================================================
+      let score = 0;
+      let maxScore = 0;
       const matchReasons: MatchReason[] = [];
 
-      // Confirmación de Carrocería
-      if (carroceriaEsFiltroDuro) {
-        maxScore += 20;
-        const matched = ansCarroceria.some((c: string) => model.tipo_carroceria === c);
-        if (matched) score += 20;
-        matchReasons.push({
-          label: matched ? `Carrocería ${model.tipo_carroceria}` : `Alternativa: ${model.tipo_carroceria}`,
-          matched
-        });
+      // 1. Carrocería (Peso: 25 pts)
+      if (hasBodyPref) {
+        maxScore += 25;
+        score += Math.round(bodyEval.ratio * 25);
+        matchReasons.push({ label: bodyEval.label, matched: bodyEval.matched });
       }
 
-      // Confirmación de Presupuesto
+      // 2. Presupuesto (Peso: 25 pts)
       if (budgetRange) {
         maxScore += 25;
-        const withinOriginalBudget = repVersion.price >= (budgetRange.min * 0.95) && repVersion.price <= (budgetRange.max * 1.05);
-        if (withinOriginalBudget) {
-          score += 25;
-          matchReasons.push({ label: `Presupuesto (${budgetRange.label})`, matched: true });
-        } else {
-          score += 10;
-          matchReasons.push({ label: `Precio aproximado: US$ ${repVersion.price.toLocaleString('es-PY')}`, matched: false });
-        }
+        score += Math.round(budgetEval.ratio * 25);
+        matchReasons.push({ label: budgetEval.label, matched: budgetEval.matched });
       }
 
-      // Evaluación de Plazas
+      // 3. Motorización / Combustible (Peso: 35 pts cuando se especifica o es prioridad consumo)
+      if (hasFuelPref || isEconomyPriority) {
+        maxScore += 35;
+        score += Math.round(fuelEval.ratio * 35);
+        matchReasons.push({ label: fuelEval.label, matched: fuelEval.matched });
+      }
+
+      // 4. Plazas / Habitabilidad (Peso: 20 pts)
       if (reqPlazas !== null) {
         maxScore += 20;
-        const exactMatch = (reqPlazas <= 2 && repVersion.plazas <= 2) ||
-                           (reqPlazas === 4 && repVersion.plazas === 4) ||
-                           (reqPlazas === 5 && repVersion.plazas === 5) ||
-                           (reqPlazas >= 7 && repVersion.plazas >= 7);
-        const compatibleMatch = (reqPlazas <= 2 && (repVersion.plazas === 4 || repVersion.plazas === 5)) ||
-                                (reqPlazas === 4 && repVersion.plazas === 5) ||
-                                (reqPlazas === 5 && (repVersion.plazas === 4 || repVersion.plazas === 7));
-
-        if (exactMatch) {
-          score += 20;
-          matchReasons.push({ label: `Capacidad de ${repVersion.plazas} plazas`, matched: true });
-        } else if (compatibleMatch) {
-          score += 16;
-          const label = (reqPlazas <= 2 && repVersion.plazas === 4)
-            ? 'Capacidad de 4 plazas (ideal 1-2 personas)'
-            : (reqPlazas <= 2 && repVersion.plazas === 5)
-            ? 'Capacidad de 5 plazas (óptimo 1-2 personas)'
-            : `Capacidad de ${repVersion.plazas} plazas (compatible)`;
-          matchReasons.push({ label, matched: true });
-        } else {
-          score += 6;
-          matchReasons.push({ label: `Capacidad de ${repVersion.plazas} plazas`, matched: false });
-        }
+        score += Math.round(plazasEval.ratio * 20);
+        matchReasons.push({ label: plazasEval.label, matched: plazasEval.matched });
       }
 
-      // Terreno / Tracción (Por dónde manejás)
-      if (reqOffroad) {
-        maxScore += 25;
-        if (has4x4) score += 25;
-        matchReasons.push({
-          label: has4x4 ? 'Tracción 4x4 / integral para todo terreno' : 'Tracción simple (caminos urbanos/mixtos)',
-          matched: has4x4
-        });
+      // 5. Terreno / Tracción (Peso: 20 pts cuando es offroad o mixto)
+      if (reqOffroad || terreno === 'mixto') {
+        maxScore += 20;
+        score += Math.round(terrainEval.ratio * 20);
+        matchReasons.push({ label: terrainEval.label, matched: terrainEval.matched });
       }
 
-      // 1. PRIORIDAD: ECONOMÍA Y NUEVAS ENERGÍAS
-      // Jerarquía: REEV > EV > PHEV > HEV > MHEV > FLEX > NAFTA > DIESEL
-      if (isEconomyPriority) {
-        maxScore += 40;
-        const eRank = ENERGY_ECONOMY_RANK[repVersion.combustible] || 1;
-        const energyPoints = Math.round((eRank / 8) * 40);
-        score += energyPoints;
-        matchReasons.push({
-          label: `Eficiencia Energética (${combustibleLabel(repVersion.combustible) || repVersion.combustible})`,
-          matched: eRank >= 4
-        });
-
-        // En economía, precio más bajo dentro del rango hace más match
-        if (budgetRange) {
-          maxScore += 25;
-          const rangeSpan = Math.max(1, (budgetRange.max < 90000000 ? budgetRange.max : 60000) - budgetRange.min);
-          const priceRatio = Math.max(0, Math.min(1, ((budgetRange.max < 90000000 ? budgetRange.max : 60000) - repVersion.price) / rangeSpan));
-          const priceBonus = Math.round(priceRatio * 25);
-          score += priceBonus;
-          matchReasons.push({
-            label: 'Precio accesible en tu rango',
-            matched: priceRatio >= 0.4
-          });
-        }
-      } else {
-        const ansComb = src['combustible'] || [];
-        if (!ansComb.includes('any') && ansComb.length > 0) {
-          maxScore += 20;
-          const matched = ansComb.includes(repVersion.combustible);
-          if (matched) score += 20;
-          matchReasons.push({ label: 'Combustible preferido', matched });
-        }
+      // 6. Prioridades específicas de estilo de vida / equipamiento
+      if (isEconomyPriority && budgetRange) {
+        maxScore += 15;
+        const maxRef = budgetRange.max < 90000000 ? budgetRange.max : 60000;
+        const rangeSpan = Math.max(1, maxRef - budgetRange.min);
+        const priceRatio = Math.max(0, Math.min(1, (maxRef - repVersion.price) / rangeSpan));
+        score += Math.round(priceRatio * 15);
       }
 
-      // 2. PRIORIDAD: CONFORT Y TECNOLOGÍA
       if (isComfortPriority) {
-        maxScore += 45;
+        maxScore += 25;
         let cPoints = 0;
-        if (hasCamara) cPoints += 12;
-        if (hasCuero) cPoints += 12;
-        if (hasTecho) cPoints += 10;
-        cPoints += Math.min(11, repVersion.confortScore * 2);
+        if (hasCamara) cPoints += 7;
+        if (hasCuero) cPoints += 7;
+        if (hasTecho) cPoints += 5;
+        cPoints += Math.min(6, repVersion.confortScore);
         score += cPoints;
-        matchReasons.push({
-          label: 'Confort y tecnología avanzada',
-          matched: cPoints >= 20
-        });
+        matchReasons.push({ label: 'Confort y equipamiento interior', matched: cPoints >= 14 });
       }
 
-      // 3. PRIORIDAD: SEGURIDAD Y FAMILIA (Más Airbags y ADAS)
       if (isSafetyPriority) {
-        maxScore += 50;
+        maxScore += 30;
         let sPoints = 0;
-        if (repVersion.airbags >= 6) sPoints += 25;
-        else if (repVersion.airbags >= 4) sPoints += 15;
-        else sPoints += 5;
-
-        if (hasAdas) sPoints += 25;
+        if (repVersion.airbags >= 6) sPoints += 15;
+        else if (repVersion.airbags >= 4) sPoints += 9;
+        else sPoints += 3;
+        if (hasAdas) sPoints += 15;
         score += sPoints;
         matchReasons.push({
-          label: repVersion.airbags >= 6 ? `${repVersion.airbags} Airbags y alta seguridad` : (hasAdas ? 'Asistencias ADAS activas' : 'Seguridad estándar'),
+          label: repVersion.airbags >= 6 ? `${repVersion.airbags} Airbags${hasAdas ? ' + ADAS' : ''}` : (hasAdas ? 'Asistencias ADAS activas' : `${repVersion.airbags} Airbags`),
           matched: repVersion.airbags >= 6 || hasAdas
         });
       }
 
-      // Transmisión
+      // 7. Transmisión (Peso: 15 pts)
       if (src['transmision'] && src['transmision'] !== 'any') {
         maxScore += 15;
         let matched = false;
         if (src['transmision'] === 'Automatica' && ALIAS.AUTO.some(a => repVersion.transmision.includes(a))) matched = true;
         if (src['transmision'] === 'Manual' && ALIAS.MANUAL.some(a => repVersion.transmision.includes(a))) matched = true;
         if (matched) score += 15;
-        matchReasons.push({ label: 'Tipo de transmisión', matched });
+        matchReasons.push({ label: `Caja ${src['transmision'] === 'Automatica' ? 'Automática' : 'Manual'}`, matched });
       }
 
-      // Marcas
-      const ansMarcas = src['marcas'] || [];
-      if (!ansMarcas.includes('any') && ansMarcas.length > 0) {
-        maxScore += 20;
+      // 8. Marcas preferidas (Peso: 15 pts)
+      if (hasBrandPref) {
+        maxScore += 15;
         const matched = ansMarcas.some((m: string) => model.brandName === m);
-        if (matched) score += 20;
-        matchReasons.push({ label: 'Marca preferida', matched });
+        if (matched) score += 15;
+        matchReasons.push({ label: matched ? `Marca ${model.brandName}` : `Alternativa: ${model.brandName}`, matched });
       }
 
-      // Origen de fabricación
-      const ansOrigen = src['origen'] || [];
-      if (!ansOrigen.includes('any') && ansOrigen.length > 0) {
+      // 9. Origen de fabricación (Peso: 10 pts)
+      if (hasOriginPref) {
         maxScore += 10;
         const matched = ansOrigen.some((o: string) => model.origen === o);
         if (matched) score += 10;
-        matchReasons.push({ label: 'Origen de fabricación', matched });
+        matchReasons.push({ label: `Origen: ${model.origen}`, matched });
       }
 
-      // Features específicos (experto)
+      // 10. Features específicos solicitados (Experto)
       const featureLabels: Record<string, string> = {
         camara: 'Cámara / Sensores', adas: 'Asistencias de manejo (ADAS)',
         cuero: 'Asientos de cuero', techo: 'Techo panorámico', '4x4': 'Tracción 4x4 / integral'
       };
       const featureFlags: Record<string, boolean> = { camara: hasCamara, adas: hasAdas, cuero: hasCuero, techo: hasTecho, '4x4': has4x4 };
-      const ansFeat = src['features'] || [];
-      if (!ansFeat.includes('any') && ansFeat.length > 0) {
+      if (hasFeatPref) {
         ansFeat.forEach((feat: string) => {
+          if (feat === '4x4' && reqOffroad) return; // Ya evaluado en terreno
           maxScore += 10;
           const matched = !!featureFlags[feat];
           if (matched) score += 10;
@@ -821,7 +1083,19 @@ export default function RecomendadorPage() {
         });
       }
 
-      const matchPercentage = Math.round((score / maxScore) * 100);
+      // Bono de calidad general y verosimilitud urbana (desempate técnico hasta 10 pts)
+      maxScore += 10;
+      const qualityBonus = Math.min(10, Math.round(maxEquipScore / 35));
+      score += qualityBonus;
+
+      // Penalización de nicho: si el usuario NO pidió 4x4/offroad ni aventura, y el auto es un
+      // todoterreno rústico de nicho sin ADAS, con <= 4 plazas o baúl minúsculo, evitamos que
+      // desplace a SUVs urbanas/familiares más completas
+      if (!reqOffroad && uso !== 'aventura' && has4x4 && !hasAdas && repVersion.plazas <= 4) {
+        score = Math.max(5, score - 12);
+      }
+
+      const matchPercentage = Math.max(15, Math.min(99, Math.round((score / Math.max(1, maxScore)) * 100)));
 
       return {
         id: model.id, brandId: model.brandId, brandName: model.brandName, modelName: model.name,
@@ -830,91 +1104,155 @@ export default function RecomendadorPage() {
         hasAdas, hasCuero, has4x4, hasTecho, hasCamara,
         topFeatures: extractedFeatures.slice(0, 4), dealershipStatus, concesionaria: primaryDealership,
         score, matchPercentage, equipScore: maxEquipScore,
-        origen: model.origen, matchReasons
+        origen: model.origen, matchReasons,
+        fuelTier: fuelEval.tier,
+        bodyTier: bodyEval.tier,
+        budgetTier: budgetEval.tier,
+        plazasTier: plazasEval.tier,
+        terrainTier: terrainEval.tier
       };
     };
 
-    // Modelo de referencia opcional
+    // Modelo de referencia opcional ("¿Ya tenés un modelo en mente?")
     const referenceModel = referenceModelId ? rawModels.find(m => m.id === referenceModelId) : null;
-    const referenceMatch = referenceModel ? scoreModel(referenceModel, { bypassHardFilters: true }) : null;
+    const referenceMatch = referenceModel ? scoreModel(referenceModel) : null;
     setReferenceMatch(referenceMatch);
 
-    // =========================================================================
-    // RECORRIDO DE FLEXIBILIZACIÓN EN CASCADA (WATERFALL)
-    // 0: Filtro estricto
-    // 1: Flexibilizar cantidad de personas (4 plazas, y luego 5 plazas)
-    // 2: Flexibilizar para qué lo voy a usar (carrocería / uso)
-    // 3: Flexibilizar por dónde manejás (terreno / 4x4)
-    // 4: Flexibilizar presupuesto (ampliar rango de precios)
-    // 5: Catálogo general por afinidad (nunca "sin resultados")
-    // =========================================================================
-    let validMatches: ScoredModel[] = [];
-    let appliedLevel = 0;
+    // Evaluar todos los modelos del catálogo
+    const allScored = rawModels
+      .filter(model => model.id !== referenceModelId)
+      .map(model => scoreModel(model))
+      .filter((a): a is ScoredModel => a !== null);
 
-    const stages: Array<{ level: number; allow5Seats?: boolean }> = [
-      { level: 0 },
-      { level: 1, allow5Seats: false }, // Flexibiliza a 4 plazas para 1-2 personas
-      { level: 1, allow5Seats: true },  // Si no hay 3 de 4 plazas, permite 5 plazas
-      { level: 2 },                     // Flexibiliza carrocería / uso
-      { level: 3 },                     // Flexibiliza terreno / 4x4
-      { level: 4 },                     // Flexibiliza presupuesto
-      { level: 5 },                     // Catálogo completo
+    // Ordenamiento maestro por jerarquía de verosimilitud y afinidad:
+    // 1. Mayor porcentaje de coincidencia
+    // 2. Mejor tier de motorización (EV/PHEV -> HEV -> MHEV -> Nafta)
+    // 3. Mejor tier de carrocería
+    // 4. Mejor tier de presupuesto
+    // 5. Mayor equipamiento real (ADAS, airbags, confort)
+    const sortCandidates = (list: ScoredModel[]) => {
+      return [...list].sort((a, b) => {
+        if (b.matchPercentage !== a.matchPercentage) return b.matchPercentage - a.matchPercentage;
+        if ((a.fuelTier ?? 9) !== (b.fuelTier ?? 9)) return (a.fuelTier ?? 9) - (b.fuelTier ?? 9);
+        if ((a.bodyTier ?? 9) !== (b.bodyTier ?? 9)) return (a.bodyTier ?? 9) - (b.bodyTier ?? 9);
+        if ((a.budgetTier ?? 9) !== (b.budgetTier ?? 9)) return (a.budgetTier ?? 9) - (b.budgetTier ?? 9);
+        if (b.equipScore !== a.equipScore) return b.equipScore - a.equipScore;
+        return a.startingPrice - b.startingPrice;
+      });
+    };
+
+    // Deduplicador de familia de modelos (evita recomendar JIMNY y JIMNY 5-DOOR juntos en el Top 3)
+    const getFamilyKey = (m: ScoredModel): string => {
+      const cleanName = m.modelName
+        .toUpperCase()
+        .replace(/\b(5-DOOR|3-DOOR|5 PUERTAS|3 PUERTAS|LITE|PRO|MAX|PLUS|NEW|NUEVO|SEDAN|SEDÁN|HATCHBACK|HB)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return `${m.brandId}_${cleanName || m.modelName}`;
+    };
+
+    // =========================================================================
+    // CASCADA MULTIDIMENSIONAL PROGRESIVA (WATERFALL)
+    // =========================================================================
+    // Nivel 0: Match Estricto (Presupuesto exacto, Carrocería 1, Combustible 1, Plazas 1, Terreno 1)
+    // Nivel 1: Sustituto Tecnológico Directo y Tolerancia Comercial (ej. incluye HEV cuando pide EV/PHEV, +8% precio, 4/5 plazas)
+    // Nivel 2: Sustituto Parcial (ej. incluye MHEV y Crossovers/Hatchbacks elevados dentro de tolerancia de precio)
+    // Nivel 3: Escalón de Presupuesto Adyacente manteniendo Tecnología y Silueta
+    // Nivel 4: Flexibilización de Motorización (incluye Nafta/Flex eficientes dentro de carrocería y presupuesto)
+    // Nivel 5: Flexibilización amplia de Carrocería y Presupuesto Adyacente
+    // Nivel 6: Red de seguridad total sobre el catálogo general (Garantiza 0 escenarios vacíos)
+    const stagePredicates: Array<{ level: number; check: (m: ScoredModel) => boolean }> = [
+      {
+        level: 0,
+        check: m => (m.budgetTier ?? 1) === 1 && (m.bodyTier ?? 1) === 1 && (m.fuelTier ?? 1) === 1 && (m.plazasTier ?? 1) === 1 && (m.terrainTier ?? 1) === 1
+      },
+      {
+        level: 1,
+        check: m => (m.budgetTier ?? 1) <= 2 && (m.bodyTier ?? 1) === 1 && (m.fuelTier ?? 1) <= 2 && (m.plazasTier ?? 1) === 1 && (m.terrainTier ?? 1) <= 2
+      },
+      {
+        level: 2,
+        check: m => (m.budgetTier ?? 1) <= 2 && (m.bodyTier ?? 1) <= 2 && (m.fuelTier ?? 1) <= 3 && (m.plazasTier ?? 1) <= 2 && (m.terrainTier ?? 1) <= 2
+      },
+      {
+        level: 3,
+        check: m => (m.budgetTier ?? 1) <= 3 && (m.bodyTier ?? 1) <= 2 && (m.fuelTier ?? 1) <= 3 && (m.plazasTier ?? 1) <= 2 && (m.terrainTier ?? 1) <= 3
+      },
+      {
+        level: 4,
+        check: m => (m.budgetTier ?? 1) <= 2 && (m.bodyTier ?? 1) <= 2 && (m.fuelTier ?? 1) <= 4 && (m.plazasTier ?? 1) <= 2 && (m.terrainTier ?? 1) <= 3
+      },
+      {
+        level: 5,
+        check: m => (m.budgetTier ?? 1) <= 3 && (m.bodyTier ?? 1) <= 3 && (m.fuelTier ?? 1) <= 4 && (m.plazasTier ?? 1) <= 3
+      },
+      {
+        level: 6,
+        check: () => true
+      }
     ];
 
-    for (const stg of stages) {
-      appliedLevel = stg.level;
-      const candidates = rawModels
-        .filter(model => model.id !== referenceModelId)
-        .map(model => scoreModel(model, { relaxationLevel: stg.level, allow5SeatsFor1or2: stg.allow5Seats }))
-        .filter((a): a is ScoredModel => a !== null);
+    let qualifiedPool: ScoredModel[] = [];
+    let appliedLevel = 0;
+    const seenIds = new Set<string>();
 
-      const sorted = candidates.sort((a, b) => b.score - a.score || b.matchPercentage - a.matchPercentage || a.startingPrice - b.startingPrice);
-
-      if (sorted.length >= 3) {
-        // Preferir candidatos de calidad (>= 40% match) si hay al menos 3
-        const highMatch = sorted.filter(m => m.matchPercentage >= 40);
-        validMatches = highMatch.length >= 3 ? highMatch : sorted;
-        break;
+    for (const stg of stagePredicates) {
+      const stageMatches = sortCandidates(allScored.filter(m => !seenIds.has(m.id) && stg.check(m)));
+      if (stageMatches.length > 0 && qualifiedPool.length < 3) {
+        appliedLevel = stg.level;
       }
+      stageMatches.forEach(m => {
+        seenIds.add(m.id);
+        qualifiedPool.push(m);
+      });
 
-      if (sorted.length > validMatches.length) {
-        validMatches = sorted;
+      // Contar cuántas familias de modelos distintas tenemos en la piscina calificada
+      const distinctFamilies = new Set(qualifiedPool.map(getFamilyKey)).size;
+      if (distinctFamilies >= 5 || (distinctFamilies >= 3 && stg.level >= 2)) {
+        break;
       }
     }
 
-    // Configuración del mensaje explicativo para el usuario según la etapa que resolvió
+    // Mensaje transparente de flexibilización según el nivel alcanzado
     if (appliedLevel === 0) {
       setRelaxationInfo(null);
     } else if (appliedLevel === 1) {
-      if (reqPlazas !== null && reqPlazas <= 2) {
+      if (hasFuelPref && qualifiedPool.some(m => (m.fuelTier ?? 1) === 2)) {
         setRelaxationInfo({
           level: 1,
-          message: 'Ampliamos la búsqueda de pasajeros a vehículos de 4 y 5 plazas, ideales y compactos para 1 o 2 ocupantes dentro de tu presupuesto.'
+          message: 'Sumamos alternativas Híbridas (HEV) dentro de tu segmento y presupuesto para darte las mejores opciones electrificadas del mercado.'
+        });
+      } else if (reqPlazas !== null && reqPlazas <= 2) {
+        setRelaxationInfo({
+          level: 1,
+          message: 'Incluimos vehículos compactos de 4 y 5 plazas, ideales para 1 o 2 ocupantes dentro de tu presupuesto.'
         });
       } else {
-        setRelaxationInfo({
-          level: 1,
-          message: 'Flexibilizamos la cantidad de plazas para mostrarte las mejores opciones viables dentro de tu presupuesto.'
-        });
+        setRelaxationInfo(null);
       }
     } else if (appliedLevel === 2) {
       setRelaxationInfo({
         level: 2,
-        message: 'Ampliamos los tipos de carrocería y uso para encontrarte opciones dentro de tu rango de presupuesto.'
+        message: 'Ampliamos la búsqueda a motorizaciones Híbridas (HEV / MHEV) y siluetas equivalentes dentro de tu rango de presupuesto.'
       });
     } else if (appliedLevel === 3) {
       setRelaxationInfo({
         level: 3,
-        message: 'Flexibilizamos la exigencia de tracción 4x4 para ofrecerte los modelos 0km más accesibles y convenientes.'
+        message: 'Ampliamos ligeramente el margen de presupuesto para mostrarte vehículos que cumplen con la tecnología y carrocería que buscás.'
       });
-    } else if (appliedLevel >= 4) {
+    } else if (appliedLevel === 4) {
       setRelaxationInfo({
         level: 4,
-        message: 'Ampliamos el rango de presupuesto para mostrarte los vehículos 0km más convenientes y cercanos a tu búsqueda.'
+        message: 'Incluimos motorizaciones eficientes adicionales dentro de tu carrocería y rango de presupuesto.'
+      });
+    } else {
+      setRelaxationInfo({
+        level: 5,
+        message: 'Flexibilizamos los filtros para sugerirte las opciones 0km más cercanas y convenientes a tu búsqueda.'
       });
     }
 
-    // 0. VERIFICACIÓN DEL SLOT PATROCINADO (CAMPANAS B2B PARA RECOMENDADOR)
+    // 0. VERIFICACIÓN DEL SLOT PATROCINADO (CAMPAÑAS B2B PARA RECOMENDADOR)
     const now = new Date();
     const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const sponsoredCampaign = ads.find(c => {
@@ -932,52 +1270,84 @@ export default function RecomendadorPage() {
     if (sponsoredCampaign && sponsoredCampaign.modelId) {
       const sponsoredModel = rawModels.find(m => m.id === sponsoredCampaign.modelId);
       if (sponsoredModel) {
-        const scoredSponsored = scoreModel(sponsoredModel, { bypassHardFilters: true });
+        const scoredSponsored = scoreModel(sponsoredModel);
         if (scoredSponsored) {
           scoredSponsored.badge = '⭐ Opción Patrocinada';
           if (sponsoredCampaign.sponsor) {
             scoredSponsored.dealershipStatus = `Pauta Oficial: ${sponsoredCampaign.sponsor}`;
           }
           sponsoredOption = scoredSponsored;
-          // Excluimos este modelo del grupo orgánico para garantizar 4 modelos únicos
-          validMatches = validMatches.filter(m => m.id !== sponsoredModel.id);
+          qualifiedPool = qualifiedPool.filter(m => m.id !== sponsoredModel.id);
         }
       }
     }
 
-    // Categorización inteligente de Pestañas Top 3 Orgánicas
+    // =========================================================================
+    // ADJUDICACIÓN VEROSÍMIL DE LOS 3 SLOTS ORGÁNICOS
+    // =========================================================================
     let finalTop3: ScoredModel[] = [];
+    const usedFamilies = new Set<string>();
 
-    if (validMatches.length >= 3) {
-      // 1. #1 Mayor Coincidencia (El mejor score global según las respuestas del usuario)
-      const top1 = validMatches[0];
+    const pickDistinctCandidate = (list: ScoredModel[]): ScoredModel | undefined => {
+      const distinct = list.find(m => !usedFamilies.has(getFamilyKey(m)));
+      return distinct || list[0];
+    };
+
+    if (qualifiedPool.length >= 3) {
+      // 1. Slot #1: 🏆 Mayor Coincidencia (Mejor afinidad integral)
+      const top1 = qualifiedPool[0];
       top1.badge = '🏆 Mayor Coincidencia';
       finalTop3.push(top1);
-      validMatches = validMatches.filter(m => m.id !== top1.id);
+      usedFamilies.add(getFamilyKey(top1));
+      qualifiedPool = qualifiedPool.filter(m => m.id !== top1.id);
 
-      // 2. #2 Tope de Gama (El más equipado / mayor equipScore entre los candidatos top)
-      const topEquipPool = validMatches.slice(0, 6);
-      let topEquipped = [...topEquipPool].sort((a, b) => b.equipScore - a.equipScore)[0] || validMatches[0];
+      // Filtrar la piscina para Slots #2 y #3 de modo que NUNCA caigan a una tecnología
+      // desconectada (ej. Nafta tier 4) si existen candidatos de alta afinidad (tier <= 3)
+      const bestRemainingFuelTier = Math.min(...qualifiedPool.map(m => m.fuelTier ?? 1));
+      const bestRemainingBodyTier = Math.min(...qualifiedPool.map(m => m.bodyTier ?? 1));
+      const allowedFuelTier = bestRemainingFuelTier <= 3 ? Math.min(3, bestRemainingFuelTier + 1) : bestRemainingFuelTier + 1;
+      const allowedBodyTier = bestRemainingBodyTier <= 2 ? Math.min(2, bestRemainingBodyTier + 1) : bestRemainingBodyTier + 1;
+
+      const coherentSubPool = qualifiedPool.filter(
+        m => (m.fuelTier ?? 1) <= allowedFuelTier && (m.bodyTier ?? 1) <= allowedBodyTier
+      );
+      const activePool = coherentSubPool.length >= 2 ? coherentSubPool : qualifiedPool.slice(0, 8);
+
+      // 2. Slot #2: 💎 Mayor Equipamiento (Mayor puntaje real de ADAS, Airbags, Confort y Pantalla dentro del pool coherente)
+      const sortedByEquip = [...activePool].sort((a, b) => b.equipScore - a.equipScore || b.matchPercentage - a.matchPercentage);
+      const topEquipped = pickDistinctCandidate(sortedByEquip) || qualifiedPool[0];
       topEquipped.badge = '💎 Mayor Equipamiento';
       finalTop3.push(topEquipped);
-      validMatches = validMatches.filter(m => m.id !== topEquipped.id);
+      usedFamilies.add(getFamilyKey(topEquipped));
+      qualifiedPool = qualifiedPool.filter(m => m.id !== topEquipped.id);
 
-      // 3. #3 Opción Inteligente (Mejor balance de precio accesible entre los candidatos top)
-      const topValuePool = validMatches.slice(0, 6);
-      let topValue = [...topValuePool].sort((a, b) => a.startingPrice - b.startingPrice)[0] || validMatches[0];
+      // 3. Slot #3: ⚖️ Opción Inteligente (Mejor relación Precio Accesible / Equipamiento / Eficiencia dentro del pool coherente)
+      const remainingCoherent = activePool.filter(m => m.id !== topEquipped.id);
+      const poolForValue = remainingCoherent.length >= 1 ? remainingCoherent : qualifiedPool.slice(0, 6);
+      const sortedBySmartValue = [...poolForValue].sort((a, b) => {
+        // Priorizar estar en presupuesto (budgetTier <= 2) y mejor precio con buen equipamiento
+        if ((a.budgetTier ?? 1) !== (b.budgetTier ?? 1)) return (a.budgetTier ?? 1) - (b.budgetTier ?? 1);
+        if ((a.fuelTier ?? 1) !== (b.fuelTier ?? 1)) return (a.fuelTier ?? 1) - (b.fuelTier ?? 1);
+        return a.startingPrice - b.startingPrice || b.equipScore - a.equipScore;
+      });
+      const topValue = pickDistinctCandidate(sortedBySmartValue) || qualifiedPool[0];
       topValue.badge = '⚖️ Opción Inteligente';
       finalTop3.push(topValue);
-      validMatches = validMatches.filter(m => m.id !== topValue.id);
+      usedFamilies.add(getFamilyKey(topValue));
+      qualifiedPool = qualifiedPool.filter(m => m.id !== topValue.id);
     } else {
-      finalTop3 = validMatches;
+      finalTop3 = qualifiedPool.map((m, idx) => {
+        const badges = ['🏆 Mayor Coincidencia', '💎 Mayor Equipamiento', '⚖️ Opción Inteligente'];
+        m.badge = badges[idx] || '🏆 Recomendado';
+        return m;
+      });
     }
 
-    // Ensamble final: Si hay opción patrocinada activa, se agrega como 4ta opción ("⭐ Opción Patrocinada")
-    // Si no hay opción patrocinada, siguen saliendo 3 opciones sin dejar ningún slot vacío
+    // Ensamble final: 3 slots orgánicos + 1 slot opcional patrocinado (si existe campaña activa)
     const finalMatches: ScoredModel[] = sponsoredOption ? [...finalTop3, sponsoredOption] : finalTop3;
 
     setTopMatches(finalMatches);
-    setOtherMatches(validMatches.slice(0, 4));
+    setOtherMatches(qualifiedPool.slice(0, 4));
 
     // Selección Inteligente y Contextual de Ads de Banner en el Recomendador (solo campañas de banner sin modelId)
     const bannerCandidates = ads.filter(a => !a.modelId);
