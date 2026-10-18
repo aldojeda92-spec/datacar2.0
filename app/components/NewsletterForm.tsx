@@ -62,7 +62,7 @@ export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: st
 
   return (
     <div className="w-full max-w-md mt-6">
-      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-0">
+      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2.5 bg-[#FFFFFF]/10 p-1.5 rounded-2xl border border-[#FFFFFF]/15 backdrop-blur-sm">
         <input
           type="email"
           aria-label="Correo electrónico para newsletter"
@@ -70,14 +70,14 @@ export default function NewsletterForm({ origen = 'Footer Home' }: { origen?: st
           disabled={status === 'loading'}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="flex-grow p-4 text-xs text-[#3A3A3C] bg-[#FFFFFF] border border-[#C0C0C0] focus:outline-none focus:border-[#0A1F33] rounded-none disabled:opacity-50"
+          className="flex-grow px-4 py-3.5 text-xs text-[#3A3A3C] bg-[#FFFFFF] border border-transparent focus:outline-none focus:border-[#00BFFF] rounded-xl disabled:opacity-50"
           style={{ fontFamily: 'var(--font-inter), sans-serif' }}
           required
         />
         <button 
           type="submit" 
           disabled={status === 'loading'}
-          className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest px-8 py-4 transition-colors disabled:bg-[#C0C0C0] border border-[#00BFFF] hover:border-[#0A1F33] rounded-none sm:w-auto w-full"
+          className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-[10px] uppercase tracking-widest px-7 py-3.5 transition-all disabled:bg-[#C0C0C0] border border-[#00BFFF] hover:border-[#FFFFFF] rounded-xl shadow-sm sm:w-auto w-full"
         >
           {status === 'loading' ? 'Procesando...' : 'Suscribirme'}
         </button>

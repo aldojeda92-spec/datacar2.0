@@ -153,20 +153,20 @@ export default function LeadModal({
   };
 
   const inputBase =
-    'w-full border bg-[#F8F9FA] p-3 text-xs focus:outline-none transition-colors rounded-none disabled:opacity-50';
+    'w-full border bg-[#F8F9FA] p-3.5 text-xs focus:outline-none transition-all rounded-xl disabled:opacity-50';
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      overlayClassName="fixed inset-0 bg-[#0A1F33]/90 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"
-      panelClassName="bg-[#FFFFFF] w-full max-w-md p-8 border-t-4 border-[#00BFFF] relative shadow-none rounded-none"
+      overlayClassName="fixed inset-0 bg-[#0A1F33]/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md"
+      panelClassName="bg-[#FFFFFF] w-full max-w-md p-8 border-t-4 border-[#00BFFF] relative shadow-2xl rounded-2xl overflow-hidden"
     >
-      {/* BOTÓN CERRAR FLAT */}
+      {/* BOTÓN CERRAR CONTEMPORÁNEO */}
       <button
         onClick={onClose}
         disabled={status === 'loading'}
-        className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#0A1F33] text-xl font-black transition-colors disabled:opacity-50"
+        className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full text-[#C0C0C0] hover:text-[#0A1F33] hover:bg-[#F8F9FA] text-lg font-black transition-all disabled:opacity-50"
         aria-label="Cerrar modal"
       >
         ✕
@@ -174,7 +174,7 @@ export default function LeadModal({
 
       {status === 'success' ? (
         <div className="text-center py-10">
-          <div className="w-16 h-16 bg-[#F8F9FA] border-2 border-[#00BFFF] text-[#00BFFF] rounded-none flex items-center justify-center mx-auto mb-6 text-3xl font-black">
+          <div className="w-16 h-16 bg-[#F8F9FA] border-2 border-[#00BFFF] text-[#00BFFF] rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-6 text-3xl font-black">
             ✓
           </div>
           <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -196,7 +196,7 @@ export default function LeadModal({
             <p className="text-[10px] text-[#1E8E3E] font-bold uppercase tracking-wider mb-2">
               Precios oficiales directos de concesionaria, sin comisiones ni recargos
             </p>
-            <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest font-bold border-b border-[#C0C0C0]/50 pb-4">
+            <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest font-bold border-b border-[#0A1F33]/10 pb-4">
               Vehículo: <span className="text-[#3A3A3C]">{marcaVehiculo} {vehiculoInteres}</span>
             </p>
           </div>
@@ -211,7 +211,7 @@ export default function LeadModal({
                 required
                 disabled={status === 'loading'}
                 aria-invalid={!!fieldErrors.nombre}
-                className={`${inputBase} ${fieldErrors.nombre ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#C0C0C0] focus:border-[#0A1F33]'}`}
+                className={`${inputBase} ${fieldErrors.nombre ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
                 placeholder="Ej: Juan Pérez"
                 value={formData.nombre}
                 onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'nombre' })}
@@ -237,7 +237,7 @@ export default function LeadModal({
                 disabled={status === 'loading'}
                 aria-invalid={!!fieldErrors.telefono}
                 aria-describedby={fieldErrors.telefono ? telefonoErrId : undefined}
-                className={`${inputBase} ${fieldErrors.telefono ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#C0C0C0] focus:border-[#0A1F33]'}`}
+                className={`${inputBase} ${fieldErrors.telefono ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
                 placeholder="Ej: 0981 234 567"
                 value={formData.telefono}
                 onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'telefono' })}
@@ -261,7 +261,7 @@ export default function LeadModal({
                 disabled={status === 'loading'}
                 aria-invalid={!!fieldErrors.email}
                 aria-describedby={fieldErrors.email ? emailErrId : undefined}
-                className={`${inputBase} ${fieldErrors.email ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#C0C0C0] focus:border-[#0A1F33]'}`}
+                className={`${inputBase} ${fieldErrors.email ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
                 placeholder="ejemplo@correo.com"
                 value={formData.email}
                 onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'email' })}
@@ -276,7 +276,7 @@ export default function LeadModal({
             </div>
 
             {status === 'error' && (
-              <p className="text-[10px] text-[#D93025] font-bold uppercase tracking-widest bg-[#FCE8E6] p-3 text-center border border-[#D93025]/30 mt-2">
+              <p className="text-[10px] text-[#D93025] font-bold uppercase tracking-widest bg-[#FCE8E6] p-3 text-center border border-[#D93025]/30 rounded-xl mt-2">
                 Ocurrió un error de conexión. Intentá de nuevo.
               </p>
             )}
@@ -284,7 +284,7 @@ export default function LeadModal({
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="w-full bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 mt-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-transparent rounded-none"
+              className="w-full bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 mt-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-transparent rounded-xl shadow-md"
             >
               {status === 'loading' ? 'Procesando...' : formatHablarCon(cleanConcesionaria)}
             </button>

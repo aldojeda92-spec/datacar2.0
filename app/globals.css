@@ -17,6 +17,50 @@ body {
   color: var(--foreground);
 }
 
+/* ==========================================================================
+   SISTEMA VISUAL CONTEMPORÁNEO DATACAR (WEB-APP PREMIUM & ROUNDED)
+   Mantiene 100% la paleta (#0A1F33, #00BFFF, #3A3A3C, #C0C0C0, #F8F9FA) y el logo
+   ========================================================================== */
+
+/* Transformar utilidades cuadradas legacy en bordes redondeados contemporáneos */
+.rounded-none {
+  border-radius: 0.75rem !important;
+}
+
+/* Botones, enlaces tipo botón, inputs y selects con radio contemporáneo y transiciones suaves */
+button:not(.rounded-full),
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  border-radius: 0.75rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px rgba(0, 191, 255, 0.18);
+}
+
+/* Tarjetas, paneles y contenedores de secciones (excluyendo nav, header, footer y tablas full-width) */
+main section > div.border,
+main section > div.border-2,
+main section a > div.border,
+main section a > div.border-2,
+main div.grid > div.border,
+main div.grid > div.border-2,
+main div.grid > a.border,
+main div.grid > a.border-2,
+main form.border,
+main aside > div.border {
+  border-radius: 1rem;
+}
+
+/* Refinar bordes grises rígidos (#C0C0C0) hacia un acabado más sutil y premium */
+.border-\[\#C0C0C0\] {
+  border-color: rgba(10, 31, 51, 0.12);
+}
+
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #C0C0C0 #F8F9FA;
@@ -27,8 +71,11 @@ body {
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: #F8F9FA;
+  border-radius: 9999px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background-color: #C0C0C0;
   border: 2px solid #F8F9FA;
+  border-radius: 9999px;
 }
+

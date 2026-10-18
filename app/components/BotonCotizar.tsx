@@ -35,10 +35,10 @@ export default function BotonCotizar({
 
   const labelBoton = textoMenu || formatHablarCon(cleanConcesionaria);
 
-  // Estilos basados estrictamente en el Manual de Marca DATACAR v2.1
-  const estilosBase = "w-full font-bold text-xs uppercase tracking-widest py-3 transition-colors text-center cursor-pointer";
+  // Estilos basados estrictamente en el Manual de Marca DATACAR v2.1 (Contemporary Web-App)
+  const estilosBase = "w-full font-bold text-xs uppercase tracking-widest py-3 transition-all duration-200 text-center cursor-pointer rounded-xl shadow-xs hover:shadow-md";
   const estilosPrimario = "bg-[#00BFFF] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF]";
-  const estilosSecundario = "border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF]";
+  const estilosSecundario = "border border-[#0A1F33]/20 text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF]";
 
   return (
     <button 

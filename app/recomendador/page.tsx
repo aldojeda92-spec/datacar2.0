@@ -1513,20 +1513,20 @@ export default function RecomendadorPage() {
           ========================================== */}
       {step === 0 && (
         <section className="flex-grow flex flex-col items-center justify-center p-4 py-16">
-          <div className="max-w-xl w-full bg-[#FFFFFF] border border-[#C0C0C0] p-12 text-center rounded-none shadow-none">
+          <div className="max-w-xl w-full bg-[#FFFFFF] border border-[#0A1F33]/10 p-10 md:p-12 text-center rounded-3xl shadow-xl">
             <h1 className="font-black text-4xl md:text-5xl text-[#0A1F33] uppercase mb-4 leading-tight" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               ENCONTRÁ TU <br/><span className="text-[#00BFFF]">AUTO IDEAL</span>
             </h1>
             <p className="text-sm text-[#3A3A3C] mb-6 leading-relaxed font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
               Respondé algunas preguntas y te ayudamos a encontrar el 0km perfecto para vos, basado en tu estilo de vida y preferencias.
             </p>
-            <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-3 mb-8 text-center">
+            <div className="bg-[#E6F4EA] border border-[#1E8E3E]/25 p-3.5 mb-8 text-center rounded-xl">
               <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-wider">
                 100% Sin Costo • Precios directos de concesionaria oficial sin comisiones
               </p>
             </div>
-            <button onClick={() => setStep(1)} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-sm uppercase tracking-widest py-5 transition-colors flex justify-center items-center gap-2 rounded-none">
-              Empezar <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            <button onClick={() => setStep(1)} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-sm uppercase tracking-widest py-5 transition-all duration-200 flex justify-center items-center gap-2 rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5">
+              Empezar <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
             </button>
             <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest mt-6">Toma menos de 2 minutos</p>
           </div>
@@ -1539,16 +1539,16 @@ export default function RecomendadorPage() {
       {step > 0 && step <= WIZARD_STEPS.length && (
         <section className="flex-grow flex flex-col">
           {/* Barra de Progreso */}
-          <div className="w-full bg-[#FFFFFF] py-6 px-4 md:px-8 border-b border-[#C0C0C0] flex flex-col items-center">
-            <div className="max-w-3xl w-full flex justify-between items-center mb-2">
-               <button onClick={() => setStep(step - 1)} className="flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors">
-                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver
+          <div className="w-full bg-[#FFFFFF]/95 backdrop-blur-md py-6 px-4 md:px-8 border-b border-[#0A1F33]/10 flex flex-col items-center shadow-xs">
+            <div className="max-w-3xl w-full flex justify-between items-center mb-2.5">
+               <button onClick={() => setStep(step - 1)} className="flex items-center gap-1.5 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors px-2 py-1 rounded-lg hover:bg-[#F8F9FA]">
+                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver
                </button>
                <span className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">Pregunta {step} de {WIZARD_STEPS.length}</span>
-               <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest">{Math.round((step/WIZARD_STEPS.length)*100)}%</span>
+               <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest bg-[#F5FBFF] px-2.5 py-0.5 rounded-full border border-[#00BFFF]/20">{Math.round((step/WIZARD_STEPS.length)*100)}%</span>
             </div>
-            <div className="max-w-3xl w-full h-2 bg-[#F5F5F5] border border-[#C0C0C0]/50 rounded-none">
-              <div className="h-full bg-[#00BFFF] transition-all duration-300" style={{ width: `${(step / WIZARD_STEPS.length) * 100}%` }}></div>
+            <div className="max-w-3xl w-full h-2.5 bg-[#F0F4F8] rounded-full overflow-hidden">
+              <div className="h-full bg-[#00BFFF] transition-all duration-300 rounded-full" style={{ width: `${(step / WIZARD_STEPS.length) * 100}%` }}></div>
             </div>
           </div>
           
@@ -1561,7 +1561,7 @@ export default function RecomendadorPage() {
                 <p className="text-sm text-[#C0C0C0] font-medium">{WIZARD_STEPS[step - 1].subtitle}</p>
               </div>
 
-              {/* Grid Dinámico Flat */}
+              {/* Grid Dinámico Contemporáneo */}
               <div className={`grid gap-4 ${WIZARD_STEPS[step - 1].id === 'marcas' ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
                 {WIZARD_STEPS[step - 1].options.map((opt, i) => {
                   const qId = WIZARD_STEPS[step - 1].id;
@@ -1572,25 +1572,25 @@ export default function RecomendadorPage() {
                     <button 
                       key={i} 
                       onClick={() => handleAnswerClick(qId, opt.value, isMultiple)} 
-                      className={`bg-[#FFFFFF] border p-6 transition-colors flex flex-row items-center gap-4 text-left group rounded-none
-                        ${isSelected ? 'border-[#00BFFF] bg-[#F5FBFF]' : 'border-[#C0C0C0] hover:border-[#0A1F33]'}`}
+                      className={`bg-[#FFFFFF] border p-6 transition-all duration-200 flex flex-row items-center gap-4 text-left group rounded-2xl
+                        ${isSelected ? 'border-[#00BFFF] bg-[#F5FBFF] shadow-md ring-2 ring-[#00BFFF]/20' : 'border-[#0A1F33]/12 hover:border-[#00BFFF] shadow-sm hover:shadow-md hover:-translate-y-0.5'}`}
                     >
                       {qId === 'carroceria' && opt.value !== 'any' ? (
-                        <div className={`w-10 h-10 flex items-center justify-center shrink-0 ${isSelected ? 'text-[#00BFFF]' : 'text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>
-                          <CarroceriaIcon tipo={opt.value} className="w-9 h-9" />
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-[#00BFFF]/15 text-[#00BFFF]' : 'bg-[#F8F9FA] text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>
+                          <CarroceriaIcon tipo={opt.value} className="w-8 h-8" />
                         </div>
                       ) : opt.icon ? (
-                        <div className={`w-10 h-10 flex items-center justify-center text-xl shrink-0 ${isSelected ? '' : 'grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100'}`}>
+                        <div className={`w-11 h-11 rounded-xl bg-[#F8F9FA] flex items-center justify-center text-xl shrink-0 ${isSelected ? 'bg-[#00BFFF]/15' : 'grayscale opacity-75 group-hover:grayscale-0 group-hover:opacity-100'}`}>
                           {opt.icon}
                         </div>
                       ) : null}
                       <div className="flex-grow">
-                        <span className={`font-bold text-sm block ${isSelected ? 'text-[#00BFFF]' : 'text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>{opt.label}</span>
-                        {opt.desc && <span className="text-[10px] text-[#C0C0C0] mt-1 block">{opt.desc}</span>}
+                        <span className={`font-bold text-sm block ${isSelected ? 'text-[#0A1F33]' : 'text-[#3A3A3C] group-hover:text-[#0A1F33]'}`}>{opt.label}</span>
+                        {opt.desc && <span className="text-[10px] text-[#3A3A3C]/60 mt-1 block">{opt.desc}</span>}
                       </div>
                       {isMultiple && (
-                        <div className={`w-4 h-4 rounded-none border shrink-0 flex items-center justify-center ${isSelected ? 'border-[#00BFFF] bg-[#00BFFF]' : 'border-[#C0C0C0]'}`}>
-                           {isSelected && <div className="w-2 h-2 bg-[#FFFFFF]"></div>}
+                        <div className={`w-5 h-5 rounded-md border shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'border-[#00BFFF] bg-[#00BFFF]' : 'border-[#C0C0C0]'}`}>
+                           {isSelected && <svg className="w-3 h-3 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
                         </div>
                       )}
                     </button>
@@ -1611,7 +1611,7 @@ export default function RecomendadorPage() {
                   <button
                     onClick={() => advanceMultiple(WIZARD_STEPS[step-1].id)}
                     disabled={!answers[WIZARD_STEPS[step-1].id] || answers[WIZARD_STEPS[step-1].id].length === 0}
-                    className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-12 transition-colors inline-block disabled:opacity-30 disabled:bg-[#C0C0C0] disabled:cursor-not-allowed rounded-none"
+                    className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-12 transition-all duration-200 inline-block disabled:opacity-30 disabled:bg-[#C0C0C0] disabled:cursor-not-allowed rounded-xl shadow-md hover:shadow-lg"
                   >
                     Continuar →
                   </button>
@@ -1631,9 +1631,9 @@ export default function RecomendadorPage() {
           ========================================== */}
       {step === WIZARD_STEPS.length + 1 && (
         <section className="flex-grow flex flex-col">
-          <div className="w-full bg-[#FFFFFF] py-6 px-4 md:px-8 border-b border-[#C0C0C0] flex justify-center">
-            <button onClick={() => setStep(step - 1)} className="max-w-3xl w-full flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver
+          <div className="w-full bg-[#FFFFFF]/95 backdrop-blur-md py-6 px-4 md:px-8 border-b border-[#0A1F33]/10 flex justify-center shadow-xs">
+            <button onClick={() => setStep(step - 1)} className="max-w-3xl w-full flex items-center gap-1.5 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver
             </button>
           </div>
 
@@ -1646,12 +1646,12 @@ export default function RecomendadorPage() {
 
               {wantsReference === null && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <button onClick={() => setWantsReference(true)} className="bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#00BFFF] p-6 transition-colors flex items-center gap-4 text-left group rounded-none">
-                    <div className="w-10 h-10 flex items-center justify-center text-xl shrink-0">🎯</div>
+                  <button onClick={() => setWantsReference(true)} className="bg-[#FFFFFF] border border-[#0A1F33]/12 hover:border-[#00BFFF] p-6 transition-all duration-200 flex items-center gap-4 text-left group rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-0.5">
+                    <div className="w-11 h-11 rounded-xl bg-[#F8F9FA] flex items-center justify-center text-xl shrink-0">🎯</div>
                     <span className="font-bold text-sm text-[#3A3A3C] group-hover:text-[#0A1F33]">Sí, quiero compararlo</span>
                   </button>
-                  <button onClick={() => { setWantsReference(false); setReferenceModelId(null); setStep(step + 1); }} className="bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#0A1F33] p-6 transition-colors flex items-center gap-4 text-left group rounded-none">
-                    <div className="w-10 h-10 flex items-center justify-center text-xl shrink-0">⚖️</div>
+                  <button onClick={() => { setWantsReference(false); setReferenceModelId(null); setStep(step + 1); }} className="bg-[#FFFFFF] border border-[#0A1F33]/12 hover:border-[#0A1F33] p-6 transition-all duration-200 flex items-center gap-4 text-left group rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-0.5">
+                    <div className="w-11 h-11 rounded-xl bg-[#F8F9FA] flex items-center justify-center text-xl shrink-0">⚖️</div>
                     <span className="font-bold text-sm text-[#3A3A3C] group-hover:text-[#0A1F33]">No, sorprendeme</span>
                   </button>
                 </div>
@@ -1659,20 +1659,20 @@ export default function RecomendadorPage() {
 
               {wantsReference === true && !referenceModelId && (
                 <div>
-                  <div className="flex border border-[#0A1F33] mb-4 bg-[#FFFFFF]">
-                    <div className="pl-4 flex items-center text-[#C0C0C0]"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
+                  <div className="flex border border-[#0A1F33]/20 mb-4 bg-[#FFFFFF] rounded-xl overflow-hidden shadow-sm focus-within:border-[#00BFFF]">
+                    <div className="pl-4 flex items-center text-[#C0C0C0]"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
                     <input type="text" aria-label="Buscar modelo" placeholder="Ej: Toyota Corolla" className="w-full p-4 text-sm focus:outline-none text-[#3A3A3C]" value={refSearchTerm} onChange={e => setRefSearchTerm(e.target.value)} autoFocus />
                   </div>
-                  <div className="max-h-80 overflow-y-auto border border-[#C0C0C0] custom-scrollbar bg-[#F8F9FA]">
+                  <div className="max-h-80 overflow-y-auto border border-[#0A1F33]/10 custom-scrollbar bg-[#FFFFFF] rounded-2xl shadow-md">
                     {refSearchTerm.length < 2 ? (
                       <div className="p-8 text-center text-[#C0C0C0] text-[10px] font-bold uppercase tracking-widest">Escribí al menos 2 caracteres...</div>
                     ) : (() => {
                       const term = refSearchTerm.toLowerCase();
                       const results = rawModels.filter(m => `${m.brandName} ${m.name}`.toLowerCase().includes(term)).slice(0, 8);
                       return results.length > 0 ? results.map(m => (
-                        <button type="button" key={m.id} onClick={() => setReferenceModelId(m.id)} className="appearance-none text-left w-full p-4 border-b border-[#C0C0C0]/40 flex justify-between items-center transition-colors cursor-pointer hover:bg-[#FFFFFF] hover:border-l-4 hover:border-l-[#00BFFF]">
+                        <button type="button" key={m.id} onClick={() => setReferenceModelId(m.id)} className="appearance-none text-left w-full p-4 border-b border-[#0A1F33]/5 flex justify-between items-center transition-colors cursor-pointer hover:bg-[#F5FBFF]">
                           <span className="font-bold text-xs text-[#0A1F33] uppercase">{m.brandName} {m.name}</span>
-                          <span className="text-[10px] text-[#00BFFF] font-black">+ Elegir</span>
+                          <span className="text-[10px] text-[#00BFFF] font-black bg-[#F5FBFF] px-3 py-1 rounded-full">+ Elegir</span>
                         </button>
                       )) : <div className="p-8 text-center text-[#C0C0C0] text-[10px] font-bold uppercase tracking-widest">Sin resultados en el catálogo.</div>;
                     })()}
@@ -1686,14 +1686,14 @@ export default function RecomendadorPage() {
               {wantsReference === true && referenceModelId && (() => {
                 const chosen = rawModels.find(m => m.id === referenceModelId);
                 return (
-                  <div className="text-center border border-[#00BFFF] bg-[#F5FBFF] p-8">
+                  <div className="text-center border border-[#00BFFF] bg-[#F5FBFF] p-8 rounded-2xl shadow-md">
                     <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-1">Vas a comparar contra</p>
                     <p className="font-black text-xl text-[#0A1F33] uppercase mb-6">{chosen?.brandName} {chosen?.name}</p>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <button onClick={() => setStep(step + 1)} className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-12 transition-colors rounded-none">
+                      <button onClick={() => setStep(step + 1)} className="bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 px-12 transition-colors rounded-xl shadow-sm">
                         Continuar →
                       </button>
-                      <button onClick={() => { setReferenceModelId(null); setRefSearchTerm(''); }} className="border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-xs uppercase tracking-widest py-4 px-8 transition-colors rounded-none">
+                      <button onClick={() => { setReferenceModelId(null); setRefSearchTerm(''); }} className="border border-[#0A1F33]/20 bg-[#FFFFFF] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-xs uppercase tracking-widest py-4 px-8 transition-colors rounded-xl">
                         Cambiar
                       </button>
                     </div>
@@ -1715,42 +1715,42 @@ export default function RecomendadorPage() {
           <div className="absolute inset-0 flex justify-center items-center pointer-events-none -z-10 overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-[1200px] px-4 blur-sm md:blur-md opacity-25 select-none">
               {['💰 Más Económico', '💎 Tope de Gama', '⚖️ Opción Equilibrada'].map((badge) => (
-                <div key={badge} className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-4">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#00BFFF] bg-[#F5FBFF] border border-[#00BFFF]/30 px-2 py-1 w-max">{badge}</span>
-                  <div className="h-32 bg-[#F5F5F5] w-full"></div>
-                  <div className="h-3 bg-[#C0C0C0] w-3/4"></div>
-                  <div className="h-3 bg-[#C0C0C0] w-1/2"></div>
-                  <div className="h-8 bg-[#0A1F33] w-2/3 mt-2"></div>
+                <div key={badge} className="bg-[#FFFFFF] border border-[#0A1F33]/10 p-6 flex flex-col gap-4 rounded-2xl">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#00BFFF] bg-[#F5FBFF] border border-[#00BFFF]/30 px-2.5 py-1 w-max rounded-full">{badge}</span>
+                  <div className="h-32 bg-[#F5F5F5] w-full rounded-xl"></div>
+                  <div className="h-3 bg-[#C0C0C0] w-3/4 rounded-full"></div>
+                  <div className="h-3 bg-[#C0C0C0] w-1/2 rounded-full"></div>
+                  <div className="h-8 bg-[#0A1F33] w-2/3 mt-2 rounded-xl"></div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="max-w-xl w-full bg-[#FFFFFF] border-t-4 border-[#00BFFF] border-l border-r border-b border-[#C0C0C0] p-10 shadow-none z-10">
-            <button onClick={() => setStep(WIZARD_STEPS.length + 1)} className="flex items-center gap-1 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors mb-6">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver a modificar respuestas
+          <div className="max-w-xl w-full bg-[#FFFFFF] border-t-4 border-t-[#00BFFF] border border-[#0A1F33]/10 p-8 md:p-10 rounded-3xl shadow-2xl z-10">
+            <button onClick={() => setStep(WIZARD_STEPS.length + 1)} className="flex items-center gap-1.5 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors mb-6">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver a modificar respuestas
             </button>
             <h2 className="font-black text-3xl text-[#0A1F33] uppercase mb-2 text-center" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Ya casi tenés las mejores opciones</h2>
             <p className="text-[11px] text-[#3A3A3C] text-center uppercase tracking-widest mb-8 font-medium">Dejanos un celular y te mostramos los 3 modelos.</p>
 
-            <div className="bg-[#E6F4EA] border border-[#1E8E3E]/30 p-4 mb-8 text-center rounded-none">
+            <div className="bg-[#E6F4EA] border border-[#1E8E3E]/25 p-4 mb-8 text-center rounded-2xl">
               <p className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest">100% Sin Costo • Precios Oficiales sin Comisión</p>
               <p className="text-xs text-[#1E8E3E]/80 mt-1">Datacar te conecta directo con la concesionaria oficial al precio de lista o con promociones vigentes. Cero intermediarios, cero recargos.</p>
             </div>
 
             <form onSubmit={submitLeadAndShowResults} className="flex flex-col gap-4">
               <div>
-                <input type="tel" minLength={10} maxLength={10} aria-label="Celular" placeholder="Celular (Ej: 0981234567)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={leadForm.telefono} onChange={e=>setLeadForm({...leadForm, telefono: e.target.value})} />
+                <input type="tel" minLength={10} maxLength={10} aria-label="Celular" placeholder="Celular (Ej: 0981234567)" className="w-full border border-[#0A1F33]/15 p-4 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#F8F9FA] rounded-xl transition-all" required value={leadForm.telefono} onChange={e=>setLeadForm({...leadForm, telefono: e.target.value})} />
               </div>
               <div>
-                <input type="text" aria-label="Nombre (opcional)" placeholder="Nombre (opcional)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={leadForm.nombre} onChange={e=>setLeadForm({...leadForm, nombre: e.target.value})} />
+                <input type="text" aria-label="Nombre (opcional)" placeholder="Nombre (opcional)" className="w-full border border-[#0A1F33]/15 p-4 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#F8F9FA] rounded-xl transition-all" value={leadForm.nombre} onChange={e=>setLeadForm({...leadForm, nombre: e.target.value})} />
               </div>
               <div>
-                <input type="email" aria-label="Correo electrónico (opcional)" placeholder="Correo electrónico (opcional, para el PDF)" className="w-full border border-[#C0C0C0] p-4 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
+                <input type="email" aria-label="Correo electrónico (opcional)" placeholder="Correo electrónico (opcional, para el PDF)" className="w-full border border-[#0A1F33]/15 p-4 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#F8F9FA] rounded-xl transition-all" value={leadForm.email} onChange={e=>setLeadForm({...leadForm, email: e.target.value})} />
               </div>
 
-              <button type="submit" disabled={isSubmittingLead} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-5 transition-colors mt-2 disabled:opacity-50 flex items-center justify-center gap-2 rounded-none">
-                {isSubmittingLead ? 'Procesando...' : 'Ver mis 3 modelos'} <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+              <button type="submit" disabled={isSubmittingLead} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-5 transition-all duration-200 mt-2 disabled:opacity-50 flex items-center justify-center gap-2 rounded-xl shadow-md hover:shadow-lg">
+                {isSubmittingLead ? 'Procesando...' : 'Ver mis 3 modelos'} <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
               </button>
 
               <p className="text-[10px] text-center text-[#C0C0C0] uppercase tracking-widest mt-2">
@@ -1768,7 +1768,7 @@ export default function RecomendadorPage() {
           ========================================== */}
       {step === WIZARD_STEPS.length + 3 && (
         <section className="flex-grow w-full pb-20">
-          <div className="w-full bg-[#FFFFFF] border-b border-[#C0C0C0] py-12 px-4 text-center">
+          <div className="w-full bg-[#FFFFFF] border-b border-[#0A1F33]/10 py-12 px-4 text-center shadow-xs">
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">100% Sin Costo • Precios Oficiales de Concesionaria</span>
             <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               Elegidos por <span className="text-[#00BFFF]">DATACAR</span>
@@ -1783,16 +1783,16 @@ export default function RecomendadorPage() {
             {/* TU OPCIÓN DE REFERENCIA (si eligió un modelo para comparar) */}
             {referenceMatch && (
               <div className="mb-12">
-                <h3 className="font-bold text-[#3A3A3C] text-sm uppercase tracking-widest mb-6 border-b border-[#C0C0C0]/50 pb-2">Tu opción</h3>
+                <h3 className="font-bold text-[#3A3A3C] text-sm uppercase tracking-widest mb-6 border-b border-[#0A1F33]/10 pb-2">Tu opción</h3>
                 <div className="max-w-sm">
-                  <article className="bg-[#FFFFFF] border border-[#00BFFF] border-t-4 border-t-[#00BFFF] flex flex-col relative rounded-none shadow-none">
-                    <div className="absolute top-4 left-4 bg-[#F8F9FA] border border-[#C0C0C0] text-[#3A3A3C] font-black text-[10px] uppercase tracking-widest px-3 py-1.5 z-10 flex items-center gap-2">
+                  <article className="bg-[#FFFFFF] border border-[#00BFFF] border-t-4 border-t-[#00BFFF] flex flex-col relative rounded-2xl shadow-md overflow-hidden">
+                    <div className="absolute top-4 left-4 bg-[#FFFFFF]/90 backdrop-blur-sm border border-[#0A1F33]/10 text-[#3A3A3C] font-black text-[10px] uppercase tracking-widest px-3 py-1.5 z-10 flex items-center gap-2 rounded-full shadow-xs">
                       <span className="text-[#00BFFF]">•</span> {referenceMatch.matchPercentage}% Match
                     </div>
-                    <div className="absolute top-4 right-4 bg-[#00BFFF] text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest px-3 py-1.5 z-10">
+                    <div className="absolute top-4 right-4 bg-[#00BFFF] text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest px-3 py-1.5 z-10 rounded-full shadow-xs">
                       🎯 Tu Opción
                     </div>
-                    <div className="relative p-4 h-56 border-b border-[#C0C0C0]/20 bg-[#F8F9FA]">
+                    <div className="relative p-4 h-56 border-b border-[#0A1F33]/5 bg-[#F8F9FA]">
                       {isValidImageSrc(referenceMatch.imgUrl) ? (
                         <Image src={referenceMatch.imgUrl} alt={referenceMatch.modelName} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-contain p-4" unoptimized={!isOptimizableImageSrc(referenceMatch.imgUrl)} />
                       ) : (
@@ -1819,11 +1819,11 @@ export default function RecomendadorPage() {
                             origenLead: 'Recomendador - Opción Referencia',
                             concesionariaDestino: referenceMatch.concesionaria || ''
                           })}
-                          className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-none"
+                          className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-xl shadow-sm"
                         >
                           {formatHablarCon(referenceMatch.concesionaria)}
                         </button>
-                        <Link href={`/catalogo/${referenceMatch.brandId}/${referenceMatch.id}`} className="w-full text-center block bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none">
+                        <Link href={`/catalogo/${referenceMatch.brandId}/${referenceMatch.id}`} className="w-full text-center block bg-[#FFFFFF] border border-[#0A1F33]/20 text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-xl">
                           Ver Detalles Técnicos
                         </Link>
                       </div>
@@ -1835,8 +1835,8 @@ export default function RecomendadorPage() {
 
             {/* SIN RESULTADOS: la carrocería es excluyente, puede no haber ningún auto de ese segmento dentro del presupuesto */}
             {topMatches.length === 0 && (
-              <div className="bg-[#FFE6E6] border border-[#D93025] p-6 mb-8 flex gap-4 items-start shadow-none rounded-none">
-                <div className="w-6 h-6 bg-[#D93025] text-[#FFFFFF] flex items-center justify-center font-black rounded-none shrink-0">!</div>
+              <div className="bg-[#FFE6E6] border border-[#D93025]/30 p-6 mb-8 flex gap-4 items-start shadow-sm rounded-2xl">
+                <div className="w-7 h-7 bg-[#D93025] text-[#FFFFFF] flex items-center justify-center font-black rounded-full shrink-0">!</div>
                 <div>
                   <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">No encontramos autos con esa combinación exacta</p>
                   <p className="text-xs text-[#3A3A3C] mb-3">No hay vehículos que encajen con lo que buscás dentro de tu presupuesto. Probá ampliando el presupuesto o cambiando alguna respuesta.</p>
@@ -1847,16 +1847,16 @@ export default function RecomendadorPage() {
 
             {/* ALERTA DE FLEXIBILIZACIÓN INTELIGENTE / CONTINGENCIA */}
             {relaxationInfo ? (
-              <div className="bg-[#F5FBFF] border border-[#00BFFF] p-5 mb-8 flex gap-4 items-start shadow-none rounded-none">
-                <div className="w-6 h-6 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-none shrink-0 text-xs">ℹ️</div>
+              <div className="bg-[#F5FBFF] border border-[#00BFFF]/40 p-5 mb-8 flex gap-4 items-start shadow-sm rounded-2xl">
+                <div className="w-7 h-7 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-full shrink-0 text-xs">ℹ️</div>
                 <div>
                   <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">Búsqueda Optimizada con Flexibilidad Inteligente</p>
                   <p className="text-xs text-[#3A3A3C]">{relaxationInfo.message}</p>
                 </div>
               </div>
             ) : (topMatches.length > 0 && topMatches[0].matchPercentage < 80 ? (
-              <div className="bg-[#F5FBFF] border border-[#00BFFF] p-6 mb-8 flex gap-4 items-start shadow-none rounded-none">
-                <div className="w-6 h-6 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-none shrink-0">!</div>
+              <div className="bg-[#F5FBFF] border border-[#00BFFF]/40 p-6 mb-8 flex gap-4 items-start shadow-sm rounded-2xl">
+                <div className="w-7 h-7 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-full shrink-0">!</div>
                 <div>
                   <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">Ampliamos la búsqueda para mostrarte opciones</p>
                   <p className="text-xs text-[#3A3A3C]">No encontramos vehículos que cumplan exactamente con el 100% de tus combinaciones excluyentes. Te mostramos las mejores alternativas viables en el país.</p>
@@ -1874,22 +1874,22 @@ export default function RecomendadorPage() {
                     className={`bg-[#FFFFFF] border ${
                       isSponsored
                         ? 'border-[#00BFFF] border-t-4 border-t-[#00BFFF]'
-                        : 'border-[#C0C0C0] border-t-4 border-t-[#0A1F33]'
-                    } flex flex-col hover:border-[#00BFFF] transition-colors relative group rounded-none shadow-none`}
+                        : 'border-[#0A1F33]/10 border-t-4 border-t-[#0A1F33]'
+                    } flex flex-col hover:border-[#00BFFF] transition-all duration-300 relative group rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 overflow-hidden`}
                   >
                     {/* % Match Box */}
-                    <div className="absolute top-4 left-4 bg-[#F8F9FA] border border-[#C0C0C0] text-[#3A3A3C] font-black text-[10px] uppercase tracking-widest px-3 py-1.5 z-10 flex items-center gap-2">
+                    <div className="absolute top-4 left-4 bg-[#FFFFFF]/95 backdrop-blur-sm border border-[#0A1F33]/10 text-[#3A3A3C] font-black text-[10px] uppercase tracking-widest px-3 py-1.5 z-10 flex items-center gap-2 rounded-full shadow-xs">
                       <span className="text-[#00BFFF]">•</span> {isSponsored ? 'Patrocinado' : `${model.matchPercentage}% Match`}
                     </div>
 
                     {/* INSIGNIA B2B INTELIGENTE */}
                     {model.badge && (
-                      <div className={`absolute top-4 right-4 ${isSponsored ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#0A1F33] text-[#FFFFFF]'} font-bold text-[9px] uppercase tracking-widest px-3 py-1.5 z-10`}>
+                      <div className={`absolute top-4 right-4 ${isSponsored ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#0A1F33] text-[#FFFFFF]'} font-bold text-[9px] uppercase tracking-widest px-3 py-1.5 z-10 rounded-full shadow-xs`}>
                         {model.badge}
                       </div>
                     )}
 
-                  <div className="relative p-4 h-56 border-b border-[#C0C0C0]/20 bg-[#F8F9FA]">
+                  <div className="relative p-4 h-56 border-b border-[#0A1F33]/5 bg-[#F8F9FA]">
                     {isValidImageSrc(model.imgUrl) ? (
                       <Image
                         src={model.imgUrl}
@@ -1910,11 +1910,11 @@ export default function RecomendadorPage() {
                     
                     {/* MATRIZ DE PÍLDORAS (PILL TAGS) */}
                     <div className="flex flex-wrap gap-1.5 mb-6">
-                      <span className="bg-[#F5F5F5] border border-[#C0C0C0]/50 text-[#3A3A3C] text-[8px] font-bold uppercase px-2 py-1 truncate max-w-[120px] rounded-none">{model.availableFuels.join(' / ')}</span>
-                      <span className="bg-[#F5F5F5] border border-[#C0C0C0]/50 text-[#3A3A3C] text-[8px] font-bold uppercase px-2 py-1 truncate max-w-[120px] rounded-none">{model.availableTransmissions.join(' / ')}</span>
-                      <span className="bg-[#F5F5F5] border border-[#C0C0C0]/50 text-[#3A3A3C] text-[8px] font-bold uppercase px-2 py-1 truncate max-w-[120px] rounded-none">Hasta {model.maxPlazas} Plazas</span>
+                      <span className="bg-[#F8F9FA] border border-[#0A1F33]/10 text-[#3A3A3C] text-[8px] font-bold uppercase px-2.5 py-1 truncate max-w-[120px] rounded-md">{model.availableFuels.join(' / ')}</span>
+                      <span className="bg-[#F8F9FA] border border-[#0A1F33]/10 text-[#3A3A3C] text-[8px] font-bold uppercase px-2.5 py-1 truncate max-w-[120px] rounded-md">{model.availableTransmissions.join(' / ')}</span>
+                      <span className="bg-[#F8F9FA] border border-[#0A1F33]/10 text-[#3A3A3C] text-[8px] font-bold uppercase px-2.5 py-1 truncate max-w-[120px] rounded-md">Hasta {model.maxPlazas} Plazas</span>
                       {model.topFeatures.map((feat, idx) => (
-                        <span key={idx} className="bg-[#F5F5F5] border border-[#C0C0C0]/50 text-[#3A3A3C] text-[8px] font-bold uppercase px-2 py-1 rounded-none">{feat}</span>
+                        <span key={idx} className="bg-[#F8F9FA] border border-[#0A1F33]/10 text-[#3A3A3C] text-[8px] font-bold uppercase px-2.5 py-1 rounded-md">{feat}</span>
                       ))}
                     </div>
 
@@ -1929,12 +1929,12 @@ export default function RecomendadorPage() {
                       </ul>
                     )}
 
-                    <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50">
+                    <div className="mt-auto pt-4 border-t border-[#0A1F33]/10">
                       <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block mb-0.5">Precio Desde</span>
                       <span className="font-black text-2xl text-[#0A1F33] block mb-4" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {model.startingPrice.toLocaleString()}</span>
                       
                       {/* TACTICA B2B: Competencia de Agencias */}
-                      <div className="border border-[#C0C0C0] p-2 text-center text-[10px] uppercase font-bold text-[#3A3A3C] mb-4 bg-[#F8F9FA]">
+                      <div className="border border-[#0A1F33]/10 p-2 text-center text-[10px] uppercase font-bold text-[#3A3A3C] mb-4 bg-[#F8F9FA] rounded-xl">
                          {model.dealershipStatus}
                       </div>
 
@@ -1946,20 +1946,20 @@ export default function RecomendadorPage() {
                             origenLead: 'Recomendador Inteligente',
                             concesionariaDestino: model.concesionaria || ''
                           })}
-                          className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-none shadow-sm"
+                          className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-xl shadow-sm"
                         >
                           {formatHablarCon(model.concesionaria)}
                         </button>
                         <div className="flex gap-2">
                           <button
                             onClick={() => { setCalcVehicle(model); setCuotaCalculada(null); }}
-                            className="flex-1 text-center bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none"
+                            className="flex-1 text-center bg-[#FFFFFF] border border-[#0A1F33]/20 text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-xl"
                           >
                             Simular Cuota
                           </button>
                           <Link
                             href={`/catalogo/${model.brandId}/${model.id}`}
-                            className="flex-1 text-center bg-[#F8F9FA] border border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-none"
+                            className="flex-1 text-center bg-[#F8F9FA] border border-[#0A1F33]/10 text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-xl"
                           >
                             Detalles
                           </Link>
@@ -1982,9 +1982,9 @@ export default function RecomendadorPage() {
                   href={targetUrl}
                   target={isExternal ? '_blank' : undefined}
                   rel={isExternal ? 'noopener noreferrer' : undefined}
-                  className="block w-full relative group overflow-hidden border border-[#C0C0C0] hover:border-[#0A1F33] transition-colors mb-12 rounded-none bg-transparent shadow-sm"
+                  className="block w-full relative group overflow-hidden border border-[#0A1F33]/10 hover:border-[#00BFFF] transition-all mb-12 rounded-2xl bg-transparent shadow-md hover:shadow-xl"
                 >
-                  <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm">
+                  <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm rounded-full">
                     Patrocinado: {smartAd.sponsor}
                   </span>
                   <Image
@@ -1998,7 +1998,7 @@ export default function RecomendadorPage() {
                   />
                   {smartAd.ctaEnabled && smartAd.ctaText && (
                     <span
-                      className="absolute bottom-4 right-4 font-bold text-xs uppercase px-5 py-2.5 shadow-lg tracking-wider transition-transform group-hover:scale-105 z-20"
+                      className="absolute bottom-4 right-4 font-bold text-xs uppercase px-5 py-2.5 shadow-lg tracking-wider transition-transform group-hover:scale-105 z-20 rounded-xl"
                       style={{ backgroundColor: smartAd.ctaColor || '#00BFFF', color: '#FFFFFF' }}
                     >
                       {smartAd.ctaText} →
@@ -2010,9 +2010,9 @@ export default function RecomendadorPage() {
                   href={targetUrl}
                   target={isExternal ? '_blank' : undefined}
                   rel={isExternal ? 'noopener noreferrer' : undefined}
-                  className="block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 mb-12 relative group transition-colors shadow-none rounded-none text-center"
+                  className="block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 mb-12 relative group transition-all shadow-lg rounded-2xl text-center"
                 >
-                  <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">
+                  <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 rounded-full">
                     Patrocinado: {smartAd.sponsor}
                   </span>
                   <h3 className="font-black text-2xl sm:text-3xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -2026,7 +2026,7 @@ export default function RecomendadorPage() {
                   {smartAd.ctaEnabled && smartAd.ctaText && (
                     <div className="mt-4">
                       <span
-                        className="inline-block font-bold text-xs uppercase px-6 py-3 tracking-wider shadow-md"
+                        className="inline-block font-bold text-xs uppercase px-6 py-3 tracking-wider shadow-md rounded-xl"
                         style={{ backgroundColor: smartAd.ctaColor || '#00BFFF', color: '#FFFFFF' }}
                       >
                         {smartAd.ctaText} →
@@ -2037,38 +2037,38 @@ export default function RecomendadorPage() {
               );
             })() : (
               /* PAUTA PROPIA DE DATACAR (SE APAGA AUTOMÁTICAMENTE CUANDO HAY UN ANUNCIANTE ACTIVO) */
-              <div className="bg-[#0A1F33] border border-[#0A1F33] p-8 md:p-12 mb-12 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden rounded-none shadow-none">
-                <span className="absolute top-4 left-4 bg-[#FFFFFF]/10 border border-[#FFFFFF]/20 text-[#FFFFFF] text-[8px] font-bold uppercase tracking-widest px-3 py-1 inline-block z-20">Servicio DATACAR</span>
+              <div className="bg-[#0A1F33] border border-[#0A1F33] p-8 md:p-12 mb-12 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden rounded-3xl shadow-xl">
+                <span className="absolute top-4 left-4 bg-[#FFFFFF]/10 border border-[#FFFFFF]/20 text-[#FFFFFF] text-[8px] font-bold uppercase tracking-widest px-3 py-1 inline-block z-20 rounded-full">Servicio DATACAR</span>
                 <div className="md:w-1/3 z-10 text-center md:text-left mt-6 md:mt-0">
                   <h3 className="font-black text-3xl text-[#FFFFFF] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>¿Indeciso? <br/>Negociamos por vos</h3>
                   <p className="text-[11px] text-[#C0C0C0] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>Analizamos las opciones y peleamos el mejor precio directo en concesionaria oficial.</p>
                 </div>
 
                 <div className="md:w-2/3 flex flex-col sm:flex-row gap-4 w-full z-10">
-                  <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/20 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left">
+                  <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/15 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left rounded-2xl">
                     <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest block mb-2">Opción 1</span>
                     <h4 className="font-bold text-[#FFFFFF] text-sm uppercase mb-1">Comparar Manualmente</h4>
                     <p className="text-[10px] text-[#C0C0C0] mb-4">Usa nuestra herramienta B2B.</p>
-                    <Link href="/comparador" className="w-full block border border-[#FFFFFF] text-[#FFFFFF] hover:bg-[#FFFFFF] hover:text-[#0A1F33] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors text-center rounded-none">Ir al Comparador →</Link>
+                    <Link href="/comparador" className="w-full block border border-[#FFFFFF]/40 text-[#FFFFFF] hover:bg-[#FFFFFF] hover:text-[#0A1F33] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors text-center rounded-xl">Ir al Comparador →</Link>
                   </div>
-                  <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/20 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left">
+                  <div className="bg-[#FFFFFF]/5 border border-[#FFFFFF]/15 p-6 flex-1 hover:border-[#00BFFF] transition-colors text-center md:text-left rounded-2xl">
                     <span className="text-[9px] text-[#00BFFF] font-bold uppercase tracking-widest block mb-2">Opción 2</span>
                     <h4 className="font-bold text-[#FFFFFF] text-sm uppercase mb-1">Delegar Compra</h4>
                     <p className="text-[10px] text-[#C0C0C0] mb-4">Ahorro y cero estrés garantizado.</p>
-                    <Link href="/negociamos-por-vos" className="w-full block bg-[#00BFFF] text-[#0A1F33] hover:bg-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent text-center rounded-none">Delegar Ahora →</Link>
+                    <Link href="/negociamos-por-vos" className="w-full block bg-[#00BFFF] text-[#0A1F33] hover:bg-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors border border-transparent text-center rounded-xl shadow-md">Delegar Ahora →</Link>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* RUNNER-UPS (OTRAS OPCIONES - HORIZONTAL FLAT) */}
+            {/* RUNNER-UPS (OTRAS OPCIONES - HORIZONTAL CONTEMPORÁNEO) */}
             {otherMatches.length > 0 && (
               <div className="mb-12">
-                <h3 className="font-bold text-[#3A3A3C] text-sm uppercase tracking-widest mb-6 border-b border-[#C0C0C0]/50 pb-2">Otras opciones viables</h3>
+                <h3 className="font-bold text-[#3A3A3C] text-sm uppercase tracking-widest mb-6 border-b border-[#0A1F33]/10 pb-2">Otras opciones viables</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {otherMatches.map(auto => (
-                    <div key={`other_${auto.id}`} className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-row hover:border-[#0A1F33] transition-colors group h-32 rounded-none shadow-none">
-                      <div className="relative w-1/3 h-full p-2 border-r border-[#C0C0C0]/30 bg-[#F8F9FA]">
+                    <div key={`other_${auto.id}`} className="bg-[#FFFFFF] border border-[#0A1F33]/10 flex flex-row hover:border-[#00BFFF] transition-all duration-200 group h-32 rounded-2xl shadow-sm hover:shadow-md overflow-hidden">
+                      <div className="relative w-1/3 h-full p-2 border-r border-[#0A1F33]/5 bg-[#F8F9FA]">
                         {isValidImageSrc(auto.imgUrl) ? (
                           <Image
                             src={auto.imgUrl}
@@ -2096,8 +2096,8 @@ export default function RecomendadorPage() {
               </div>
             )}
 
-            <div className="text-center mt-12 border-t border-[#C0C0C0] pt-12">
-              <button onClick={() => { setStep(1); setAnswers({}); setCalcVehicle(null); }} className="bg-[#FFFFFF] border border-[#0A1F33] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] px-8 py-4 text-[10px] font-bold uppercase tracking-widest transition-colors inline-flex items-center gap-2 rounded-none">
+            <div className="text-center mt-12 border-t border-[#0A1F33]/10 pt-12">
+              <button onClick={() => { setStep(1); setAnswers({}); setCalcVehicle(null); }} className="bg-[#FFFFFF] border border-[#0A1F33]/20 text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] px-8 py-4 text-[10px] font-bold uppercase tracking-widest transition-all inline-flex items-center gap-2 rounded-xl shadow-sm hover:shadow-md">
                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Volver a empezar
               </button>
             </div>
@@ -2112,35 +2112,35 @@ export default function RecomendadorPage() {
       <Modal
         isOpen={!!calcVehicle}
         onClose={() => { setCalcVehicle(null); setCuotaCalculada(null); }}
-        overlayClassName="fixed inset-0 bg-[#0A1F33]/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
-        panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#0A1F33] shadow-none rounded-none"
+        overlayClassName="fixed inset-0 bg-[#0A1F33]/75 z-50 flex items-center justify-center p-4 backdrop-blur-md"
+        panelClassName="bg-[#FFFFFF] p-8 max-w-md w-full border-t-4 border-[#00BFFF] shadow-2xl rounded-2xl relative"
       >
         {calcVehicle && (
           <>
-            <button onClick={() => { setCalcVehicle(null); setCuotaCalculada(null); }} className="absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] font-black text-lg border-none outline-none">✕</button>
+            <button onClick={() => { setCalcVehicle(null); setCuotaCalculada(null); }} className="w-8 h-8 rounded-full bg-[#F8F9FA] flex items-center justify-center absolute top-4 right-4 text-[#C0C0C0] hover:text-[#D93025] hover:bg-[#FFE6E6] font-black text-sm border-none outline-none transition-colors">✕</button>
             <h3 className="font-black text-2xl text-[#0A1F33] uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Plan Financiero</h3>
-            <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6 border-b border-[#C0C0C0]/50 pb-4">
+            <p className="text-[10px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-6 border-b border-[#0A1F33]/10 pb-4">
               Vehículo: {calcVehicle.brandName} {calcVehicle.modelName} (Desde US$ {calcVehicle.startingPrice.toLocaleString()})
             </p>
             
             <form onSubmit={handleCalculate} className="flex flex-col gap-4">
               <div>
                 <label htmlFor="recomendador-calc-entrega" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Capital de Entrega (USD)</label>
-                <input id="recomendador-calc-entrega" type="number" placeholder="Ej: 10000" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" required value={calcForm.entrega} onChange={e=>setCalcForm({...calcForm, entrega: e.target.value})} />
+                <input id="recomendador-calc-entrega" type="number" placeholder="Ej: 10000" className="w-full border border-[#0A1F33]/15 p-3.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#F8F9FA] rounded-xl" required value={calcForm.entrega} onChange={e=>setCalcForm({...calcForm, entrega: e.target.value})} />
               </div>
               <div>
                 <label htmlFor="recomendador-calc-plazo" className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-2">Plazo de Financiación</label>
-                <select id="recomendador-calc-plazo" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] cursor-pointer rounded-none" value={calcForm.plazo} onChange={e=>setCalcForm({...calcForm, plazo: e.target.value})}>
+                <select id="recomendador-calc-plazo" className="w-full border border-[#0A1F33]/15 p-3.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] cursor-pointer rounded-xl" value={calcForm.plazo} onChange={e=>setCalcForm({...calcForm, plazo: e.target.value})}>
                   <option value="12">12 Meses</option><option value="24">24 Meses</option><option value="36">36 Meses</option><option value="48">48 Meses</option><option value="60">60 Meses</option>
                 </select>
               </div>
               
-              <button type="submit" className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors mt-2 border border-transparent rounded-none">
+              <button type="submit" className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors mt-2 border border-transparent rounded-xl shadow-md">
                 Calcular Cuota
               </button>
 
               {cuotaCalculada !== null && (
-                <div className="mt-4 border-t-4 border-[#0A1F33] bg-[#F8F9FA] p-6 text-center">
+                <div className="mt-4 border-t-4 border-[#0A1F33] bg-[#F8F9FA] p-6 text-center rounded-2xl">
                   <p className="text-[11px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-2">Cuota Mensual Estimada</p>
                   <p className="font-black text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>US$ {cuotaCalculada.toLocaleString('en-US', {maximumFractionDigits: 0})}</p>
                   <p className="text-[9px] text-[#3A3A3C] uppercase tracking-widest mt-4 max-w-sm mx-auto leading-relaxed opacity-70">

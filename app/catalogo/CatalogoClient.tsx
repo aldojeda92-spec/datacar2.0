@@ -516,8 +516,8 @@ function CatalogoContent() {
     return (
       <label className="flex items-start gap-3 cursor-pointer group">
         <input type="checkbox" className="sr-only" checked={isChecked} onChange={onToggle} />
-        <div aria-hidden="true" className={`mt-0.5 w-4 h-4 border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
-          {isChecked && <svg className="w-3 h-3 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+        <div aria-hidden="true" className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
+          {isChecked && <svg className="w-3 h-3 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
         </div>
         {icon && <span className={`shrink-0 -mt-0.5 transition-colors ${isChecked ? 'text-[#0A1F33]' : 'text-[#C0C0C0] group-hover:text-[#3A3A3C]'}`}>{icon}</span>}
         <div className="flex flex-col">
@@ -537,9 +537,9 @@ function CatalogoContent() {
         target="_blank"
         rel="noopener noreferrer"
         key={`injected-ad-${adToShow.id}`}
-        className="col-span-full block w-full relative group overflow-hidden border border-[#C0C0C0] hover:border-[#00BFFF] transition-colors mb-6 mt-2 rounded-none bg-transparent shadow-sm"
+        className="col-span-full block w-full relative group overflow-hidden border border-[#0A1F33]/10 hover:border-[#00BFFF] transition-all mb-6 mt-2 rounded-2xl bg-transparent shadow-md hover:shadow-xl"
       >
-        <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm">
+        <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm rounded-full">
           Patrocinado: {adToShow.sponsor}
         </span>
         <Image
@@ -558,9 +558,9 @@ function CatalogoContent() {
         target="_blank"
         rel="noopener noreferrer"
         key={`injected-ad-${adToShow.id}`}
-        className="col-span-full block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 relative transition-colors group overflow-hidden mb-6 mt-2 rounded-none text-center"
+        className="col-span-full block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 relative transition-all group overflow-hidden mb-6 mt-2 rounded-2xl shadow-lg text-center"
       >
-        <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">
+        <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 rounded-full">
           Patrocinado: {adToShow.sponsor}
         </span>
         <p className="font-black text-2xl sm:text-3xl text-[#FFFFFF] uppercase leading-tight break-words mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -579,22 +579,22 @@ function CatalogoContent() {
   // drawer de mobile, para no duplicar el markup de cada categoría.
   const filtrosSecciones = (
     <>
-      <div className="p-5 border-b border-[#C0C0C0]">
+      <div className="p-5 border-b border-[#0A1F33]/10">
         <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Presupuesto (USD)</h3>
         <div className="flex flex-col gap-2">
-          <input type="number" aria-label="Presupuesto mínimo en dólares" placeholder="Mínimo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.from} onChange={(e) => setPriceRange({...priceRange, from: e.target.value})} />
-          <input type="number" aria-label="Presupuesto máximo en dólares" placeholder="Máximo" className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none" value={priceRange.to} onChange={(e) => setPriceRange({...priceRange, to: e.target.value})} />
+          <input type="number" aria-label="Presupuesto mínimo en dólares" placeholder="Mínimo" className="w-full border border-[#0A1F33]/15 p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#F8F9FA] rounded-xl" value={priceRange.from} onChange={(e) => setPriceRange({...priceRange, from: e.target.value})} />
+          <input type="number" aria-label="Presupuesto máximo en dólares" placeholder="Máximo" className="w-full border border-[#0A1F33]/15 p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#F8F9FA] rounded-xl" value={priceRange.to} onChange={(e) => setPriceRange({...priceRange, to: e.target.value})} />
         </div>
       </div>
 
-      <div className="p-5 border-b border-[#C0C0C0]">
+      <div className="p-5 border-b border-[#0A1F33]/10">
         <h3 className="text-[10px] text-[#3A3A3C] mb-3 font-bold uppercase tracking-widest">Marca Automotriz</h3>
         {marcasDisponibles.length > 8 && (
           <input
             type="search"
             aria-label="Buscar marca"
             placeholder="Buscar marca..."
-            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#0A1F33] bg-[#F8F9FA] rounded-none mb-3"
+            className="w-full border border-[#0A1F33]/15 p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#F8F9FA] rounded-xl mb-3"
             value={marcaQuery}
             onChange={(e) => setMarcaQuery(e.target.value)}
           />
@@ -610,42 +610,42 @@ function CatalogoContent() {
         </div>
       </div>
 
-      <div className="p-5 border-b border-[#C0C0C0]">
+      <div className="p-5 border-b border-[#0A1F33]/10">
         <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tipo de Carrocería</h3>
         <div className="flex flex-col gap-3">
           {tiposDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="tipos" icon={<CarroceriaIcon tipo={item} className="w-5 h-5" />} onToggle={() => toggleFilter('tipos', item)} />))}
         </div>
       </div>
 
-      <div className="p-5 border-b border-[#C0C0C0]">
+      <div className="p-5 border-b border-[#0A1F33]/10">
         <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Transmisión</h3>
         <div className="flex flex-col gap-3">
           {transmisionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="transmisiones" onToggle={() => toggleFilter('transmisiones', item)} />))}
         </div>
       </div>
 
-      <div className="p-5 border-b border-[#C0C0C0]">
+      <div className="p-5 border-b border-[#0A1F33]/10">
         <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Motorización</h3>
         <div className="flex flex-col gap-3">
           {combustiblesDisponibles.map(item => (<FlatCheckbox key={item} label={combustibleLabel(item) || item} value={item} category="combustibles" subLabel={combustibleLabel(item) ? item : undefined} onToggle={() => toggleFilter('combustibles', item)} />))}
         </div>
       </div>
 
-      <div className="p-5 border-b border-[#C0C0C0]">
+      <div className="p-5 border-b border-[#0A1F33]/10">
         <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Tracción</h3>
         <div className="flex flex-col gap-3">
           {traccionesOpciones.map(item => (<FlatCheckbox key={item} label={item} category="tracciones" onToggle={() => toggleFilter('tracciones', item)} />))}
         </div>
       </div>
 
-      <div className="p-5 border-b border-[#C0C0C0]">
+      <div className="p-5 border-b border-[#0A1F33]/10">
         <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Capacidad</h3>
         <div className="flex flex-col gap-3">
           {plazasDisponibles.map(item => (<FlatCheckbox key={item} label={`${item} Plazas`} value={item} category="plazas" onToggle={() => toggleFilter('plazas', item)} />))}
         </div>
       </div>
 
-      <div className="p-5 border-b border-[#C0C0C0] md:border-b-0">
+      <div className="p-5 border-b border-[#0A1F33]/10 md:border-b-0">
         <h3 className="text-[10px] text-[#3A3A3C] mb-4 font-bold uppercase tracking-widest">Origen de Marca</h3>
         <div className="flex flex-col gap-3">
           {origenesDisponibles.map(item => (<FlatCheckbox key={item} label={item} category="origenes" onToggle={() => toggleFilter('origenes', item)} />))}
@@ -656,7 +656,7 @@ function CatalogoContent() {
 
   return (
     <>
-      <header className="w-full border-b border-[#C0C0C0] bg-[#FFFFFF] pt-6 pb-6">
+      <header className="w-full border-b border-[#0A1F33]/10 bg-[#FFFFFF] pt-6 pb-6 shadow-xs">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8">
           <p className="text-[10px] font-medium text-[#C0C0C0] mb-2 uppercase tracking-widest"><Link href="/" className="hover:text-[#3A3A3C] transition-colors">Inicio</Link> / <span className="font-bold text-[#3A3A3C]">Catálogo</span></p>
           <h1 className="font-black text-3xl md:text-4xl text-[#0A1F33]" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Catálogo de autos 0km</h1>
@@ -670,7 +670,7 @@ function CatalogoContent() {
         <button
           type="button"
           onClick={() => setFiltersOpen(true)}
-          className="md:hidden w-full flex items-center justify-between gap-2 border border-[#0A1F33] bg-[#FFFFFF] px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-[#0A1F33]"
+          className="md:hidden w-full flex items-center justify-between gap-2 border border-[#0A1F33]/20 bg-[#FFFFFF] px-4 py-3.5 text-[11px] font-bold uppercase tracking-widest text-[#0A1F33] rounded-xl shadow-sm"
         >
           <span className="flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h18M6 12h12M10 20h4" /></svg>
@@ -685,10 +685,10 @@ function CatalogoContent() {
         <Modal
           isOpen={filtersOpen}
           onClose={() => setFiltersOpen(false)}
-          overlayClassName="fixed inset-0 bg-[#0A1F33]/70 z-[160] md:hidden"
-          panelClassName="fixed inset-x-0 bottom-0 z-[170] md:hidden bg-[#FFFFFF] max-h-[85vh] flex flex-col rounded-none border-t-4 border-[#00BFFF]"
+          overlayClassName="fixed inset-0 bg-[#0A1F33]/70 z-[160] md:hidden backdrop-blur-sm"
+          panelClassName="fixed inset-x-0 bottom-0 z-[170] md:hidden bg-[#FFFFFF] max-h-[85vh] flex flex-col rounded-t-3xl border-t-4 border-[#00BFFF] shadow-2xl overflow-hidden"
         >
-          <div className="p-4 border-b border-[#C0C0C0] flex justify-between items-center bg-[#F5F5F5] shrink-0">
+          <div className="p-4 border-b border-[#0A1F33]/10 flex justify-between items-center bg-[#F8F9FA] shrink-0">
             <h2 className="font-bold text-[#0A1F33] text-sm uppercase tracking-wider">Parámetros</h2>
             <div className="flex items-center gap-4">
               <button onClick={clearFilters} className="text-[10px] text-[#D93025] hover:underline font-bold uppercase tracking-widest border-none outline-none">Restablecer</button>
@@ -700,17 +700,17 @@ function CatalogoContent() {
           <div className="overflow-y-auto custom-scrollbar flex-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             {filtrosSecciones}
           </div>
-          <div className="p-4 border-t border-[#C0C0C0] shrink-0">
-            <button onClick={() => setFiltersOpen(false)} className="w-full bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 rounded-none">
+          <div className="p-4 border-t border-[#0A1F33]/10 shrink-0">
+            <button onClick={() => setFiltersOpen(false)} className="w-full bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 rounded-xl shadow-md">
               Ver {autosOrdenados.length} autos
             </button>
           </div>
         </Modal>
 
         {/* Sidebar de escritorio: siempre visible, con scroll propio. */}
-        <aside className="hidden md:block md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-none border border-[#C0C0C0]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+        <aside className="hidden md:block md:w-[260px] flex-shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto custom-scrollbar shadow-sm border border-[#0A1F33]/10 rounded-2xl overflow-hidden bg-[#FFFFFF]" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <div className="bg-[#FFFFFF]">
-            <div className="p-4 border-b border-[#C0C0C0] flex justify-between items-center bg-[#F5F5F5] sticky top-0 z-10">
+            <div className="p-4 border-b border-[#0A1F33]/10 flex justify-between items-center bg-[#F8F9FA] sticky top-0 z-10">
               <h2 className="font-bold text-[#0A1F33] text-sm uppercase tracking-wider">Parámetros</h2>
               <button onClick={clearFilters} className="text-[10px] text-[#D93025] hover:underline font-bold uppercase tracking-widest border-none outline-none">Restablecer</button>
             </div>
@@ -721,9 +721,9 @@ function CatalogoContent() {
         <section className="flex-1 flex flex-col min-w-0">
           
           {(priceRange.from || priceRange.to) && (
-            <div className="bg-[#0A1F33] text-[#FFFFFF] p-5 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-none shadow-none border-l-4 border-[#00BFFF]">
+            <div className="bg-[#0A1F33] text-[#FFFFFF] p-5 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-2xl shadow-md border-l-4 border-[#00BFFF]">
               <div className="flex items-center gap-4">
-                <div className="bg-[#FFFFFF]/10 p-2 rounded-full shrink-0">
+                <div className="bg-[#FFFFFF]/10 p-2.5 rounded-full shrink-0">
                   <svg className="w-6 h-6 text-[#00BFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </div>
                 <div>
@@ -735,7 +735,7 @@ function CatalogoContent() {
               </div>
               <button 
                 onClick={() => setPriceRange({from: '', to: ''})} 
-                className="text-[10px] font-bold text-[#FFFFFF] hover:text-[#00BFFF] border border-[#FFFFFF]/20 hover:border-[#00BFFF] px-4 py-2 uppercase tracking-widest transition-colors w-full sm:w-auto rounded-none"
+                className="text-[10px] font-bold text-[#FFFFFF] hover:text-[#00BFFF] border border-[#FFFFFF]/20 hover:border-[#00BFFF] px-4 py-2 uppercase tracking-widest transition-colors w-full sm:w-auto rounded-xl"
               >
                 ✕ Quitar Filtro
               </button>
@@ -743,9 +743,9 @@ function CatalogoContent() {
           )}
 
           {similarModel && (
-            <div className="bg-[#0A1F33] text-[#FFFFFF] p-5 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-none shadow-none border-l-4 border-[#00BFFF]">
+            <div className="bg-[#0A1F33] text-[#FFFFFF] p-5 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-2xl shadow-md border-l-4 border-[#00BFFF]">
               <div className="flex items-center gap-4">
-                <div className="bg-[#FFFFFF]/10 p-2 rounded-full shrink-0">
+                <div className="bg-[#FFFFFF]/10 p-2.5 rounded-full shrink-0">
                   <svg className="w-6 h-6 text-[#00BFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
                 <div>
@@ -757,14 +757,14 @@ function CatalogoContent() {
               </div>
               <button 
                 onClick={() => setSimilarModel(null)} 
-                className="text-[10px] font-bold text-[#FFFFFF] hover:text-[#00BFFF] border border-[#FFFFFF]/20 hover:border-[#00BFFF] px-4 py-2 uppercase tracking-widest transition-colors w-full sm:w-auto rounded-none"
+                className="text-[10px] font-bold text-[#FFFFFF] hover:text-[#00BFFF] border border-[#FFFFFF]/20 hover:border-[#00BFFF] px-4 py-2 uppercase tracking-widest transition-colors w-full sm:w-auto rounded-xl"
               >
                 ✕ Quitar Filtro
               </button>
             </div>
           )}
 
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6 pb-4 border-b border-[#C0C0C0]">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6 pb-4 border-b border-[#0A1F33]/10">
             <span className="text-[11px] text-[#3A3A3C] uppercase tracking-widest shrink-0">
               {isLoading ? 'Cargando catálogo...' : <><span className="font-bold text-[#0A1F33] text-sm">{autosOrdenados.length}</span> autos disponibles</>}
               {!isLoading && totalPages > 1 && (
@@ -780,19 +780,19 @@ function CatalogoContent() {
                     onChange={(e) => { setGlobalSearchQuery(e.target.value); setShowSuggestions(true); }}
                     onFocus={() => setShowSuggestions(true)}
                     placeholder="Buscar marca o modelo"
-                    className="w-full border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-bold uppercase tracking-widest py-2 px-3 pr-8 focus:outline-none focus:border-[#0A1F33] rounded-none"
+                    className="w-full border border-[#0A1F33]/15 bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-bold uppercase tracking-widest py-2.5 px-3.5 pr-8 focus:outline-none focus:border-[#00BFFF] rounded-xl shadow-xs"
                   />
                   {globalSearchQuery && (
                     <button 
                       onClick={() => { setGlobalSearchQuery(''); setSelectedSearchModelId(null); setShowSuggestions(false); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#C0C0C0] hover:text-[#0A1F33]"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#C0C0C0] hover:text-[#0A1F33]"
                     >
                       ✕
                     </button>
                   )}
                 </div>
                 {showSuggestions && searchSuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-[#FFFFFF] border border-[#C0C0C0] shadow-lg z-50">
+                  <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#FFFFFF] border border-[#0A1F33]/10 shadow-xl z-50 rounded-xl overflow-hidden">
                     {searchSuggestions.map(s => (
                       <button
                         key={s.id}
@@ -801,7 +801,7 @@ function CatalogoContent() {
                           setGlobalSearchQuery(`${s.brand} ${s.name}`);
                           setShowSuggestions(false);
                         }}
-                        className="w-full text-left px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-[#3A3A3C] hover:bg-[#F8F9FA] hover:text-[#0A1F33] border-b border-[#F8F9FA] last:border-b-0"
+                        className="w-full text-left px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-widest text-[#3A3A3C] hover:bg-[#F5FBFF] hover:text-[#0A1F33] border-b border-[#0A1F33]/5 last:border-b-0 transition-colors"
                       >
                         {s.brand} {s.name}
                       </button>
@@ -815,7 +815,7 @@ function CatalogoContent() {
                   aria-label="Ordenar resultados"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortKey)}
-                  className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-3 focus:outline-none focus:border-[#0A1F33] rounded-none"
+                  className="border border-[#0A1F33]/15 bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2.5 px-3.5 focus:outline-none focus:border-[#00BFFF] rounded-xl shadow-xs"
                 >
                   {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -844,24 +844,24 @@ function CatalogoContent() {
                     {/* Renderizamos el Ad justo ANTES de la tarjeta número 7 */}
                     {showAdHere && index === 6 && renderAdBanner()}
 
-                    <div className="relative h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group shadow-none rounded-none">
-                      <div className="absolute top-2 right-2 z-20 flex flex-col items-end gap-2">
+                    <div className="relative h-full bg-[#FFFFFF] border border-[#0A1F33]/10 flex flex-col hover:border-[#00BFFF] transition-all duration-300 group shadow-sm hover:shadow-xl hover:-translate-y-1 rounded-2xl overflow-hidden">
+                      <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-2">
                         <button
                           type="button"
                           onClick={() => toggleCompare(auto)}
                           aria-pressed={enCompare}
                           aria-label={enCompare ? `Quitar ${auto.brand} ${auto.name} del comparador` : `Agregar ${auto.brand} ${auto.name} al comparador`}
                           title={enCompare ? 'Quitar del comparador' : 'Agregar al comparador'}
-                          className={`flex items-center gap-1 border px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors rounded-none ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
+                          className={`flex items-center gap-1 border px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-widest transition-all rounded-full shadow-xs ${enCompare ? 'bg-[#0A1F33] border-[#0A1F33] text-[#FFFFFF]' : 'bg-[#FFFFFF]/90 backdrop-blur-sm border-[#0A1F33]/15 text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33]'}`}
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
                           {enCompare ? 'Comparando' : 'Comparar'}
                         </button>
                       </div>
                       <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="block flex-grow cursor-pointer">
-                        <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#C0C0C0]/20 relative">
+                        <div className="p-4 h-44 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors border-b border-[#0A1F33]/5 relative">
                           {isDatacarCheck(auto.concesionaria, checkedDealershipSet) && (
-                            <div className="absolute top-2 left-2 z-10"><DatacarCheckBadge size="sm" concesionariaNombre={auto.concesionaria} /></div>
+                            <div className="absolute top-3 left-3 z-10"><DatacarCheckBadge size="sm" concesionariaNombre={auto.concesionaria} /></div>
                           )}
                           {isValidImageSrc(auto.img) ? (
                             <Image
@@ -869,7 +869,7 @@ function CatalogoContent() {
                               alt={auto.name}
                               fill
                               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                              className="object-contain p-4 group-hover:scale-[1.02] transition-transform duration-300"
+                              className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
                               unoptimized={!isOptimizableImageSrc(auto.img)}
                             />
                           ) : (
@@ -892,7 +892,7 @@ function CatalogoContent() {
                               }}
                               title={`Buscar similares a ${auto.brand} ${auto.name}`}
                               aria-label={`Buscar similares a ${auto.brand} ${auto.name}`}
-                              className="p-1.5 text-[#C0C0C0] hover:text-[#00BFFF] hover:bg-[#F5FBFF] border border-[#C0C0C0]/50 hover:border-[#00BFFF] transition-colors shrink-0 rounded-none"
+                              className="p-1.5 text-[#C0C0C0] hover:text-[#00BFFF] hover:bg-[#F5FBFF] border border-[#0A1F33]/10 hover:border-[#00BFFF] transition-colors shrink-0 rounded-lg"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -907,7 +907,7 @@ function CatalogoContent() {
                             {auto.tipo_carroceria} • {auto.transmision || 'Consultar'}
                           </p>
                           
-                          <div className="mt-auto pt-4 border-t border-[#C0C0C0]/50 flex justify-between items-end">
+                          <div className="mt-auto pt-4 border-t border-[#0A1F33]/10 flex justify-between items-end">
                             <div className="flex flex-col min-w-0">
                               <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest mb-0.5 truncate">
                                 {verSel && verSel.id !== auto.versionId
@@ -933,7 +933,7 @@ function CatalogoContent() {
                               aria-label={`Elegir versión de ${auto.brand} ${auto.name} para comparar`}
                               value={verSel?.id || ''}
                               onChange={(e) => setVersionSel(prev => ({ ...prev, [auto.id]: e.target.value }))}
-                              className="border border-[#C0C0C0] bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-2 focus:outline-none focus:border-[#0A1F33] rounded-none"
+                              className="border border-[#0A1F33]/15 bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-medium normal-case tracking-normal py-2 px-2.5 focus:outline-none focus:border-[#00BFFF] rounded-xl"
                             >
                               {auto.versiones.map(v => (
                                 <option key={v.id} value={v.id}>{v.name} — US$ {v.price.toLocaleString()}</option>
@@ -948,7 +948,7 @@ function CatalogoContent() {
                           origenLead="Catálogo General"
                           variante="primario"
                         />
-                        <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="w-full text-center border border-[#C0C0C0] text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-3 transition-colors rounded-none">
+                        <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="w-full text-center border border-[#0A1F33]/15 text-[#3A3A3C] hover:border-[#0A1F33] hover:text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-3 transition-colors rounded-xl">
                           Ver Ficha Técnica
                         </Link>
                       </div>
@@ -962,22 +962,22 @@ function CatalogoContent() {
               })
 
             ) : (
-              <div className="col-span-full py-20 bg-[#F8F9FA] border border-[#C0C0C0] text-center flex flex-col items-center justify-center rounded-none shadow-none">
+              <div className="col-span-full py-20 bg-[#F8F9FA] border border-[#0A1F33]/10 text-center flex flex-col items-center justify-center rounded-2xl shadow-xs">
                 <span className="text-3xl mb-3 opacity-50">🛡️</span>
                 <p className="text-sm text-[#0A1F33] font-bold uppercase tracking-widest mb-2">Sin coincidencias</p>
                 <p className="text-[10px] text-[#3A3A3C] uppercase tracking-widest mb-6">El catálogo actual no posee autos con estos parámetros.</p>
-                <button onClick={clearFilters} className="border border-[#0A1F33] text-[#0A1F33] px-6 py-3 text-[10px] font-bold uppercase tracking-widest hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors rounded-none outline-none">Ver todos los autos</button>
+                <button onClick={clearFilters} className="border border-[#0A1F33] text-[#0A1F33] px-6 py-3 text-[10px] font-bold uppercase tracking-widest hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors rounded-xl outline-none">Ver todos los autos</button>
               </div>
             )}
           </div>
 
           {/* CONTROLES DE PAGINACIÓN B2B */}
           {!isLoading && totalPages > 1 && (
-            <div className="flex justify-center flex-wrap gap-2 mt-12 mb-8 border-t border-[#C0C0C0] pt-8">
+            <div className="flex justify-center flex-wrap gap-2 mt-12 mb-8 border-t border-[#0A1F33]/10 pt-8">
               <button 
                 onClick={() => goToPage(currentPage - 1)} 
                 disabled={currentPage === 1}
-                className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest border border-[#C0C0C0] bg-[#FFFFFF] text-[#3A3A3C] hover:border-[#0A1F33] disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded-none"
+                className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest border border-[#0A1F33]/15 bg-[#FFFFFF] text-[#3A3A3C] hover:border-[#0A1F33] disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded-xl"
               >
                 Anterior
               </button>
@@ -986,7 +986,7 @@ function CatalogoContent() {
                 <button
                   key={page}
                   onClick={() => goToPage(page)}
-                  className={`w-10 h-10 flex items-center justify-center text-[10px] font-bold uppercase tracking-widest border transition-colors rounded-none ${currentPage === page ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}
+                  className={`w-10 h-10 flex items-center justify-center text-[10px] font-bold uppercase tracking-widest border transition-all rounded-xl ${currentPage === page ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33] shadow-sm' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#0A1F33]/15 hover:border-[#0A1F33]'}`}
                 >
                   {page}
                 </button>
@@ -995,7 +995,7 @@ function CatalogoContent() {
               <button 
                 onClick={() => goToPage(currentPage + 1)} 
                 disabled={currentPage === totalPages}
-                className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest border border-[#C0C0C0] bg-[#FFFFFF] text-[#3A3A3C] hover:border-[#0A1F33] disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded-none"
+                className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest border border-[#0A1F33]/15 bg-[#FFFFFF] text-[#3A3A3C] hover:border-[#0A1F33] disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded-xl"
               >
                 Siguiente
               </button>
@@ -1006,15 +1006,15 @@ function CatalogoContent() {
       </div>
 
       {compareItems.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-[150] bg-[#0A1F33] border-t-4 border-[#00BFFF] px-4 lg:px-8 py-3">
+        <div className="fixed bottom-0 left-0 right-0 z-[150] bg-[#0A1F33]/95 backdrop-blur-md border-t-4 border-[#00BFFF] px-4 lg:px-8 py-3.5 shadow-2xl">
           <div className="max-w-[1400px] mx-auto flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest shrink-0">Comparador · {compareItems.length}/3</span>
               <span className="text-[11px] text-[#FFFFFF]/70 truncate hidden sm:block">{compareItems.map(v => v.name).join('  ·  ')}</span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button onClick={() => { setCompareItems([]); saveCompareList([]); }} className="text-[10px] font-bold text-[#FFFFFF]/70 hover:text-[#FFFFFF] uppercase tracking-widest border border-[#FFFFFF]/20 hover:border-[#FFFFFF] px-3 py-2 transition-colors rounded-none">Vaciar</button>
-              <Link href="/comparador" className="text-[10px] font-bold text-[#0A1F33] bg-[#00BFFF] hover:bg-[#FFFFFF] uppercase tracking-widest px-4 py-2 transition-colors rounded-none">Comparar ahora →</Link>
+              <button onClick={() => { setCompareItems([]); saveCompareList([]); }} className="text-[10px] font-bold text-[#FFFFFF]/70 hover:text-[#FFFFFF] uppercase tracking-widest border border-[#FFFFFF]/20 hover:border-[#FFFFFF] px-3.5 py-2 transition-colors rounded-xl">Vaciar</button>
+              <Link href="/comparador" className="text-[10px] font-bold text-[#0A1F33] bg-[#00BFFF] hover:bg-[#FFFFFF] uppercase tracking-widest px-4 py-2 transition-colors rounded-xl shadow-md">Comparar ahora →</Link>
             </div>
           </div>
         </div>

@@ -365,19 +365,19 @@ export default function HomeClient() {
           ========================================== */}
       <section className="w-full bg-[#0A1F33] pt-20 pb-16 px-4 flex flex-col items-center relative z-40 border-b-4 border-[#00BFFF]">
         <div className="text-center mb-10">
-          <span className="bg-[#FFFFFF]/10 text-[#00BFFF] border border-[#00BFFF]/30 font-bold tracking-widest uppercase px-4 py-1 text-[10px] mb-6 inline-block">100% Sin Costo • Precios Oficiales de Concesionaria</span>
+          <span className="bg-[#FFFFFF]/10 text-[#00BFFF] border border-[#00BFFF]/30 rounded-full font-bold tracking-widest uppercase px-5 py-1.5 text-[10px] mb-6 inline-block backdrop-blur-sm">100% Sin Costo • Precios Oficiales de Concesionaria</span>
           <h1 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
             Visitá todas las concesionarias<br/><span className="text-[#00BFFF]">en un solo lugar.</span>
           </h1>
           <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8">
-            <Link href="/catalogo" className="bg-[#00BFFF] text-[#FFFFFF] font-bold text-sm uppercase tracking-widest py-5 px-10 transition-colors">Explorar Catálogo</Link>
-            <Link href="/recomendador" className="border-2 border-[#0A1F33] bg-[#FFFFFF] text-[#0A1F33] font-bold text-sm uppercase tracking-widest py-5 px-10 hover:bg-[#0A1F33] hover:text-[#FFFFFF] transition-colors">Encontrá tu Auto Ideal</Link>
+            <Link href="/catalogo" className="bg-[#00BFFF] hover:bg-[#00BFFF]/90 text-[#FFFFFF] font-bold text-sm uppercase tracking-widest py-4 px-10 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">Explorar Catálogo</Link>
+            <Link href="/recomendador" className="border-2 border-[#FFFFFF]/20 bg-[#FFFFFF] text-[#0A1F33] font-bold text-sm uppercase tracking-widest py-4 px-10 rounded-2xl shadow-lg hover:bg-[#00BFFF] hover:text-[#FFFFFF] hover:border-[#00BFFF] hover:-translate-y-0.5 transition-all">Encontrá tu Auto Ideal</Link>
           </div>
         </div>
 
         <div className="w-full max-w-4xl relative mb-6">
-          <div className="flex bg-[#FFFFFF] border-2 border-transparent focus-within:border-[#00BFFF] transition-colors overflow-hidden">
-            <div className="pl-6 flex items-center text-[#C0C0C0]"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
+          <div className="flex bg-[#FFFFFF] border-2 border-transparent focus-within:border-[#00BFFF] rounded-2xl shadow-xl transition-all overflow-hidden">
+            <div className="pl-6 flex items-center text-[#C0C0C0]"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></div>
             <input
               type="text"
               role="combobox"
@@ -394,17 +394,17 @@ export default function HomeClient() {
           </div>
           
           {isDropdownOpen && (
-            <div className="absolute top-full left-0 w-full bg-[#FFFFFF] border-2 border-t-0 border-[#00BFFF] max-h-80 overflow-y-auto z-50 mt-0">
+            <div className="absolute top-full left-0 w-full bg-[#FFFFFF] border border-[#00BFFF]/40 rounded-2xl shadow-2xl max-h-80 overflow-y-auto z-50 mt-2">
               <ul id="home-search-listbox" role="listbox" className="flex flex-col">
                 {searchResults.length > 0 ? searchResults.map((item) => {
                     const dynamicUrl = item.type === 'Modelo' && item.brandId && item.modelId
                       ? `/catalogo/${item.brandId}/${item.modelId}`
                       : `/catalogo?marca=${encodeURIComponent(item.title)}`;
                     return (
-                      <li key={item.id} role="option" aria-selected="false" className="border-b border-[#C0C0C0]/40 last:border-0 hover:bg-[#F8F9FA] transition-colors">
+                      <li key={item.id} role="option" aria-selected="false" className="border-b border-[#0A1F33]/10 last:border-0 hover:bg-[#F8F9FA] transition-colors">
                         <Link href={dynamicUrl} className="flex justify-between items-center px-6 py-4">
                           <div className="flex flex-col"><span className="font-bold text-sm text-[#0A1F33] uppercase">{item.title}</span>{item.subtitle && <span className="text-[10px] text-[#3A3A3C] font-medium uppercase mt-1">{item.subtitle}</span>}</div>
-                          <span className={`text-[9px] font-bold uppercase tracking-widest px-3 py-1 border ${item.type === 'Marca' ? 'border-[#00BFFF] text-[#00BFFF]' : 'border-[#3A3A3C] text-[#3A3A3C]'}`}>{item.type}</span>
+                          <span className={`text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border ${item.type === 'Marca' ? 'border-[#00BFFF] text-[#00BFFF] bg-[#F0FBFF]' : 'border-[#3A3A3C]/30 text-[#3A3A3C] bg-[#F8F9FA]'}`}>{item.type}</span>
                         </Link>
                       </li>
                     )
@@ -421,23 +421,23 @@ export default function HomeClient() {
 
         {/* Filtros Rápidos */}
         <div className="flex flex-wrap justify-center gap-3 px-2 mt-4 max-w-5xl" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
-          <Link href="/catalogo?tipo=SUV" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] transition-colors flex items-center gap-2 border border-[#C0C0C0] hover:border-[#0A1F33]">
-            <svg className="w-4 h-4 text-[#C0C0C0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M8 7h8l2 4v7a1 1 0 01-1 1H7a1 1 0 01-1-1v-7l2-4z"></path></svg> SUVs
+          <Link href="/catalogo?tipo=SUV" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-2 border border-[#FFFFFF]/80">
+            <svg className="w-4 h-4 text-[#00BFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h8l2 4v7a1 1 0 01-1 1H7a1 1 0 01-1-1v-7l2-4z"></path></svg> SUVs
           </Link>
-          <Link href="/catalogo?tipo=SEDAN" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] transition-colors flex items-center gap-2 border border-[#C0C0C0] hover:border-[#0A1F33]">
-            <svg className="w-4 h-4 text-[#C0C0C0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M5 13l4-4h6l4 4m-14 0v4a1 1 0 001 1h12a1 1 0 001-1v-4M5 13h14"></path></svg> Sedanes
+          <Link href="/catalogo?tipo=SEDAN" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-2 border border-[#FFFFFF]/80">
+            <svg className="w-4 h-4 text-[#00BFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4-4h6l4 4m-14 0v4a1 1 0 001 1h12a1 1 0 001-1v-4M5 13h14"></path></svg> Sedanes
           </Link>
-          <Link href="/catalogo?tipo=PICKUP" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] transition-colors flex items-center gap-2 border border-[#C0C0C0] hover:border-[#0A1F33]">
-            <svg className="w-4 h-4 text-[#C0C0C0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M3 10h12m-6 4h12M3 14v4a1 1 0 001 1h16a1 1 0 001-1v-4M5 10l2-4h10l2 4"></path></svg> Pick-ups
+          <Link href="/catalogo?tipo=PICKUP" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-2 border border-[#FFFFFF]/80">
+            <svg className="w-4 h-4 text-[#00BFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h12m-6 4h12M3 14v4a1 1 0 001 1h16a1 1 0 001-1v-4M5 10l2-4h10l2 4"></path></svg> Pick-ups
           </Link>
-          <Link href="/catalogo?combustible=EV" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] transition-colors flex items-center gap-2 border border-[#C0C0C0] hover:border-[#0A1F33]">
-            <svg className="w-4 h-4 text-[#1E8E3E]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Movilidad Eléctrica
+          <Link href="/catalogo?combustible=EV" className="bg-[#FFFFFF] px-5 py-3 text-[11px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-2 border border-[#FFFFFF]/80">
+            <svg className="w-4 h-4 text-[#1E8E3E]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Movilidad Eléctrica
           </Link>
-          <Link href="/negociamos-por-vos" className="bg-[#E6F4EA] px-5 py-3 text-[11px] font-bold text-[#1E8E3E] hover:bg-[#1E8E3E] hover:text-[#FFFFFF] transition-colors flex items-center gap-2 border border-[#1E8E3E]/30 hover:border-[#1E8E3E]">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg> Delegar Negociación
+          <Link href="/negociamos-por-vos" className="bg-[#E6F4EA] px-5 py-3 text-[11px] font-bold text-[#1E8E3E] hover:bg-[#1E8E3E] hover:text-[#FFFFFF] rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-2 border border-[#1E8E3E]/30 hover:border-[#1E8E3E]">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg> Delegar Negociación
           </Link>
-          <Link href="/recomendador" className="bg-[#F5FBFF] px-5 py-3 text-[11px] font-bold text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] transition-colors flex items-center gap-2 border border-[#00BFFF]/30 hover:border-[#00BFFF]">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg> Usar Recomendador
+          <Link href="/recomendador" className="bg-[#F5FBFF] px-5 py-3 text-[11px] font-bold text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center gap-2 border border-[#00BFFF]/30 hover:border-[#00BFFF]">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg> Usar Recomendador
           </Link>
         </div>
       </section>
@@ -452,9 +452,9 @@ export default function HomeClient() {
               href={normalizeExternalUrl(activeAd.link)}
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full relative group overflow-hidden border border-[#C0C0C0] hover:border-[#00BFFF] transition-colors shadow-sm bg-transparent"
+              className="block w-full relative group overflow-hidden rounded-2xl border border-[#0A1F33]/10 hover:border-[#00BFFF] transition-all shadow-md hover:shadow-xl bg-transparent"
             >
-              <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm">
+              <span className="absolute top-3 right-3 bg-[#0A1F33]/85 text-[#FFFFFF] text-[8px] uppercase font-bold px-3.5 py-1 rounded-full tracking-widest border border-[#FFFFFF]/20 z-20 backdrop-blur-sm">
                 Auspicio Oficial: {activeAd.sponsor}
               </span>
               <Image
@@ -473,9 +473,9 @@ export default function HomeClient() {
               href={normalizeExternalUrl(activeAd.link)}
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full bg-[#0A1F33] border-2 border-transparent hover:border-[#00BFFF] p-8 md:p-12 relative transition-colors group overflow-hidden text-center"
+              className="block w-full bg-[#0A1F33] rounded-2xl border-2 border-transparent hover:border-[#00BFFF] p-8 md:p-12 relative transition-all shadow-md hover:shadow-xl group overflow-hidden text-center"
             >
-              <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3 py-1 tracking-widest border border-[#FFFFFF]/20 z-20">
+              <span className="absolute top-4 right-4 bg-[#FFFFFF]/10 text-[#FFFFFF] text-[8px] uppercase font-bold px-3.5 py-1 rounded-full tracking-widest border border-[#FFFFFF]/20 z-20">
                 Auspicio Oficial: {activeAd.sponsor}
               </span>
               <p className="font-black text-3xl md:text-5xl text-[#FFFFFF] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -496,7 +496,7 @@ export default function HomeClient() {
           3. LO MÁS BUSCADO (AUTOS DESTACADOS AMPLIADOS)
           ========================================== */}
       <section className="max-w-[1400px] mx-auto px-4 lg:px-8 mt-14 mb-16">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#0A1F33]/10 pb-4">
           <div>
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Tendencias del Mercado</span>
             <h2 className="font-black text-3xl sm:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -516,14 +516,14 @@ export default function HomeClient() {
           ) : autosMasBuscados.length > 0 ? (
             autosMasBuscados.map((auto) => (
               <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`pop_${auto.id}`} className="block group h-full">
-                <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] hover:border-[#00BFFF] hover:shadow-lg transition-all duration-200 flex flex-col justify-between overflow-hidden relative">
+                <div className="h-full bg-[#FFFFFF] border border-[#0A1F33]/10 rounded-2xl shadow-sm hover:border-[#00BFFF] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden relative">
                   
                   {/* Top Bar: Marca & Categoría */}
-                  <div className="px-5 py-3 border-b border-[#C0C0C0]/30 flex justify-between items-center bg-[#F8F9FA]">
+                  <div className="px-5 py-3.5 border-b border-[#0A1F33]/5 flex justify-between items-center bg-[#F8F9FA]">
                     <span className="text-[10px] font-black text-[#00BFFF] uppercase tracking-wider">
                       {auto.brand}
                     </span>
-                    <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-wider border border-[#C0C0C0] px-2.5 py-0.5 bg-[#FFFFFF]">
+                    <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-wider border border-[#0A1F33]/10 rounded-full px-3 py-0.5 bg-[#FFFFFF]">
                       {auto.category}
                     </span>
                   </div>
@@ -555,22 +555,22 @@ export default function HomeClient() {
                     {/* Ficha Rápida / Atributos Detallados */}
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {auto.combustible && (
-                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2 py-0.5 border border-[#E0E2E6] uppercase">
+                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2.5 py-0.5 rounded-lg border border-[#E0E2E6] uppercase">
                           ⛽ {auto.combustible}
                         </span>
                       )}
                       {auto.transmision && (
-                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2 py-0.5 border border-[#E0E2E6] uppercase">
+                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2.5 py-0.5 rounded-lg border border-[#E0E2E6] uppercase">
                           ⚙️ {auto.transmision.toLowerCase().includes('auto') || auto.transmision.toLowerCase().includes('at') || auto.transmision.toLowerCase().includes('cvt') ? 'Automática' : 'Manual'}
                         </span>
                       )}
                       {auto.plazas ? (
-                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2 py-0.5 border border-[#E0E2E6] uppercase">
+                        <span className="text-[9px] font-bold text-[#3A3A3C] bg-[#F4F5F7] px-2.5 py-0.5 rounded-lg border border-[#E0E2E6] uppercase">
                           👥 {auto.plazas} Plazas
                         </span>
                       ) : null}
                       {auto.versionesCount && auto.versionesCount > 1 ? (
-                        <span className="text-[9px] font-bold text-[#00BFFF] bg-[#F0FBFF] px-2 py-0.5 border border-[#00BFFF]/30 uppercase">
+                        <span className="text-[9px] font-bold text-[#00BFFF] bg-[#F0FBFF] px-2.5 py-0.5 rounded-lg border border-[#00BFFF]/30 uppercase">
                           {auto.versionesCount} Versiones
                         </span>
                       ) : null}
@@ -584,7 +584,7 @@ export default function HomeClient() {
                     )}
 
                     {/* Precio Contado */}
-                    <div className="mt-auto pt-3 border-t border-[#C0C0C0]/50">
+                    <div className="mt-auto pt-3 border-t border-[#0A1F33]/10">
                       <span className="text-[9px] text-[#6A6A6C] font-bold uppercase tracking-widest block mb-0.5">
                         Precio contado desde
                       </span>
@@ -594,7 +594,7 @@ export default function HomeClient() {
                     </div>
 
                     {/* CTA Claro y Prominente */}
-                    <div className="mt-4 w-full bg-[#0A1F33] group-hover:bg-[#00BFFF] text-[#FFFFFF] group-hover:text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-3 text-center transition-all flex items-center justify-center gap-2 border border-transparent shadow-xs">
+                    <div className="mt-4 w-full bg-[#0A1F33] group-hover:bg-[#00BFFF] text-[#FFFFFF] group-hover:text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-3 rounded-xl text-center transition-all flex items-center justify-center gap-2 border border-transparent shadow-xs">
                       <span>Ver Ficha y Versiones</span>
                       <span className="group-hover:translate-x-1 transition-transform">→</span>
                     </div>
@@ -615,8 +615,8 @@ export default function HomeClient() {
           4. CALCULADORA FINANCIERA COMPRIMIDA HORIZONTALMENTE
           ========================================== */}
       <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-14">
-        <div className="bg-[#FFFFFF] border-2 border-[#0A1F33] p-6 lg:p-8">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-2 mb-6 border-b border-[#C0C0C0]/50 pb-4">
+        <div className="bg-[#FFFFFF] border border-[#0A1F33]/15 rounded-3xl shadow-lg p-6 lg:p-8">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-2 mb-6 border-b border-[#0A1F33]/10 pb-4">
             <div>
               <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Simulación Financiera</span>
               <h2 className="font-black text-2xl md:text-3xl text-[#0A1F33] uppercase leading-tight" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -632,20 +632,20 @@ export default function HomeClient() {
               {/* 1. Selección de Modelo */}
               <div className="relative">
                 <label className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1.5 block">1. Modelo</label>
-                <div className="flex bg-[#F5F5F5] border border-[#C0C0C0] focus-within:border-[#00BFFF] transition-colors relative">
+                <div className="flex bg-[#F8F9FA] border border-[#0A1F33]/15 rounded-xl focus-within:border-[#00BFFF] focus-within:bg-[#FFFFFF] transition-all relative">
                   <input
                     type="text"
                     placeholder="Escribí modelo..."
-                    className="w-full py-2.5 px-3 text-xs font-medium text-[#3A3A3C] bg-transparent focus:outline-none"
+                    className="w-full py-3 px-3.5 text-xs font-medium text-[#3A3A3C] bg-transparent focus:outline-none rounded-xl"
                     value={calcModel ? calcModel.title : calcSearchTerm}
                     onChange={(e) => { setCalcSearchTerm(e.target.value); setCalcModel(null); }}
                     onFocus={() => calcSearchTerm.length >= 2 && setCalcDropdownOpen(true)}
                   />
                 </div>
                 {calcDropdownOpen && calcSearchResults.length > 0 && (
-                  <ul className="absolute top-full left-0 w-full bg-[#FFFFFF] border-2 border-t-0 border-[#00BFFF] max-h-48 overflow-y-auto z-50 shadow-lg">
+                  <ul className="absolute top-full left-0 w-full bg-[#FFFFFF] border border-[#00BFFF]/40 rounded-xl max-h-48 overflow-y-auto z-50 shadow-xl mt-1">
                     {calcSearchResults.map(item => (
-                      <li key={item.id} className="px-3 py-2 hover:bg-[#F8F9FA] cursor-pointer text-xs border-b border-[#C0C0C0]/30 last:border-none" onClick={() => { setCalcModel(item); setCalcSearchTerm(''); setCalcDropdownOpen(false); }}>
+                      <li key={item.id} className="px-3.5 py-2.5 hover:bg-[#F8F9FA] cursor-pointer text-xs border-b border-[#0A1F33]/5 last:border-none" onClick={() => { setCalcModel(item); setCalcSearchTerm(''); setCalcDropdownOpen(false); }}>
                         <span className="font-bold text-[#0A1F33] uppercase">{item.title}</span>
                       </li>
                     ))}
@@ -659,7 +659,7 @@ export default function HomeClient() {
                 <input
                   type="number"
                   placeholder="Ej: 5000"
-                  className="w-full py-2.5 px-3 text-xs font-medium text-[#3A3A3C] bg-[#F5F5F5] border border-[#C0C0C0] focus:outline-none focus:border-[#00BFFF]"
+                  className="w-full py-3 px-3.5 text-xs font-medium text-[#3A3A3C] bg-[#F8F9FA] border border-[#0A1F33]/15 rounded-xl focus:outline-none focus:border-[#00BFFF] focus:bg-[#FFFFFF]"
                   value={calcDownPayment}
                   onChange={(e) => setCalcDownPayment(e.target.value)}
                 />
@@ -671,7 +671,7 @@ export default function HomeClient() {
                 <select
                   value={calcTerm}
                   onChange={(e) => setCalcTerm(Number(e.target.value))}
-                  className="w-full py-2.5 px-3 text-xs font-medium text-[#3A3A3C] bg-[#F5F5F5] border border-[#C0C0C0] focus:outline-none focus:border-[#00BFFF] rounded-none cursor-pointer"
+                  className="w-full py-3 px-3.5 text-xs font-medium text-[#3A3A3C] bg-[#F8F9FA] border border-[#0A1F33]/15 rounded-xl focus:outline-none focus:border-[#00BFFF] focus:bg-[#FFFFFF] cursor-pointer"
                 >
                   {[12, 24, 36, 48, 60].map(term => (
                     <option key={term} value={term}>{term} meses</option>
@@ -684,7 +684,7 @@ export default function HomeClient() {
                 <button
                   type="button"
                   onClick={handleCalculate}
-                  className="w-full bg-[#00BFFF] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-3 px-4 transition-colors rounded-none text-center"
+                  className="w-full bg-[#00BFFF] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-3.5 px-4 transition-all rounded-xl shadow-sm text-center"
                 >
                   Calcular
                 </button>
@@ -692,10 +692,10 @@ export default function HomeClient() {
             </div>
 
             {/* Separador Vertical */}
-            <div className="hidden xl:block w-px self-stretch bg-[#C0C0C0]/50"></div>
+            <div className="hidden xl:block w-px self-stretch bg-[#0A1F33]/10"></div>
 
             {/* Resultado a la Derecha Mismo */}
-            <div className="xl:w-80 bg-[#0A1F33] text-[#FFFFFF] p-5 flex flex-col justify-between shrink-0">
+            <div className="xl:w-80 bg-[#0A1F33] text-[#FFFFFF] p-6 rounded-2xl shadow-md flex flex-col justify-between shrink-0">
               {calcResult !== null ? (
                 <>
                   <div className="mb-3">
@@ -711,7 +711,7 @@ export default function HomeClient() {
                       origenLead: 'Calculadora Rápida Home',
                       concesionariaDestino: 'Central'
                     })}
-                    className="w-full bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-4 transition-colors text-center"
+                    className="w-full bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-[11px] uppercase tracking-widest py-3 px-4 rounded-xl transition-all text-center shadow-sm"
                   >
                     Solicitá tu crédito →
                   </button>
@@ -732,7 +732,7 @@ export default function HomeClient() {
           5. AUTOS POR MENOS DE
           ========================================== */}
       <section className="w-full max-w-[1400px] mx-auto px-4 lg:px-8 my-16 min-w-0">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6 border-b border-[#C0C0C0] pb-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6 border-b border-[#0A1F33]/10 pb-4">
           <div>
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Segmentos de Precio</span>
             <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -745,14 +745,14 @@ export default function HomeClient() {
         </div>
         
         {/* Pestañas Lógicas Dinámicas */}
-        <div className="flex gap-2 mb-8 overflow-x-auto custom-scrollbar pb-2">
+        <div className="flex gap-2.5 mb-8 overflow-x-auto custom-scrollbar pb-2">
           {validPriceTabs.map(tab => (
             <button 
               key={tab.id} 
               onClick={() => setActivePriceTab(tab.id)} 
-              className={`px-6 py-3 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors border ${activePriceTab === tab.id ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33]' : 'bg-[#F5F5F5] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'}`}
+              className={`px-6 py-3 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap rounded-xl transition-all border ${activePriceTab === tab.id ? 'bg-[#0A1F33] text-[#FFFFFF] border-[#0A1F33] shadow-sm' : 'bg-[#FFFFFF] text-[#3A3A3C] border-[#0A1F33]/15 hover:border-[#0A1F33]'}`}
             >
-              {tab.label} <span className={`font-normal text-[10px] ml-1 ${activePriceTab === tab.id ? 'text-[#C0C0C0]' : 'text-[#3A3A3C]/70'}`}>({tab.count} autos)</span>
+              {tab.label} <span className={`font-normal text-[10px] ml-1 ${activePriceTab === tab.id ? 'text-[#00BFFF]' : 'text-[#3A3A3C]/70'}`}>({tab.count} autos)</span>
             </button>
           ))}
           {validPriceTabs.length === 0 && !isLoading && (
@@ -765,14 +765,14 @@ export default function HomeClient() {
              <div className="col-span-full py-10 text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">Filtrando mercado...</div>
           ) : autosFiltradosPorPrecio.length > 0 ? (
             autosFiltradosPorPrecio.map((auto) => (
-              <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`precio_${auto.id}`} className="block">
-                <div className="h-full bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col hover:border-[#0A1F33] transition-colors group overflow-hidden">
-                  <div className="p-3 flex justify-end shrink-0 h-10 border-b border-[#C0C0C0]/20">
-                    <span className="text-[8px] border border-[#C0C0C0] text-[#3A3A3C] px-2 py-1 uppercase font-bold bg-[#F8F9FA] truncate max-w-full block">
+              <Link href={`/catalogo/${auto.brandId}/${auto.id}`} key={`precio_${auto.id}`} className="block h-full">
+                <div className="h-full bg-[#FFFFFF] border border-[#0A1F33]/10 rounded-2xl shadow-xs hover:shadow-lg hover:-translate-y-0.5 flex flex-col hover:border-[#00BFFF] transition-all duration-300 group overflow-hidden">
+                  <div className="p-3 flex justify-end shrink-0 h-10 border-b border-[#0A1F33]/5">
+                    <span className="text-[8px] border border-[#0A1F33]/10 rounded-full text-[#3A3A3C] px-2.5 py-0.5 uppercase font-bold bg-[#F8F9FA] truncate max-w-full block">
                       {auto.category}
                     </span>
                   </div>
-                  <div className="relative p-4 pt-0 shrink-0 h-32 bg-[#FFFFFF] group-hover:bg-[#F8F9FA] transition-colors">
+                  <div className="relative p-4 pt-0 shrink-0 h-32 bg-[#FFFFFF] group-hover:bg-[#F8F9FA]/50 transition-colors">
                     {isValidImageSrc(auto.img) ? (
                       <Image
                         src={auto.img}
@@ -786,12 +786,12 @@ export default function HomeClient() {
                       <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
                     )}
                   </div>
-                  <div className="p-4 flex flex-col flex-grow border-t border-[#C0C0C0] bg-[#F8F9FA]">
-                    <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
-                    <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight h-8 line-clamp-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  <div className="p-4 flex flex-col flex-grow border-t border-[#0A1F33]/5 bg-[#F8F9FA]">
+                    <p className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest mb-1 truncate">{auto.brand}</p>
+                    <h3 className="font-black text-[13px] text-[#0A1F33] uppercase leading-tight h-8 line-clamp-2 group-hover:text-[#00BFFF] transition-colors" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                       {auto.name}
                     </h3>
-                    <div className="mt-auto pt-3 border-t border-[#C0C0C0]/50">
+                    <div className="mt-auto pt-3 border-t border-[#0A1F33]/10">
                       <p className="text-[8px] uppercase tracking-widest text-[#3A3A3C] font-bold mb-0.5">Desde</p>
                       <p className="font-black text-[14px] text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
                         US$ {auto.price.toLocaleString()}
@@ -802,7 +802,7 @@ export default function HomeClient() {
               </Link>
             ))
           ) : (
-            <div className="col-span-full py-10 border border-[#C0C0C0] bg-[#F8F9FA] text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">
+            <div className="col-span-full py-10 border border-[#0A1F33]/10 rounded-2xl bg-[#F8F9FA] text-center font-bold text-[#C0C0C0] uppercase tracking-widest text-[10px]">
               Selecciona un rango de precios.
             </div>
           )}
@@ -813,7 +813,7 @@ export default function HomeClient() {
           6. MARCAS POPULARES
           ========================================== */}
       <section id="marcas-section" className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#0A1F33]/10 pb-4">
           <div>
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Ecosistema Oficial</span>
             <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -829,9 +829,9 @@ export default function HomeClient() {
             <p className="text-[10px] uppercase text-[#C0C0C0] font-bold tracking-widest">Escaneando mercado...</p>
           ) : marcas.length > 0 ? (
             marcas.slice(0, 10).map((marca) => (
-              <Link href={`/catalogo?marca=${encodeURIComponent(marca.name)}`} key={marca.id} className="w-28 h-28 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col justify-center items-center hover:border-[#0A1F33] transition-colors group">
+              <Link href={`/catalogo?marca=${encodeURIComponent(marca.name)}`} key={marca.id} className="w-28 h-28 bg-[#FFFFFF] border border-[#0A1F33]/10 rounded-2xl shadow-xs hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-center items-center hover:border-[#00BFFF] transition-all group">
                 {isValidImageSrc(marca.logoUrl) ? (
-                  <div className="relative w-12 h-12 mb-3 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <div className="relative w-12 h-12 mb-3 opacity-85 group-hover:opacity-100 transition-opacity">
                     <Image
                       src={marca.logoUrl}
                       alt={marca.name}
@@ -842,11 +842,11 @@ export default function HomeClient() {
                     />
                   </div>
                 ) : (
-                  <div className="w-12 h-12 bg-[#F5F5F5] mb-3 flex justify-center items-center group-hover:bg-[#0A1F33] transition-colors text-[10px] text-[#C0C0C0] group-hover:text-[#FFFFFF] uppercase font-bold">
+                  <div className="w-12 h-12 bg-[#F8F9FA] rounded-xl mb-3 flex justify-center items-center group-hover:bg-[#0A1F33] transition-colors text-[10px] text-[#3A3A3C] group-hover:text-[#FFFFFF] uppercase font-bold">
                     {marca.name.substring(0,2)}
                   </div>
                 )}
-                <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest truncate max-w-[90%]">
+                <span className="text-[9px] font-bold text-[#3A3A3C] group-hover:text-[#0A1F33] uppercase tracking-widest truncate max-w-[90%]">
                   {marca.name}
                 </span>
               </Link>
@@ -856,7 +856,7 @@ export default function HomeClient() {
           )}
           
           {marcas.length > 10 && (
-            <Link href="/catalogo" className="w-28 h-28 bg-[#F8F9FA] border border-dashed border-[#C0C0C0] flex flex-col justify-center items-center hover:border-[#00BFFF] transition-colors group">
+            <Link href="/catalogo" className="w-28 h-28 bg-[#F8F9FA] border border-dashed border-[#0A1F33]/20 rounded-2xl flex flex-col justify-center items-center hover:border-[#00BFFF] hover:bg-[#FFFFFF] transition-all group">
               <span className="text-2xl text-[#C0C0C0] group-hover:text-[#00BFFF] mb-2">+</span>
               <span className="text-[9px] font-bold text-[#C0C0C0] group-hover:text-[#00BFFF] uppercase tracking-widest text-center px-2">Ver Todas</span>
             </Link>
@@ -868,7 +868,7 @@ export default function HomeClient() {
           7. COMPARACIONES POPULARES
           ========================================== */}
       <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#C0C0C0] pb-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-8 border-b border-[#0A1F33]/10 pb-4">
           <div>
             <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">Métricas de Interés</span>
             <h2 className="font-black text-3xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -880,13 +880,13 @@ export default function HomeClient() {
             Ir al comparador →
           </Link>
         </div>
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap gap-3.5">
           {topComparisons.length > 0 ? (
             topComparisons.map((comp, idx) => (
               <Link
                 key={idx}
                 href={`/comparador?autos=${Array.isArray(comp.ids) ? comp.ids.join(',') : comp.ids}`}
-                className="border border-[#C0C0C0] hover:border-[#00BFFF] bg-[#FFFFFF] p-4 text-center font-bold text-[#0A1F33] text-[11px] uppercase tracking-widest transition-colors hover:text-[#00BFFF]"
+                className="border border-[#0A1F33]/10 hover:border-[#00BFFF] bg-[#FFFFFF] rounded-xl shadow-xs hover:shadow-md hover:-translate-y-0.5 px-5 py-4 text-center font-bold text-[#0A1F33] text-[11px] uppercase tracking-widest transition-all hover:text-[#00BFFF]"
               >
                 {comp.combo}
               </Link>
@@ -901,19 +901,19 @@ export default function HomeClient() {
           8. NEGOCIAMOS POR VOS
           ========================================== */}
       <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
-        <div className="bg-[#0A1F33] border border-[#0A1F33] w-full p-6 md:p-14 flex flex-col md:flex-row items-center justify-between relative">
+        <div className="bg-[#0A1F33] border border-[#0A1F33] rounded-3xl shadow-xl overflow-hidden w-full p-6 md:p-14 flex flex-col md:flex-row items-center justify-between relative">
           <div className="absolute top-0 left-0 w-2 h-full bg-[#00BFFF]"></div>
           <div className="md:w-1/2 z-10 mb-8 md:mb-0 md:pr-8">
-            <span className="border border-[#00BFFF] text-[#00BFFF] text-[9px] font-bold uppercase px-3 py-1 tracking-widest mb-4 inline-block bg-[#FFFFFF]/5">Nuevo Servicio</span>
+            <span className="border border-[#00BFFF]/50 text-[#00BFFF] rounded-full text-[9px] font-bold uppercase px-3.5 py-1 tracking-widest mb-4 inline-block bg-[#FFFFFF]/5">Nuevo Servicio</span>
             <h2 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
             <p className="text-[#C0C0C0] text-sm max-w-md mb-8 leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>El mercado vende autos todos los días. Vos comprás uno cada 5 años. Ponemos nuestra experiencia técnica y financiera a tu favor.</p>
-            <Link href="/negociamos-por-vos" className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-10 transition-colors inline-block">Consultar Asesoría →</Link>
+            <Link href="/negociamos-por-vos" className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-10 rounded-xl shadow-md transition-all inline-block">Consultar Asesoría →</Link>
           </div>
           <div className="md:w-1/2 flex justify-end w-full z-10">
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-lg text-center">
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
-              <div className="border border-[#FFFFFF]/20 p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-colors"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 w-full max-w-lg text-center">
+              <div className="border border-[#FFFFFF]/15 rounded-2xl p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-all backdrop-blur-xs"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
+              <div className="border border-[#FFFFFF]/15 rounded-2xl p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-all backdrop-blur-xs"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
+              <div className="border border-[#FFFFFF]/15 rounded-2xl p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-all backdrop-blur-xs"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
               <p className="col-span-2 lg:col-span-3 text-[9px] text-[#C0C0C0]/70 leading-relaxed text-left mt-1">
                 Promedios sobre operaciones cerradas a través de DATACAR. El ahorro compara el precio final negociado contra el precio de lista publicado; el retorno es ese ahorro frente al costo del servicio.
               </p>
