@@ -173,7 +173,7 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<User | null>(null);
 
   // Pestañas del Sistema
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'financiero' | 'accesos' | 'analitica' | 'blog' | 'newsletter'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'slider_home' | 'financiero' | 'accesos' | 'analitica' | 'blog' | 'newsletter'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -300,6 +300,48 @@ export default function AdminDashboardPage() {
   const [adModelFilterConcesionaria, setAdModelFilterConcesionaria] = useState('Todas');
   const [adModelFilterMarca, setAdModelFilterMarca] = useState('Todas');
   const [adVaultFilterLocation, setAdVaultFilterLocation] = useState('todos');
+
+  // CONFIGURACIÓN DE SLIDER HOME (Hasta 3 modelos destacados + 2 sugerencias de ubicación)
+  const [homeSliderConfig, setHomeSliderConfig] = useState<{
+    enabled: boolean;
+    activeVariant: 'sugerencia_1' | 'sugerencia_2' | 'ambas';
+    slides: Array<{
+      id: string;
+      modelId: string;
+      badgeText: string;
+      customText: string;
+      ctaText: string;
+      ctaAction: 'cotizar' | 'ficha' | 'url';
+      ctaUrl: string;
+      isActive: boolean;
+      order: number;
+    }>;
+  }>({
+    enabled: true,
+    activeVariant: 'ambas',
+    slides: [],
+  });
+  const [sliderSlideForm, setSliderSlideForm] = useState<{
+    id: string;
+    modelId: string;
+    badgeText: string;
+    customText: string;
+    ctaText: string;
+    ctaAction: 'cotizar' | 'ficha' | 'url';
+    ctaUrl: string;
+    isActive: boolean;
+  }>({
+    id: '',
+    modelId: '',
+    badgeText: 'Destacado del Mes',
+    customText: '',
+    ctaText: 'Solicitar Cotización Directa',
+    ctaAction: 'cotizar',
+    ctaUrl: '',
+    isActive: true,
+  });
+  const [sliderFilterConcesionaria, setSliderFilterConcesionaria] = useState('Todas');
+  const [sliderFilterMarca, setSliderFilterMarca] = useState('Todas');
   
   const [finForm, setFinForm] = useState({ tasa_anual: 0.09, gastos_admin: 0.022, seguro_vida: 0.005 });
 
@@ -352,7 +394,7 @@ export default function AdminDashboardPage() {
         }
       };
 
-      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap, newsSnap, newsSubSnap, wizSnap] = await Promise.all([
+      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap, newsSnap, newsSubSnap, wizSnap, sliderSnap] = await Promise.all([
         safeFetch(collection(db, 'brands'), 'brands'),
         safeFetch(collection(db, 'models'), 'models'),
         safeFetch(collection(db, 'versions'), 'versions'),
@@ -367,6 +409,7 @@ export default function AdminDashboardPage() {
         safeFetch(collection(db, 'newsletter'), 'newsletter'),
         safeFetch(collection(db, 'newsletter_subscribers'), 'newsletter_subscribers'),
         safeFetch(collection(db, 'wizard_stats'), 'wizard_stats'),
+        getDoc(doc(db, 'config', 'home_slider')).catch(() => null),
       ]);
       
       setMarcasList(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -377,6 +420,15 @@ export default function AdminDashboardPage() {
       setComparisonStatsList(compSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setBlogPostsList(blogSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setVideoReviewsList(videosSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      if (sliderSnap && sliderSnap.exists()) {
+        const sData = sliderSnap.data();
+        setHomeSliderConfig({
+          enabled: sData.enabled !== false,
+          activeVariant: sData.activeVariant || 'ambas',
+          slides: Array.isArray(sData.slides) ? sData.slides.slice(0, 3) : [],
+        });
+      }
       
       // Accesos B2B y Admins
       setUsuariosSistemaList(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -607,6 +659,41 @@ export default function AdminDashboardPage() {
     if (abmVerFilterMarca === 'Todas') return modelosList;
     return modelosList.filter(m => m.brandId === abmVerFilterMarca);
   }, [modelosList, abmVerFilterMarca]);
+
+  // Filtros en cascada para el Slider Home (Concesionaria -> Marca -> Modelo)
+  const marcasParaSlider = useMemo(() => {
+    const sortedMarcas = [...marcasList].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (sliderFilterConcesionaria === 'Todas') return sortedMarcas;
+    const modelIdsOfDealer = new Set(
+      versionesList
+        .filter(v => (v.concesionaria || '').trim().toUpperCase() === sliderFilterConcesionaria.toUpperCase())
+        .map(v => v.modelId)
+    );
+    const brandIdsOfDealer = new Set(
+      modelosList.filter(m => modelIdsOfDealer.has(m.id)).map(m => m.brandId)
+    );
+    return sortedMarcas.filter(b => brandIdsOfDealer.has(b.id));
+  }, [marcasList, modelosList, versionesList, sliderFilterConcesionaria]);
+
+  const modelosParaSlider = useMemo(() => {
+    let list = [...modelosList];
+    if (sliderFilterConcesionaria !== 'Todas') {
+      const modelIdsOfDealer = new Set(
+        versionesList
+          .filter(v => (v.concesionaria || '').trim().toUpperCase() === sliderFilterConcesionaria.toUpperCase())
+          .map(v => v.modelId)
+      );
+      list = list.filter(m => modelIdsOfDealer.has(m.id));
+    }
+    if (sliderFilterMarca !== 'Todas') {
+      list = list.filter(m => m.brandId === sliderFilterMarca);
+    }
+    return list.sort((a, b) => {
+      const brandA = marcasList.find(br => br.id === a.brandId)?.name || '';
+      const brandB = marcasList.find(br => br.id === b.brandId)?.name || '';
+      return `${brandA} ${a.name}`.localeCompare(`${brandB} ${b.name}`);
+    });
+  }, [modelosList, versionesList, marcasList, sliderFilterConcesionaria, sliderFilterMarca]);
 
   // Orígenes únicos de marcas para filtro ABM Marcas
   const origenesMarcasUnicos = useMemo(() => {
@@ -2089,6 +2176,220 @@ export default function AdminDashboardPage() {
   };
 
   // ==========================================
+  // OPERACIONES DE SLIDER HOME (MÁX. 3 MODELOS)
+  // ==========================================
+  const persistHomeSliderConfig = async (
+    nextConfig: typeof homeSliderConfig,
+    successMsg = 'Configuración del Slider Home guardada con éxito.'
+  ) => {
+    setLoading(true);
+    try {
+      const sanitizedSlides = nextConfig.slides.slice(0, 3).map((s, idx) => ({
+        ...s,
+        order: idx + 1,
+      }));
+      const payload = {
+        enabled: nextConfig.enabled,
+        activeVariant: nextConfig.activeVariant,
+        slides: sanitizedSlides,
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(doc(db, 'config', 'home_slider'), payload, { merge: true });
+      setHomeSliderConfig({
+        enabled: nextConfig.enabled,
+        activeVariant: nextConfig.activeVariant,
+        slides: sanitizedSlides,
+      });
+      setFeedback({ type: 'success', message: successMsg });
+      showToast(successMsg);
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Error al guardar Slider Home: ${err.message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveSliderSlide = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sliderSlideForm.modelId) {
+      setFeedback({ type: 'error', message: 'Seleccioná un modelo del catálogo para destacar en el banner.' });
+      return;
+    }
+    if (!sliderSlideForm.customText.trim()) {
+      setFeedback({ type: 'error', message: 'Ingresá el texto descriptivo o promocional para el banner.' });
+      return;
+    }
+    if (!sliderSlideForm.ctaText.trim()) {
+      setFeedback({ type: 'error', message: 'Ingresá el texto del botón CTA.' });
+      return;
+    }
+    if (sliderSlideForm.ctaAction === 'url' && !sliderSlideForm.ctaUrl.trim()) {
+      setFeedback({ type: 'error', message: 'Ingresá la URL de destino para el botón CTA.' });
+      return;
+    }
+
+    const isEditing = Boolean(sliderSlideForm.id);
+    if (!isEditing && homeSliderConfig.slides.length >= 3) {
+      setFeedback({
+        type: 'error',
+        message: 'Límite alcanzado: El Slider Home permite hasta un máximo de 3 banners. Editá o eliminá uno existente.',
+      });
+      showToast('Máximo 3 banners permitidos en el Slider Home.');
+      return;
+    }
+
+    const slideItem = {
+      id: sliderSlideForm.id || `slide_${generarId()}`,
+      modelId: sliderSlideForm.modelId,
+      badgeText: sliderSlideForm.badgeText.trim() || 'Modelo Destacado',
+      customText: sliderSlideForm.customText.trim(),
+      ctaText: sliderSlideForm.ctaText.trim(),
+      ctaAction: sliderSlideForm.ctaAction,
+      ctaUrl: sliderSlideForm.ctaAction === 'url' ? sliderSlideForm.ctaUrl.trim() : '',
+      isActive: sliderSlideForm.isActive,
+      order: isEditing
+        ? (homeSliderConfig.slides.find(s => s.id === sliderSlideForm.id)?.order || 1)
+        : homeSliderConfig.slides.length + 1,
+    };
+
+    const nextSlides = isEditing
+      ? homeSliderConfig.slides.map(s => (s.id === sliderSlideForm.id ? slideItem : s))
+      : [...homeSliderConfig.slides, slideItem].slice(0, 3);
+
+    await persistHomeSliderConfig(
+      { ...homeSliderConfig, slides: nextSlides },
+      isEditing ? 'Banner del Slider Home actualizado.' : 'Banner agregado al Slider Home.'
+    );
+
+    setSliderSlideForm({
+      id: '',
+      modelId: '',
+      badgeText: 'Destacado del Mes',
+      customText: '',
+      ctaText: 'Solicitar Cotización Directa',
+      ctaAction: 'cotizar',
+      ctaUrl: '',
+      isActive: true,
+    });
+    setSliderFilterConcesionaria('Todas');
+    setSliderFilterMarca('Todas');
+  };
+
+  const handleEditSliderSlide = (slide: any) => {
+    setSliderSlideForm({
+      id: slide.id,
+      modelId: slide.modelId || '',
+      badgeText: slide.badgeText || 'Destacado del Mes',
+      customText: slide.customText || '',
+      ctaText: slide.ctaText || 'Solicitar Cotización Directa',
+      ctaAction: slide.ctaAction || 'cotizar',
+      ctaUrl: slide.ctaUrl || '',
+      isActive: slide.isActive !== false,
+    });
+    setSliderFilterConcesionaria('Todas');
+    setSliderFilterMarca('Todas');
+  };
+
+  const handleResetSliderSlideForm = () => {
+    setSliderSlideForm({
+      id: '',
+      modelId: '',
+      badgeText: 'Destacado del Mes',
+      customText: '',
+      ctaText: 'Solicitar Cotización Directa',
+      ctaAction: 'cotizar',
+      ctaUrl: '',
+      isActive: true,
+    });
+    setSliderFilterConcesionaria('Todas');
+    setSliderFilterMarca('Todas');
+  };
+
+  const handleDeleteSliderSlide = async (slideId: string) => {
+    const nextSlides = homeSliderConfig.slides.filter(s => s.id !== slideId);
+    await persistHomeSliderConfig(
+      { ...homeSliderConfig, slides: nextSlides },
+      'Banner eliminado del Slider Home.'
+    );
+    if (sliderSlideForm.id === slideId) {
+      handleResetSliderSlideForm();
+    }
+  };
+
+  const handleToggleSliderSlide = async (slideId: string) => {
+    const nextSlides = homeSliderConfig.slides.map(s =>
+      s.id === slideId ? { ...s, isActive: !s.isActive } : s
+    );
+    await persistHomeSliderConfig(
+      { ...homeSliderConfig, slides: nextSlides },
+      'Estado del banner actualizado.'
+    );
+  };
+
+  const handleMoveSliderSlide = async (idx: number, direction: -1 | 1) => {
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= homeSliderConfig.slides.length) return;
+    const copy = [...homeSliderConfig.slides];
+    const temp = copy[idx];
+    copy[idx] = copy[targetIdx];
+    copy[targetIdx] = temp;
+    await persistHomeSliderConfig(
+      { ...homeSliderConfig, slides: copy },
+      'Orden de banners actualizado.'
+    );
+  };
+
+  const handleLoadDemoSliderSlides = async () => {
+    const candidates = modelosList.filter(m => m.imgUrl && m.isPopular).slice(0, 3);
+    const pool = candidates.length >= 3 ? candidates : modelosList.filter(m => m.imgUrl).slice(0, 3);
+    if (pool.length === 0) {
+      showToast('Aún no hay modelos con imagen en el catálogo.');
+      return;
+    }
+    const presets = [
+      {
+        badgeText: 'Destacado del Mes',
+        customText: 'Bonificación especial por tiempo limitado y entrega inmediata en representantes oficiales con respaldo DATACAR CHECK.',
+        ctaText: 'Solicitar Cotización Directa',
+        ctaAction: 'cotizar' as const,
+      },
+      {
+        badgeText: 'Oportunidad 0km',
+        customText: 'Financiación preferencial disponible y equipamiento de seguridad de última generación para ciudad y ruta.',
+        ctaText: 'Cotizar con Beneficio',
+        ctaAction: 'cotizar' as const,
+      },
+      {
+        badgeText: 'Lanzamiento Oficial',
+        customText: 'Conocé todas las versiones disponibles en Paraguay, compará su ficha técnica oficial y agendá tu Test Drive hoy.',
+        ctaText: 'Recibir Oferta Oficial',
+        ctaAction: 'cotizar' as const,
+      },
+    ];
+
+    const demoSlides = pool.slice(0, 3).map((m, idx) => ({
+      id: `slide_demo_${idx + 1}`,
+      modelId: m.id,
+      badgeText: presets[idx]?.badgeText || 'Modelo Destacado',
+      customText: presets[idx]?.customText || 'Consultá disponibilidad y financiación oficial.',
+      ctaText: presets[idx]?.ctaText || 'Solicitar Cotización',
+      ctaAction: presets[idx]?.ctaAction || ('cotizar' as const),
+      ctaUrl: '',
+      isActive: true,
+      order: idx + 1,
+    }));
+
+    await persistHomeSliderConfig(
+      {
+        ...homeSliderConfig,
+        enabled: true,
+        slides: demoSlides,
+      },
+      'Se cargaron 3 modelos destacados de prueba en el Slider Home.'
+    );
+  };
+
+  // ==========================================
   // OPERACIONES DE NEWSLETTER & BROADCASTING
   // ==========================================
   const handleSendTestEmail = async () => {
@@ -2649,6 +2950,12 @@ export default function AdminDashboardPage() {
           <span className="text-[#C0C0C0] px-6 mt-6 mb-3">Herramientas</span>
           <button onClick={() => { setActiveTab('inyector'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'inyector' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Inyector CSV</button>
           <button onClick={() => { setActiveTab('ads'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'ads' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Ads Manager</button>
+          <button onClick={() => { setActiveTab('slider_home'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 flex items-center justify-between ${activeTab === 'slider_home' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>
+            <span>🎠 Slider Home</span>
+            <span className={`text-[8px] font-black px-1.5 py-0.5 ${activeTab === 'slider_home' ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#FFFFFF]/15 text-white'}`}>
+              {homeSliderConfig.slides.length}/3
+            </span>
+          </button>
           <button onClick={() => { setActiveTab('blog'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'blog' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Blog & Reseñas IG</button>
         </nav>
 
@@ -4875,7 +5182,32 @@ export default function AdminDashboardPage() {
           )}
 
           {activeTab === 'ads' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 h-full">
+            <div className="flex flex-col gap-6 h-full">
+              {/* ACCESO RÁPIDO AL SLIDER HOME DE MODELOS DESTACADOS (MÁX. 3 BANNERS) */}
+              <div className="bg-[#0A1F33] text-white border border-[#00BFFF]/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase tracking-widest px-2 py-0.5">
+                      NUEVO EXPERIMENTO HOME
+                    </span>
+                    <span className="text-xs font-black uppercase tracking-wider">
+                      🎠 Banner Slider de Modelos Destacados en HOME (Máx. 3 Banners)
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[#C0C0C0] mt-1">
+                    Elegí hasta 3 modelos del catálogo, personalizá el texto promocional, el botón CTA y alterná entre las 2 sugerencias de ubicación en el Home.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('slider_home')}
+                  className="bg-[#00BFFF] hover:bg-white text-[#0A1F33] font-black text-[10px] uppercase tracking-widest px-5 py-3 transition-colors shrink-0 cursor-pointer"
+                >
+                  Configurar Slider Home ({homeSliderConfig.slides.length}/3) →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 flex-1">
               {/* COLUMNA IZQUIERDA: INYECTOR DE ADS POR ESPACIO PUBLICITARIO */}
               <div className="xl:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-fit overflow-y-auto custom-scrollbar">
                 <div className="flex items-center justify-between mb-4 border-b border-[#C0C0C0] pb-3">
@@ -5418,6 +5750,444 @@ export default function AdminDashboardPage() {
                       </>
                     );
                   })()}
+                </div>
+              </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================= */}
+          {/* VISTA: SLIDER HOME (MÁX. 3 MODELOS)    */}
+          {/* ======================================= */}
+          {activeTab === 'slider_home' && (
+            <div className="flex flex-col gap-6 h-full">
+              {/* CABECERA GLOBAL DEL SLIDER HOME */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 shrink-0">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-[#0A1F33] text-[#00BFFF] text-[9px] font-black uppercase tracking-widest px-2.5 py-1">
+                        SLIDER DE MODELOS DESTACADOS • HOME
+                      </span>
+                      <span className={`text-[9px] font-black uppercase px-2.5 py-1 border ${
+                        homeSliderConfig.enabled
+                          ? 'bg-[#ECFDF5] border-[#6EE7B7] text-[#059669]'
+                          : 'bg-[#FEF2F2] border-[#FCA5A5] text-[#DC2626]'
+                      }`}>
+                        {homeSliderConfig.enabled ? 'Slider Activo en Home' : 'Slider Desactivado'}
+                      </span>
+                    </div>
+                    <h2 className="font-black text-lg text-[#0A1F33] uppercase mt-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      Configurador de Banner Slider en Home (Límite: Hasta 3 Banners)
+                    </h2>
+                    <p className="text-[11px] text-[#3A3A3C] mt-0.5">
+                      Ubicación fija: <strong>Entre &ldquo;Lo más buscado&rdquo; y la &ldquo;Calculadora de Cuotas&rdquo;</strong>. Elegí hasta 3 modelos del catálogo, personalizá el texto promocional y el botón CTA.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        persistHomeSliderConfig(
+                          { ...homeSliderConfig, enabled: !homeSliderConfig.enabled },
+                          homeSliderConfig.enabled ? 'Slider Home pausado.' : 'Slider Home activado.'
+                        )
+                      }
+                      className={`text-[10px] font-bold uppercase tracking-widest px-4 py-2.5 border transition-colors cursor-pointer ${
+                        homeSliderConfig.enabled
+                          ? 'border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-white'
+                          : 'bg-[#1E8E3E] border-[#1E8E3E] text-white hover:bg-[#15652C]'
+                      }`}
+                    >
+                      {homeSliderConfig.enabled ? 'Pausar Slider' : 'Activar Slider'}
+                    </button>
+
+                    <Link
+                      href="/"
+                      target="_blank"
+                      className="bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-white font-bold text-[10px] uppercase tracking-widest px-4 py-2.5 transition-colors"
+                    >
+                      Ver en Home ↗
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* CUERPO: FORMULARIO DE BANNER (IZQUIERDA) + LISTADO DE HASTA 3 BANNERS (DERECHA) */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 flex-1">
+                {/* COLUMNA IZQUIERDA: FORMULARIO CREAR / EDITAR BANNER */}
+                <div className="xl:col-span-1 bg-[#FFFFFF] border border-[#C0C0C0] p-6 h-fit">
+                  <div className="flex items-center justify-between border-b border-[#C0C0C0] pb-3 mb-4">
+                    <div>
+                      <h3 className="font-black text-sm text-[#0A1F33] uppercase">
+                        {sliderSlideForm.id ? 'Editar Banner del Slider' : 'Agregar Modelo al Slider'}
+                      </h3>
+                      <p className="text-[10px] text-[#3A3A3C]">
+                        Capacidad ocupada: <strong>{homeSliderConfig.slides.length} de 3 banners</strong> permitidos.
+                      </p>
+                    </div>
+                    {sliderSlideForm.id && (
+                      <button
+                        type="button"
+                        onClick={handleResetSliderSlideForm}
+                        className="text-[9px] font-bold uppercase text-[#D93025] border border-[#D93025] px-2.5 py-1 hover:bg-[#D93025] hover:text-white transition-colors cursor-pointer"
+                      >
+                        Cancelar ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {!sliderSlideForm.id && homeSliderConfig.slides.length >= 3 && (
+                    <div className="bg-[#FFFBEB] border border-[#FCD34D] text-[#B45309] p-3 mb-4 text-[10px] font-bold leading-relaxed">
+                      ⚠️ Ya tenés configurados los <strong>3 banners máximos</strong>. Para agregar otro modelo, hacé clic en <strong>Editar</strong> o <strong>Eliminar</strong> sobre alguno de los 3 banners a la derecha.
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSaveSliderSlide} className="flex flex-col gap-4">
+                    {/* PASO 1: ELEGIR MODELO A DESTACAR (CON FILTRO DE CONCESIONARIA Y MARCA) */}
+                    <div className="bg-[#F8F9FA] border border-[#C0C0C0] p-3.5 flex flex-col gap-3">
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider border-b border-[#C0C0C0]/60 pb-1.5">
+                        1. Modelo a Destacar *
+                      </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label htmlFor="sliderFilter-dealer" className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                            Filtrar Concesionaria
+                          </label>
+                          <select
+                            id="sliderFilter-dealer"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs bg-white text-[#0A1F33]"
+                            value={sliderFilterConcesionaria}
+                            onChange={e => {
+                              setSliderFilterConcesionaria(e.target.value);
+                              setSliderFilterMarca('Todas');
+                            }}
+                          >
+                            <option value="Todas">Todas las Concesionarias</option>
+                            {concesionariasParaAds.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label htmlFor="sliderFilter-brand" className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                            Filtrar Marca
+                          </label>
+                          <select
+                            id="sliderFilter-brand"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs bg-white text-[#0A1F33]"
+                            value={sliderFilterMarca}
+                            onChange={e => setSliderFilterMarca(e.target.value)}
+                          >
+                            <option value="Todas">Todas las Marcas ({marcasParaSlider.length})</option>
+                            {marcasParaSlider.map(b => (
+                              <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="sliderForm-modelId" className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                          Seleccionar Modelo del Catálogo *
+                        </label>
+                        <select
+                          id="sliderForm-modelId"
+                          className="w-full border border-[#0A1F33] p-2.5 text-xs bg-white font-bold text-[#0A1F33]"
+                          value={sliderSlideForm.modelId}
+                          onChange={e => setSliderSlideForm({ ...sliderSlideForm, modelId: e.target.value })}
+                          required
+                        >
+                          <option value="">-- Elegí un modelo ({modelosParaSlider.length} disponibles) --</option>
+                          {modelosParaSlider.map(m => {
+                            const b = marcasList.find(br => br.id === m.brandId);
+                            const dealerVer = versionesList.find(v => v.modelId === m.id && v.concesionaria);
+                            const dealerTag = dealerVer?.concesionaria ? ` (${dealerVer.concesionaria})` : '';
+                            return (
+                              <option key={m.id} value={m.id}>
+                                {b ? `${b.name} - ` : ''}{m.name}{dealerTag}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* PASO 2: ETIQUETA / BADGE Y TEXTO PERSONALIZADO */}
+                    <div>
+                      <label htmlFor="sliderForm-badge" className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                        2. Etiqueta Superior (Badge)
+                      </label>
+                      <input
+                        id="sliderForm-badge"
+                        type="text"
+                        placeholder="Ej: Destacado del Mes / Bono Especial / Lanzamiento"
+                        className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33]"
+                        value={sliderSlideForm.badgeText}
+                        onChange={e => setSliderSlideForm({ ...sliderSlideForm, badgeText: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="sliderForm-customText" className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                        3. Texto del Banner *
+                      </label>
+                      <textarea
+                        id="sliderForm-customText"
+                        rows={3}
+                        placeholder="Ej: Entrega inmediata y financiación especial disponible en representantes oficiales con respaldo DATACAR CHECK."
+                        className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] resize-none"
+                        value={sliderSlideForm.customText}
+                        onChange={e => setSliderSlideForm({ ...sliderSlideForm, customText: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    {/* PASO 3: CONFIGURACIÓN DEL BOTÓN CTA */}
+                    <div className="bg-[#F8F9FA] border border-[#C0C0C0] p-3.5 flex flex-col gap-3">
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider border-b border-[#C0C0C0]/60 pb-1.5">
+                        4. Configuración del Botón CTA *
+                      </span>
+
+                      <div>
+                        <label htmlFor="sliderForm-ctaText" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                          Texto del Botón CTA *
+                        </label>
+                        <input
+                          id="sliderForm-ctaText"
+                          type="text"
+                          placeholder="Ej: Solicitar Cotización Directa / Agendar Test Drive"
+                          className="w-full border border-[#C0C0C0] p-2.5 text-xs bg-white font-bold text-[#0A1F33]"
+                          value={sliderSlideForm.ctaText}
+                          onChange={e => setSliderSlideForm({ ...sliderSlideForm, ctaText: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="sliderForm-ctaAction" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                          Acción al hacer clic en el CTA
+                        </label>
+                        <select
+                          id="sliderForm-ctaAction"
+                          className="w-full border border-[#C0C0C0] p-2 text-xs bg-white font-semibold text-[#0A1F33]"
+                          value={sliderSlideForm.ctaAction}
+                          onChange={e =>
+                            setSliderSlideForm({
+                              ...sliderSlideForm,
+                              ctaAction: e.target.value as 'cotizar' | 'ficha' | 'url',
+                            })
+                          }
+                        >
+                          <option value="cotizar">Abrir Modal de Cotización Directa (Lead directo a la Concesionaria)</option>
+                          <option value="ficha">Ir a la Ficha Técnica del Modelo en DATACAR</option>
+                          <option value="url">Redirigir a un Enlace / URL Personalizada</option>
+                        </select>
+                      </div>
+
+                      {sliderSlideForm.ctaAction === 'url' && (
+                        <div>
+                          <label htmlFor="sliderForm-ctaUrl" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            URL de Destino *
+                          </label>
+                          <input
+                            id="sliderForm-ctaUrl"
+                            type="text"
+                            placeholder="https://... o /catalogo?marca=..."
+                            className="w-full border border-[#C0C0C0] p-2 text-xs bg-white"
+                            value={sliderSlideForm.ctaUrl}
+                            onChange={e => setSliderSlideForm({ ...sliderSlideForm, ctaUrl: e.target.value })}
+                            required={sliderSlideForm.ctaAction === 'url'}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loading || (!sliderSlideForm.id && homeSliderConfig.slides.length >= 3)}
+                      className="bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-white font-black text-xs uppercase tracking-widest py-3.5 transition-colors disabled:opacity-40 cursor-pointer"
+                    >
+                      {sliderSlideForm.id
+                        ? 'Guardar Cambios del Banner'
+                        : homeSliderConfig.slides.length >= 3
+                        ? 'Límite de 3 Banners Alcanzado'
+                        : 'Agregar Banner al Slider (${homeSliderConfig.slides.length + 1}/3)'.replace('${homeSliderConfig.slides.length + 1}', String(homeSliderConfig.slides.length + 1))}
+                    </button>
+                  </form>
+                </div>
+
+                {/* COLUMNA DERECHA: LISTA DE HASTA 3 BANNERS CONFIGURADOS */}
+                <div className="xl:col-span-2 bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-full min-h-[420px]">
+                  <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="font-black text-xs uppercase tracking-widest text-[#0A1F33] block">
+                        Banners Configurados en el Slider ({homeSliderConfig.slides.length} / 3 Máximo)
+                      </span>
+                      <span className="text-[10px] text-[#3A3A3C]">
+                        Podés editar el modelo, el texto, el CTA, pausar o cambiar el orden de aparición.
+                      </span>
+                    </div>
+                    {homeSliderConfig.slides.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={handleLoadDemoSliderSlides}
+                        className="bg-[#00BFFF] hover:bg-[#0A1F33] text-[#0A1F33] hover:text-white font-black text-[10px] uppercase tracking-widest px-4 py-2 transition-colors cursor-pointer"
+                      >
+                        ⚡ Cargar 3 Modelos de Prueba del Catálogo
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-6 flex flex-col gap-4 flex-1 overflow-y-auto custom-scrollbar">
+                    {homeSliderConfig.slides.length === 0 ? (
+                      <div className="border border-dashed border-[#C0C0C0] p-10 text-center flex flex-col items-center justify-center gap-3">
+                        <p className="text-xs font-black text-[#0A1F33] uppercase tracking-widest">
+                          Aún no guardaste banners personalizados en la base de datos
+                        </p>
+                        <p className="text-[11px] text-[#3A3A3C] max-w-md leading-relaxed">
+                          Mientras esta lista esté vacía, el Home muestra automáticamente <strong>3 modelos de demostración</strong> de tu catálogo para que puedas visualizar las 2 sugerencias en localhost. Usá el formulario de la izquierda o hacé clic en el botón de abajo para cargar 3 modelos editables ahora mismo.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleLoadDemoSliderSlides}
+                          className="mt-2 bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-white font-black text-[10px] uppercase tracking-widest px-6 py-3 transition-colors cursor-pointer"
+                        >
+                          ⚡ Cargar 3 Modelos del Catálogo para Editar
+                        </button>
+                      </div>
+                    ) : (
+                      homeSliderConfig.slides.map((slide, idx) => {
+                        const modelObj = modelosList.find(m => m.id === slide.modelId);
+                        const brandObj = modelObj ? marcasList.find(b => b.id === modelObj.brandId) : null;
+                        const dealerVer = versionesList.find(v => v.modelId === slide.modelId && v.concesionaria);
+                        const fullName = modelObj
+                          ? `${brandObj?.name || ''} ${modelObj.name}`.trim()
+                          : `Modelo ID: ${slide.modelId}`;
+
+                        return (
+                          <div
+                            key={slide.id}
+                            className={`border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${
+                              slide.isActive !== false
+                                ? 'border-[#00BFFF] bg-[#F5FBFF]'
+                                : 'border-[#C0C0C0] bg-[#F8F9FA] opacity-75'
+                            }`}
+                          >
+                            <div className="flex items-center gap-4 min-w-0 w-full">
+                              <div className="w-8 h-8 rounded-full bg-[#0A1F33] text-[#00BFFF] font-black text-xs flex items-center justify-center shrink-0">
+                                #{idx + 1}
+                              </div>
+
+                              {modelObj && isValidImageSrc(modelObj.imgUrl) && (
+                                <div className="w-28 h-16 relative bg-white border border-[#C0C0C0]/60 shrink-0">
+                                  <Image
+                                    src={modelObj.imgUrl}
+                                    alt={fullName}
+                                    fill
+                                    className="object-contain p-1"
+                                    unoptimized={!isOptimizableImageSrc(modelObj.imgUrl)}
+                                  />
+                                </div>
+                              )}
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                  <span className="bg-[#0A1F33] text-[#00BFFF] px-2 py-0.5 text-[8px] font-black uppercase tracking-wider">
+                                    {slide.badgeText || 'Destacado'}
+                                  </span>
+                                  {dealerVer?.concesionaria && (
+                                    <span className="bg-white border border-[#C0C0C0] text-[#0A1F33] px-2 py-0.5 text-[8px] font-bold uppercase">
+                                      {dealerVer.concesionaria}
+                                    </span>
+                                  )}
+                                  <span className={`px-2 py-0.5 text-[8px] font-bold uppercase border ${
+                                    slide.isActive !== false
+                                      ? 'bg-[#ECFDF5] text-[#059669] border-[#6EE7B7]'
+                                      : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0]'
+                                  }`}>
+                                    {slide.isActive !== false ? 'Activo' : 'Pausado'}
+                                  </span>
+                                </div>
+
+                                <p className="font-black text-sm text-[#0A1F33] uppercase truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                                  {fullName}
+                                </p>
+
+                                <p className="text-[11px] text-[#3A3A3C] line-clamp-2 mt-1 leading-snug">
+                                  “{slide.customText}”
+                                </p>
+
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                  <span className="bg-[#00BFFF]/15 border border-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase px-2.5 py-0.5">
+                                    CTA: {slide.ctaText} →
+                                  </span>
+                                  <span className="text-[9px] text-[#3A3A3C] font-semibold uppercase">
+                                    Acción:{' '}
+                                    {slide.ctaAction === 'cotizar'
+                                      ? 'Modal Cotización'
+                                      : slide.ctaAction === 'ficha'
+                                      ? 'Ficha Técnica'
+                                      : `URL (${slide.ctaUrl})`}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0 self-end md:self-center">
+                              <button
+                                type="button"
+                                onClick={() => handleMoveSliderSlide(idx, -1)}
+                                disabled={idx === 0}
+                                className="border border-[#C0C0C0] text-[#0A1F33] px-2 py-2 text-[9px] font-bold disabled:opacity-30 hover:border-[#0A1F33] cursor-pointer"
+                                title="Subir orden"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveSliderSlide(idx, 1)}
+                                disabled={idx === homeSliderConfig.slides.length - 1}
+                                className="border border-[#C0C0C0] text-[#0A1F33] px-2 py-2 text-[9px] font-bold disabled:opacity-30 hover:border-[#0A1F33] cursor-pointer"
+                                title="Bajar orden"
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEditSliderSlide(slide)}
+                                className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-white px-3 py-2 text-[9px] font-bold uppercase transition-colors cursor-pointer"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSliderSlide(slide.id)}
+                                className={`border px-3 py-2 text-[9px] font-bold uppercase cursor-pointer ${
+                                  slide.isActive !== false
+                                    ? 'border-[#D93025] text-[#D93025]'
+                                    : 'border-[#0A1F33] text-[#0A1F33]'
+                                }`}
+                              >
+                                {slide.isActive !== false ? 'Pausar' : 'Activar'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSliderSlide(slide.id)}
+                                className="border border-[#C0C0C0] text-[#C0C0C0] hover:border-[#D93025] hover:text-[#D93025] px-2.5 py-2 text-[9px] font-bold uppercase cursor-pointer"
+                                title="Eliminar banner"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

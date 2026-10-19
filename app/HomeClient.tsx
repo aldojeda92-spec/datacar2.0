@@ -13,6 +13,7 @@ import { normalizeCombustible, combustibleLabel } from '../lib/combustible';
 import { normalizeExternalUrl } from '../lib/externalUrl';
 import Navbar, { NavItem } from './components/Navbar';
 import InstagramReelsSection from './components/InstagramReelsSection';
+import HomeModelSlider, { HomeSliderConfig, HomeSliderSlide, EnrichedSliderSlide } from './components/HomeModelSlider';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { FinancialConfig, DEFAULT_FINANCIAL_CONFIG, calcularCuotaFrancesa } from '../lib/finance';
@@ -143,8 +144,9 @@ export default function HomeClient() {
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
-  // 2. Banner Publicitario
+  // 2. Banner Publicitario y Slider de Modelos Destacados (Hasta 3 Banners)
   const [activeAd, setActiveAd] = useState<AdCampaign | null>(null);
+  const [sliderConfig, setSliderConfig] = useState<HomeSliderConfig | null>(null);
 
   // 7. Filtros de Presupuesto (Dinámicos y Armónicos)
   const priceTabs = useMemo(() => [
@@ -226,13 +228,46 @@ export default function HomeClient() {
         // Carga de Pauta (Espacio #1: Home)
         const now = new Date();
         const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const validCampaign = (campaignsData as AdCampaign[]).find(c =>
+        const homeCamps = (campaignsData as AdCampaign[]).filter(c =>
           c.isActive !== false &&
-          (c.location === 'home' || c.location === 'ambos') &&
-          (!c.startDate || c.startDate <= today) &&
-          (!c.endDate || c.endDate >= today)
+          (c.location === 'home' || c.location === 'ambos')
         );
-        if (validCampaign) setActiveAd(validCampaign);
+        const validCampaign =
+          homeCamps.find(c =>
+            (!c.startDate || c.startDate <= today) &&
+            (!c.endDate || c.endDate >= today)
+          ) ||
+          homeCamps[0] ||
+          (campaignsData as AdCampaign[]).find(c => c.isActive !== false && isValidImageSrc(c.img));
+
+        if (validCampaign) {
+          setActiveAd(validCampaign);
+        } else {
+          setActiveAd({
+            id: 'default_home_ad',
+            sponsor: 'DATACAR CHECK',
+            headline: 'COMPRÁ TU 0KM CON RESPALDO',
+            highlight: 'NEGOCIAMOS POR VOS',
+            price: 'Ahorro promedio US$ 3.500 sobre precio de lista',
+            link: '/negociamos-por-vos',
+            img: '',
+            location: 'home',
+            startDate: '',
+            endDate: '',
+            isActive: true,
+          });
+        }
+
+        // Carga de Configuración del Slider de Modelos Destacados en Home (config/home_slider)
+        try {
+          const sliderDoc = await getDoc(doc(db, 'config', 'home_slider'));
+          if (sliderDoc.exists()) {
+            const data = sliderDoc.data() as HomeSliderConfig;
+            setSliderConfig(data);
+          }
+        } catch (err) {
+          console.warn("Configuración de slider home no disponible:", err);
+        }
 
         // Carga de Configuración Financiera
         try {
@@ -303,6 +338,84 @@ export default function HomeClient() {
     const others = autos.filter(a => !a.isPopular);
     return [...featured, ...others].slice(0, 8);
   }, [autos]);
+
+  // Construcción de los hasta 3 slides para el Banner Slider de Modelos Destacados
+  // Si el Admin configuró slides en config/home_slider, usa esos (máx. 3).
+  // Si aún no hay configuración guardada en BD, genera 3 slides demostrativos con modelos reales del catálogo.
+  const enrichedSliderSlides = useMemo<EnrichedSliderSlide[]>(() => {
+    if (autos.length === 0) return [];
+
+    if (sliderConfig && Array.isArray(sliderConfig.slides) && sliderConfig.slides.length > 0) {
+      if (sliderConfig.enabled === false) return [];
+      return [...sliderConfig.slides]
+        .filter(s => s && s.isActive !== false && s.modelId)
+        .sort((a, b) => (Number(a.order) || 1) - (Number(b.order) || 1))
+        .slice(0, 3)
+        .map((slide, idx) => {
+          const foundModel = autos.find(a => a.id === slide.modelId);
+          return {
+            ...slide,
+            order: idx + 1,
+            resolvedBrandId: foundModel?.brandId || slide.brandId || 'marca',
+            resolvedBrandName: foundModel?.brand || slide.brandName || 'MARCA',
+            resolvedModelName: foundModel?.name || slide.modelName || 'MODELO',
+            resolvedImg: slide.customImgUrl?.trim() || foundModel?.img || '',
+            resolvedPrice: foundModel?.price || 0,
+            resolvedCategory: foundModel?.category || 'SUV',
+            resolvedCombustible: foundModel?.combustible,
+            resolvedTransmision: foundModel?.transmision,
+            resolvedPlazas: foundModel?.plazas,
+            resolvedConcesionaria: foundModel?.concesionaria,
+            resolvedVersionesCount: foundModel?.versionesCount,
+          };
+        });
+    }
+
+    // Fallback inicial de prueba (hasta 3 modelos reales con imagen) mientras se configura desde Admin
+    const candidates = autosMasBuscados.filter(a => isValidImageSrc(a.img) && a.price > 0);
+    const top3 = (candidates.length >= 3 ? candidates : autos).slice(0, 3);
+    const defaultBadges = ['⭐ Destacado #1', '🚀 Oportunidad 0KM', '💎 Selección Oficial'];
+    const defaultTexts = [
+      'Consultá disponibilidad inmediata y financiación directa con el representante oficial en Paraguay. Precio transparente sin comisiones.',
+      'Equipamiento tecnológico de última generación, respaldo de garantía oficial y planes de entrega personalizados.',
+      'Comparado y auditado por DATACAR: una de las opciones más buscadas de su segmento con atención prioritaria en concesionaria.',
+    ];
+    const defaultCtas = ['Cotizar con Concesionaria', 'Solicitar Test Drive', 'Hablar con Asesor Oficial'];
+
+    return top3.map((auto, idx) => ({
+      id: `demo_slide_${idx + 1}`,
+      order: idx + 1,
+      isActive: true,
+      modelId: auto.id,
+      brandId: auto.brandId,
+      brandName: auto.brand,
+      modelName: auto.name,
+      badgeText: defaultBadges[idx] || '⭐ Modelo Destacado',
+      customText: defaultTexts[idx] || defaultTexts[0],
+      ctaText: defaultCtas[idx] || 'Cotizar Ahora',
+      ctaAction: 'cotizar',
+      resolvedBrandId: auto.brandId,
+      resolvedBrandName: auto.brand,
+      resolvedModelName: auto.name,
+      resolvedImg: auto.img,
+      resolvedPrice: auto.price,
+      resolvedCategory: auto.category,
+      resolvedCombustible: auto.combustible,
+      resolvedTransmision: auto.transmision,
+      resolvedPlazas: auto.plazas,
+      resolvedConcesionaria: auto.concesionaria,
+      resolvedVersionesCount: auto.versionesCount,
+    }));
+  }, [autos, autosMasBuscados, sliderConfig]);
+
+  const handleQuoteSliderModel = (slide: EnrichedSliderSlide) => {
+    openLeadModal({
+      vehiculoInteres: `${slide.resolvedBrandName} ${slide.resolvedModelName}`,
+      marcaVehiculo: slide.resolvedBrandName,
+      origenLead: 'Slider Destacados Home',
+      concesionariaDestino: sanitizeDealershipName(slide.resolvedConcesionaria) || 'Central',
+    });
+  };
   
   // Calcula la cantidad de autos por pestaña y determina cuáles mostrar
   const validPriceTabs = useMemo(() => {
@@ -612,6 +725,17 @@ export default function HomeClient() {
       </section>
 
       {/* ==========================================
+          3.5 SLIDER DE MODELOS DESTACADOS (ENTRE "LO MÁS BUSCADO" Y "CALCULADORA DE CUOTAS")
+          ========================================== */}
+      {!isLoading && enrichedSliderSlides.length > 0 && (
+        <HomeModelSlider
+          slides={enrichedSliderSlides}
+          autoPlayMs={sliderConfig?.autoPlayMs || 6000}
+          onQuoteModel={handleQuoteSliderModel}
+        />
+      )}
+
+      {/* ==========================================
           4. CALCULADORA FINANCIERA COMPRIMIDA HORIZONTALMENTE
           ========================================== */}
       <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-14">
@@ -896,32 +1020,6 @@ export default function HomeClient() {
           )}
         </div>
       </section>
-
-      {/* ==========================================
-          8. NEGOCIAMOS POR VOS
-          ========================================== */}
-      <section className="max-w-[1400px] mx-auto px-4 lg:px-8 my-16">
-        <div className="bg-[#0A1F33] border border-[#0A1F33] rounded-3xl shadow-xl overflow-hidden w-full p-6 md:p-14 flex flex-col md:flex-row items-center justify-between relative">
-          <div className="absolute top-0 left-0 w-2 h-full bg-[#00BFFF]"></div>
-          <div className="md:w-1/2 z-10 mb-8 md:mb-0 md:pr-8">
-            <span className="border border-[#00BFFF]/50 text-[#00BFFF] rounded-full text-[9px] font-bold uppercase px-3.5 py-1 tracking-widest mb-4 inline-block bg-[#FFFFFF]/5">Nuevo Servicio</span>
-            <h2 className="font-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#FFFFFF] uppercase leading-tight break-words mb-6" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Negociamos <br/><span className="text-[#C0C0C0]">por vos.</span></h2>
-            <p className="text-[#C0C0C0] text-sm max-w-md mb-8 leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>El mercado vende autos todos los días. Vos comprás uno cada 5 años. Ponemos nuestra experiencia técnica y financiera a tu favor.</p>
-            <Link href="/negociamos-por-vos" className="bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-10 rounded-xl shadow-md transition-all inline-block">Consultar Asesoría →</Link>
-          </div>
-          <div className="md:w-1/2 flex justify-end w-full z-10">
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 w-full max-w-lg text-center">
-              <div className="border border-[#FFFFFF]/15 rounded-2xl p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-all backdrop-blur-xs"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>$3,5M</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Ahorro Promedio</p></div>
-              <div className="border border-[#FFFFFF]/15 rounded-2xl p-6 bg-[#FFFFFF]/5 hover:bg-[#FFFFFF]/10 transition-all backdrop-blur-xs"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>35x</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Retorno del Servicio</p></div>
-              <div className="border border-[#FFFFFF]/15 rounded-2xl p-6 bg-[#FFFFFF]/5 col-span-2 lg:col-span-1 hover:bg-[#FFFFFF]/10 transition-all backdrop-blur-xs"><p className="font-black text-3xl text-[#00BFFF] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>700+</p><p className="text-[9px] text-[#C0C0C0] uppercase font-bold tracking-widest">Autos Gestionados</p></div>
-              <p className="col-span-2 lg:col-span-3 text-[9px] text-[#C0C0C0]/70 leading-relaxed text-left mt-1">
-                Promedios sobre operaciones cerradas a través de DATACAR. El ahorro compara el precio final negociado contra el precio de lista publicado; el retorno es ese ahorro frente al costo del servicio.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
 
       {/* ==========================================
           8.5 DATACAR EN INSTAGRAM (REELS & RESEÑAS)
