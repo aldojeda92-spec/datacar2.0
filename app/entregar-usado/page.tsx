@@ -28,39 +28,39 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const USED_BRAND_OPTIONS = [
-  'Toyota',
-  'Kia',
-  'Hyundai',
-  'Volkswagen',
-  'Chevrolet',
-  'Nissan',
-  'Ford',
-  'Mazda',
-  'Mercedes-Benz',
+  'TOYOTA',
+  'KIA',
+  'HYUNDAI',
+  'VOLKSWAGEN',
+  'CHEVROLET',
+  'NISSAN',
+  'FORD',
+  'MAZDA',
+  'MERCEDES-BENZ',
   'BMW',
-  'Suzuki',
-  'Honda',
-  'Jeep',
-  'Mitsubishi',
-  'Chery',
-  'Geely',
+  'SUZUKI',
+  'HONDA',
+  'JEEP',
+  'MITSUBISHI',
+  'CHERY',
+  'GEELY',
   'GWM',
   'BYD',
-  'Peugeot',
-  'Renault',
-  'Citroën',
-  'Fiat',
-  'Isuzu',
-  'Audi',
-  'Volvo',
-  'Subaru',
-  'Land Rover',
+  'PEUGEOT',
+  'RENAULT',
+  'CITROËN',
+  'FIAT',
+  'ISUZU',
+  'AUDI',
+  'VOLVO',
+  'SUBARU',
+  'LAND ROVER',
   'JAC',
-  'Changan',
+  'CHANGAN',
   'MG',
   'RAM',
-  'SsangYong',
-  'Lexus',
+  'SSANGYONG',
+  'LEXUS',
 ];
 
 const YEAR_OPTIONS = Array.from({ length: 27 }, (_, i) => String(2026 - i)); // 2026 a 2000
@@ -212,7 +212,14 @@ export default function EntregarUsadoPage() {
           })
           .sort((a, b) => a.brandName.localeCompare(b.brandName) || a.name.localeCompare(b.name));
 
-        setCatalogBrands(sortedBrands);
+        const uniqueBrandMap = new Map<string, { id: string; name: string }>();
+        sortedBrands.forEach((b) => {
+          const clean = (b.name || '').trim().toUpperCase();
+          if (clean && !uniqueBrandMap.has(clean)) {
+            uniqueBrandMap.set(clean, { id: b.id, name: clean });
+          }
+        });
+        setCatalogBrands(Array.from(uniqueBrandMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'es')));
         setCatalogModels(formattedModels);
       } catch (err) {
         console.error('Error cargando catálogo en Entregar Usado:', err);
@@ -221,13 +228,19 @@ export default function EntregarUsadoPage() {
     loadCatalog();
   }, []);
 
-  // Lista combinada de marcas para el selector del usado (catálogo + marcas tradicionales de usados)
+  // Lista combinada de marcas para el selector del usado (catálogo + tradicionales de usados)
+  // Deduplicada estrictamente en mayúsculas sin duplicados por sensibilidad a mayúsculas/minúsculas
   const opcionesMarcasUsado = useMemo(() => {
-    const set = new Set<string>(USED_BRAND_OPTIONS);
-    catalogBrands.forEach((b) => {
-      if (b.name) set.add(b.name);
+    const brandsMap = new Map<string, string>();
+    USED_BRAND_OPTIONS.forEach((name) => {
+      const clean = (name || '').trim().toUpperCase();
+      if (clean) brandsMap.set(clean, clean);
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    catalogBrands.forEach((b) => {
+      const clean = (b.name || '').trim().toUpperCase();
+      if (clean) brandsMap.set(clean, clean);
+    });
+    return Array.from(brandsMap.values()).sort((a, b) => a.localeCompare(b, 'es'));
   }, [catalogBrands]);
 
   const usadoMarcaFinal = useMemo(() => {
