@@ -492,9 +492,10 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
         vehiculoInteres={
           leadOrigen === 'calc' && cuotaCalculada !== null
             ? `${model.name} — cuota estimada US$ ${cuotaCalculada.toLocaleString('en-US', { maximumFractionDigits: 0 })}/mes (entrega US$ ${Number(calcForm.entrega).toLocaleString()}, ${calcForm.plazo} meses)`
-            : versionToConsult ? versionToConsult.name : model.name
+            : versionToConsult ? `${model.name} ${versionToConsult.name}` : model.name
         }
         marcaVehiculo={brand?.name || ''}
+        modeloVehiculo={model.name}
         origenLead={leadOrigen === 'calc' ? 'Calculadora en Ficha' : 'Ficha Modelo y Versiones'}
         concesionariaDestino={
           sanitizeDealershipName(versionToConsult?.concesionaria) ||

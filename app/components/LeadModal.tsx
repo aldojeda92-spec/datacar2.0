@@ -9,6 +9,7 @@ import { sendLeadNotificationEmail } from '../../lib/mailer';
 import { normalizePhonePY } from '../../lib/phone';
 import { track } from '../../lib/analytics';
 import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
+import { formatLeadVehicleTitle } from '../../lib/vehicleTitle';
 import Modal from './a11y/Modal';
 
 interface LeadModalProps {
@@ -16,6 +17,7 @@ interface LeadModalProps {
   onClose: () => void;
   vehiculoInteres: string;
   marcaVehiculo: string;
+  modeloVehiculo?: string;
   origenLead: string;
   concesionariaDestino: string;
 }
@@ -30,6 +32,7 @@ export default function LeadModal({
   onClose,
   vehiculoInteres,
   marcaVehiculo,
+  modeloVehiculo,
   origenLead,
   concesionariaDestino,
 }: LeadModalProps) {
@@ -45,6 +48,7 @@ export default function LeadModal({
   const emailErrId = `${idPrefix}-email-err`;
 
   const cleanConcesionaria = sanitizeDealershipName(concesionariaDestino);
+  const fullVehicleDisplay = formatLeadVehicleTitle(marcaVehiculo, modeloVehiculo, vehiculoInteres);
 
   // Telemetría de embudo: apertura del modal (con su origen).
   useEffect(() => {
@@ -100,6 +104,7 @@ export default function LeadModal({
       : 'No proporcionado';
 
     const cleanConcesionaria = sanitizeDealershipName(concesionariaDestino);
+  const fullVehicleDisplay = formatLeadVehicleTitle(marcaVehiculo, modeloVehiculo, vehiculoInteres);
 
     try {
       // 1. Inyección directa a Firebase (La Bóveda)
@@ -107,7 +112,8 @@ export default function LeadModal({
         nombre: formData.nombre.trim(),
         telefono: telefonoFinal,
         email: formData.email.trim() || 'No proporcionado',
-        vehiculo: `${marcaVehiculo} ${vehiculoInteres}`,
+        vehiculo: fullVehicleDisplay,
+        modelo: modeloVehiculo || '',
         marca: marcaVehiculo,
         origen: origenLead,
         concesionaria_destino: cleanConcesionaria || 'A designar (Central DATACAR)',
@@ -122,7 +128,7 @@ export default function LeadModal({
           leadName: formData.nombre.trim(),
           leadPhone: telefonoFinal,
           leadEmail: formData.email.trim(),
-          vehicleOfInterest: `${marcaVehiculo} ${vehiculoInteres}`,
+          vehicleOfInterest: fullVehicleDisplay,
           origen: origenLead,
           concesionariaDestino: cleanConcesionaria || 'Central DATACAR',
         });
@@ -197,7 +203,7 @@ export default function LeadModal({
               Precios oficiales directos de concesionaria, sin comisiones ni recargos
             </p>
             <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest font-bold border-b border-[#0A1F33]/10 pb-4">
-              Vehículo: <span className="text-[#3A3A3C]">{marcaVehiculo} {vehiculoInteres}</span>
+              Vehículo: <span className="text-[#3A3A3C]">{fullVehicleDisplay}</span>
             </p>
           </div>
 

@@ -1065,6 +1065,7 @@ function CatalogoContent() {
                         <BotonCotizar
                           vehiculoInteres={`${auto.brand} ${auto.name} ${verSel?.name || auto.versionName}`}
                           marcaVehiculo={auto.brand}
+                          modeloVehiculo={auto.name}
                           concesionariaDestino={auto.concesionaria || ''}
                           origenLead="Catálogo General"
                           variante="primario"

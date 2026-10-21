@@ -62,7 +62,7 @@ export default function CalculadoraClient() {
   // ESTADOS: LEAD MODAL B2B
   // ==========================================
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
-  const [modalPayload, setModalPayload] = useState({ marca: '', vehiculo: '', concesionaria: '' });
+  const [modalPayload, setModalPayload] = useState({ marca: '', modelo: '', vehiculo: '', concesionaria: '' });
 
   // ==========================================
   // 1. OBTENCIÓN DE DATOS Y CONFIGURACIÓN
@@ -144,12 +144,14 @@ export default function CalculadoraClient() {
       // Armamos el payload dinámico para inyectarlo en el correo
       setModalPayload({
         marca: bName,
+        modelo: mName,
         vehiculo: `${mName} ${vName} | (P.Contado: US$ ${precioVehiculo} / Entrega: US$ ${entregaDirecto} / ${plazoDirecto} meses / Cuota Est: US$ ${Math.round(cuotaCalculada || 0)})`,
         concesionaria: bName 
       });
     } else {
       setModalPayload({
         marca: 'Análisis Inverso',
+        modelo: '',
         vehiculo: `Poder de Compra: US$ ${Math.round(presupuestoBase || 0)} | (Cuota Obj: US$ ${cuotaObjetivo} / Entrega: US$ ${entregaInverso} / ${plazoInverso} meses)`,
         concesionaria: 'A designar (Central DATACAR)'
       });
@@ -351,6 +353,7 @@ export default function CalculadoraClient() {
         onClose={() => setIsLeadModalOpen(false)} 
         vehiculoInteres={modalPayload.vehiculo} 
         marcaVehiculo={modalPayload.marca} 
+        modeloVehiculo={modalPayload.modelo}
         origenLead="Calculadora Financiera" 
         concesionariaDestino={modalPayload.concesionaria} 
       />

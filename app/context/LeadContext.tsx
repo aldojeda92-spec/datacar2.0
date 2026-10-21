@@ -7,6 +7,7 @@ import LeadModal from '../components/LeadModal';
 interface LeadData {
   vehiculoInteres: string;
   marcaVehiculo: string;
+  modeloVehiculo?: string;
   origenLead: string;
   concesionariaDestino: string;
 }
@@ -22,6 +23,7 @@ export function LeadProvider({ children }: { children: ReactNode }) {
   const [leadData, setLeadData] = useState<LeadData>({
     vehiculoInteres: '',
     marcaVehiculo: '',
+    modeloVehiculo: '',
     origenLead: '',
     concesionariaDestino: ''
   });
@@ -41,6 +43,7 @@ export function LeadProvider({ children }: { children: ReactNode }) {
         onClose={() => setIsOpen(false)}
         vehiculoInteres={leadData.vehiculoInteres}
         marcaVehiculo={leadData.marcaVehiculo}
+        modeloVehiculo={leadData.modeloVehiculo}
         origenLead={leadData.origenLead}
         concesionariaDestino={leadData.concesionariaDestino}
       />

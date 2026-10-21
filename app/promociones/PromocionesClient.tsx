@@ -278,6 +278,7 @@ export default function PromocionesClient() {
                       <BotonCotizar
                         vehiculoInteres={`${brand?.name} ${model?.name} ${version.name}`}
                         marcaVehiculo={brand?.name || ''}
+                        modeloVehiculo={model?.name || ''}
                         origenLead="Promociones"
                         concesionariaDestino={concesionariaName || concesionariaObj?.name || ''}
                       />

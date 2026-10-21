@@ -1424,8 +1424,9 @@ function ComparadorContent() {
       <LeadModal
         isOpen={!!consultingVehicle}
         onClose={() => setConsultingVehicle(null)}
-        vehiculoInteres={consultingVehicle?.name || ''}
+        vehiculoInteres={consultingVehicle ? `${consultingVehicle.modelName || ''} ${consultingVehicle.name || ''}`.trim() : ''}
         marcaVehiculo={consultingVehicle?.brandName || ''}
+        modeloVehiculo={consultingVehicle?.modelName || ''}
         origenLead="Comparador B2C"
         concesionariaDestino={consultingVehicle?.concesionaria || ''}
       />

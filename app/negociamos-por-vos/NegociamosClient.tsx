@@ -327,6 +327,7 @@ export default function NegociamosClient() {
         onClose={() => setIsModalOpen(false)}
         vehiculoInteres={modelName}
         marcaVehiculo={brandName}
+        modeloVehiculo={modelName}
         origenLead="Servicio Premium - Negociamos por vos"
         concesionariaDestino="A designar (Central DATACAR)"
       />

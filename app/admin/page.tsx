@@ -33,6 +33,7 @@ import {
   generateSolicitudesCSV,
   generateWizardStatsCSV
 } from '../../lib/csvExport';
+import { formatLeadVehicleTitle } from '../../lib/vehicleTitle';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
@@ -46,6 +47,8 @@ interface LeadData {
   telefono: string;
   email: string;
   vehiculo: string;
+  marca?: string;
+  modelo?: string;
   origen: string;
   concesionaria_destino: string;
   estado: string;
@@ -490,14 +493,73 @@ export default function AdminDashboardPage() {
       // Telemetría del Recomendador
       setWizardStatsList(wizSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
+      // Diccionarios para resolver el modelo en leads históricos
+      const brandsNameMap = new Map<string, string>();
+      bSnap.docs.forEach(d => {
+        const bData = d.data();
+        if (bData.name) brandsNameMap.set(d.id, bData.name.trim());
+      });
+
+      const modelsInfoMap = new Map<string, { modelName: string; brandName: string }>();
+      mSnap.docs.forEach(d => {
+        const mData = d.data();
+        if (mData.name) {
+          const bName = brandsNameMap.get(mData.brandId) || '';
+          modelsInfoMap.set(d.id, {
+            modelName: mData.name.trim(),
+            brandName: bName,
+          });
+        }
+      });
+
+      const versionLookupMap = new Map<string, string>();
+      vSnap.docs.forEach(d => {
+        const vData = d.data();
+        const mInfo = modelsInfoMap.get(vData.modelId);
+        if (mInfo && mInfo.modelName && vData.name) {
+          const vClean = vData.name.trim().toLowerCase();
+          const bClean = mInfo.brandName.toLowerCase();
+          if (bClean && vClean) {
+            const key = `${bClean}::${vClean}`;
+            if (!versionLookupMap.has(key)) {
+              versionLookupMap.set(key, mInfo.modelName);
+            }
+          }
+        }
+      });
+
       const loadedLeads = leadsSnap.docs.map(doc => {
         const data = doc.data();
+        const vehiculoRaw = data.vehiculo || data.vehiculo_interes || 'No especificado';
+        const marcaRaw = data.marca || '';
+        let modeloRaw = data.modelo || '';
+
+        if (!modeloRaw && vehiculoRaw !== 'No especificado') {
+          let vName = vehiculoRaw.trim();
+          if (marcaRaw && vName.toLowerCase().startsWith(marcaRaw.toLowerCase())) {
+            vName = vName.substring(marcaRaw.length).trim();
+            vName = vName.replace(/^[-–—:]\s*/, '').trim();
+          }
+          const pureVersion = vName.split(/[—–|-]/)[0].trim().toLowerCase();
+          if (marcaRaw && pureVersion) {
+            const key = `${marcaRaw.trim().toLowerCase()}::${pureVersion}`;
+            if (versionLookupMap.has(key)) {
+              modeloRaw = versionLookupMap.get(key) || '';
+            }
+          }
+        }
+
+        const finalVehiculo = (modeloRaw || marcaRaw)
+          ? formatLeadVehicleTitle(marcaRaw, modeloRaw, vehiculoRaw)
+          : vehiculoRaw;
         return {
           id: doc.id,
           nombre: data.nombre || 'Sin Nombre',
           telefono: data.telefono || '-',
           email: data.email || '-',
-          vehiculo: data.vehiculo || data.vehiculo_interes || 'No especificado',
+          vehiculo: finalVehiculo,
+          marca: marcaRaw,
+          modelo: modeloRaw,
           origen: data.origen || 'Desconocido',
           concesionaria_destino: data.concesionaria_destino || 'A designar',
           estado: data.estado || 'Nuevo',

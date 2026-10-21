@@ -1816,6 +1816,7 @@ export default function RecomendadorPage() {
                           onClick={() => openLeadModal({
                             vehiculoInteres: `${referenceMatch.brandName} ${referenceMatch.modelName}`,
                             marcaVehiculo: referenceMatch.brandName,
+                            modeloVehiculo: referenceMatch.modelName,
                             origenLead: 'Recomendador - Opción Referencia',
                             concesionariaDestino: referenceMatch.concesionaria || ''
                           })}
@@ -1943,6 +1944,7 @@ export default function RecomendadorPage() {
                           onClick={() => openLeadModal({
                             vehiculoInteres: `${model.brandName} ${model.modelName}`,
                             marcaVehiculo: model.brandName,
+                            modeloVehiculo: model.modelName,
                             origenLead: 'Recomendador Inteligente',
                             concesionariaDestino: model.concesionaria || ''
                           })}

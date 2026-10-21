@@ -7,6 +7,7 @@ import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 interface BotonCotizarProps {
   vehiculoInteres: string;
   marcaVehiculo: string;
+  modeloVehiculo?: string;
   origenLead: string;
   concesionariaDestino: string;
   textoMenu?: string;
@@ -16,6 +17,7 @@ interface BotonCotizarProps {
 export default function BotonCotizar({ 
   vehiculoInteres, 
   marcaVehiculo, 
+  modeloVehiculo,
   origenLead, 
   concesionariaDestino,
   textoMenu,
@@ -28,6 +30,7 @@ export default function BotonCotizar({
     openLeadModal({
       vehiculoInteres,
       marcaVehiculo,
+      modeloVehiculo,
       origenLead,
       concesionariaDestino: cleanConcesionaria
     });

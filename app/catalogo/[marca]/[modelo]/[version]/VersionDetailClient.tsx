@@ -395,9 +395,10 @@ export default function VersionDetailClient({
         vehiculoInteres={
           leadOrigen === 'calc' && cuotaCalculada !== null
             ? `${model.name} ${version.name} — cuota estimada US$ ${cuotaCalculada.toLocaleString('en-US', { maximumFractionDigits: 0 })}/mes (entrega US$ ${Number(calcForm.entrega).toLocaleString()}, ${calcForm.plazo} meses)`
-            : version.name
+            : `${model.name} ${version.name}`
         }
         marcaVehiculo={brand?.name || ''}
+        modeloVehiculo={model.name}
         origenLead={leadOrigen === 'calc' ? 'Calculadora en Ficha' : 'Ficha Versión Exacta'}
         concesionariaDestino={sanitizeDealershipName(version.concesionaria) || brand?.name || ''}
       />
