@@ -19,6 +19,20 @@ import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { useToast } from '../context/ToastContext';
 import { DEFAULT_REELS } from '../components/InstagramReelsSection';
 import { sendNewsletterBroadcast } from '../../lib/mailer';
+import {
+  downloadCSV,
+  exportAllDatabasesZip,
+  generateCatalogoCompletoCSV,
+  generateMarcasCSV,
+  generateModelosCSV,
+  generateVersionesRawCSV,
+  generateLeadsCSV,
+  generateConcesionariasCSV,
+  generateCampaignsCSV,
+  generateNewsletterCSV,
+  generateSolicitudesCSV,
+  generateWizardStatsCSV
+} from '../../lib/csvExport';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
@@ -36,6 +50,7 @@ interface LeadData {
   concesionaria_destino: string;
   estado: string;
   preferencias_wizard?: any;
+  datos_usado?: any;
   createdAt: Date;
 }
 
@@ -173,7 +188,7 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<User | null>(null);
 
   // Pestañas del Sistema
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'ads' | 'slider_home' | 'financiero' | 'accesos' | 'analitica' | 'blog' | 'newsletter'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'exportar_csv' | 'ads' | 'slider_home' | 'financiero' | 'accesos' | 'analitica' | 'blog' | 'newsletter'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -295,10 +310,15 @@ export default function AdminDashboardPage() {
     id: '',
     sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', 
     location: 'home', targetCategory: 'Todas', targetCombustible: 'Todas', modelId: '', startDate: '', endDate: '',
-    ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF'
+    ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF',
+    competitorModelId: '',
+    modelIds: [] as string[],
+    catalogoScope: 'general' as 'general' | 'filtros'
   });
   const [adModelFilterConcesionaria, setAdModelFilterConcesionaria] = useState('Todas');
   const [adModelFilterMarca, setAdModelFilterMarca] = useState('Todas');
+  const [adCompFilterConcesionaria, setAdCompFilterConcesionaria] = useState('Todas');
+  const [adCompFilterMarca, setAdCompFilterMarca] = useState('Todas');
   const [adVaultFilterLocation, setAdVaultFilterLocation] = useState('todos');
 
   // CONFIGURACIÓN DE SLIDER HOME (Hasta 3 modelos destacados + 2 sugerencias de ubicación)
@@ -348,6 +368,7 @@ export default function AdminDashboardPage() {
   // Inyector CSV
   const [csvData, setCsvData] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  const [isExportingZip, setIsExportingZip] = useState(false);
 
   // Filtros Dashboard: Por defecto, los últimos 30 días según requerimiento
   const [filterDateFrom, setFilterDateFrom] = useState(() => {
@@ -481,6 +502,7 @@ export default function AdminDashboardPage() {
           concesionaria_destino: data.concesionaria_destino || 'A designar',
           estado: data.estado || 'Nuevo',
           preferencias_wizard: data.preferencias_wizard || null,
+          datos_usado: data.datos_usado || null,
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date())
         };
       });
@@ -619,6 +641,40 @@ export default function AdminDashboardPage() {
       return `${brandA} ${a.name}`.localeCompare(`${brandB} ${b.name}`);
     });
   }, [modelosList, versionesList, marcasList, adModelFilterConcesionaria, adModelFilterMarca]);
+
+  const marcasParaCompetidorAds = useMemo(() => {
+    const sortedMarcas = [...marcasList].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (adCompFilterConcesionaria === 'Todas') return sortedMarcas;
+    const modelIdsOfDealer = new Set(
+      versionesList
+        .filter(v => (v.concesionaria || '').trim().toUpperCase() === adCompFilterConcesionaria.toUpperCase())
+        .map(v => v.modelId)
+    );
+    const brandIdsOfDealer = new Set(
+      modelosList.filter(m => modelIdsOfDealer.has(m.id)).map(m => m.brandId)
+    );
+    return sortedMarcas.filter(b => brandIdsOfDealer.has(b.id));
+  }, [marcasList, modelosList, versionesList, adCompFilterConcesionaria]);
+
+  const modelosParaCompetidorAds = useMemo(() => {
+    let list = [...modelosList];
+    if (adCompFilterConcesionaria !== 'Todas') {
+      const modelIdsOfDealer = new Set(
+        versionesList
+          .filter(v => (v.concesionaria || '').trim().toUpperCase() === adCompFilterConcesionaria.toUpperCase())
+          .map(v => v.modelId)
+      );
+      list = list.filter(m => modelIdsOfDealer.has(m.id));
+    }
+    if (adCompFilterMarca !== 'Todas') {
+      list = list.filter(m => m.brandId === adCompFilterMarca);
+    }
+    return list.sort((a, b) => {
+      const brandA = marcasList.find(br => br.id === a.brandId)?.name || '';
+      const brandB = marcasList.find(br => br.id === b.brandId)?.name || '';
+      return `${brandA} ${a.name}`.localeCompare(`${brandB} ${b.name}`);
+    });
+  }, [modelosList, versionesList, marcasList, adCompFilterConcesionaria, adCompFilterMarca]);
 
   // Marcas correspondientes a la concesionaria seleccionada en Accesos B2B (Regla E)
   const marcasParaConcesionariaB2B = useMemo(() => {
@@ -1793,6 +1849,30 @@ export default function AdminDashboardPage() {
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
+  // EXPORTADOR TOTAL DE BASE DE DATOS (CSV Y ZIP)
+  const handleExportAllZip = async () => {
+    setIsExportingZip(true);
+    setFeedback({ type: 'success', message: 'Empaquetando todas las colecciones en archivo ZIP con codificación UTF-8...' });
+    try {
+      await exportAllDatabasesZip({
+        versionesList,
+        modelosList,
+        marcasList,
+        leadsList,
+        concesionariasList,
+        campaignsList,
+        newsletterSubscribers,
+        solicitudesList,
+        wizardStatsList
+      });
+      setFeedback({ type: 'success', message: '¡Archivo ZIP descargado exitosamente con todas las bases de datos en CSV!' });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Error al generar ZIP: ${err.message}` });
+    } finally {
+      setIsExportingZip(false);
+    }
+  };
+
   // ABMs Restantes con soporte para Modales y Toggles en Cuadros
   const handleSaveMarca = async (e: React.FormEvent) => {
     e.preventDefault(); if (!marcaForm.name) return; setLoading(true);
@@ -2041,12 +2121,33 @@ export default function AdminDashboardPage() {
     }
 
     const isComparador = adForm.location === 'comparador';
+    const isComparadorCompetencia = adForm.location === 'comparador_competencia';
+    const isCatalogoDestaque = adForm.location === 'catalogo_destaque';
     const isRecomendadorSlot = adForm.location === 'recomendador';
-    const isModelSponsor = isComparador || isRecomendadorSlot;
-    const isCatalogoFiltros = adForm.location === 'catalogo_filtros';
+    const isModelSponsor = isComparador || isRecomendadorSlot || isComparadorCompetencia || isCatalogoDestaque;
+    const isCatalogoFiltros = adForm.location === 'catalogo_filtros' || (isCatalogoDestaque && adForm.catalogoScope === 'filtros');
 
     if (isModelSponsor) {
-      if (!adForm.modelId) {
+      if (isComparadorCompetencia) {
+        if (!adForm.competitorModelId || !adForm.modelId) {
+          setFeedback({ type: 'error', message: 'Para Comparador por Competencia, debés elegir tanto el Modelo Competidor como el Modelo Anunciante.' });
+          return;
+        }
+        if (adForm.competitorModelId === adForm.modelId) {
+          setFeedback({ type: 'error', message: 'El Modelo Competidor y el Modelo Anunciante deben ser distintos.' });
+          return;
+        }
+      } else if (isCatalogoDestaque) {
+        const cleanIds = (adForm.modelIds || []).filter(Boolean).slice(0, 3);
+        if (cleanIds.length === 0) {
+          setFeedback({ type: 'error', message: 'Para Destaque en el Catálogo, debés elegir al menos 1 modelo anunciante (máximo 3).' });
+          return;
+        }
+        if (adForm.catalogoScope === 'filtros' && adForm.targetCategory === 'Todas' && adForm.targetCombustible === 'Todas') {
+          setFeedback({ type: 'error', message: 'Si aplicás el destaque a un filtro del catálogo, elegí al menos Tipo de Auto (Carrocería) o Tipo de Motorización.' });
+          return;
+        }
+      } else if (!adForm.modelId) {
         setFeedback({ type: 'error', message: `Para el espacio ${isRecomendadorSlot ? 'Recomendador (Slot Modelo)' : 'Comparador'}, debés elegir un modelo del listado.` });
         return;
       }
@@ -2070,7 +2171,11 @@ export default function AdminDashboardPage() {
       let finalHeadline = adForm.headline.trim();
       let finalImg = adForm.img.trim();
       let finalLink = isModelSponsor ? '' : adForm.link.trim();
-      let finalModelId = isModelSponsor ? adForm.modelId : '';
+      const cleanDestaqueIds = isCatalogoDestaque ? Array.from(new Set((adForm.modelIds || []).filter(Boolean))).slice(0, 3) : [];
+      let finalModelId = isCatalogoDestaque ? (cleanDestaqueIds[0] || '') : (isModelSponsor ? adForm.modelId : '');
+      let finalCompetitorModelId = isComparadorCompetencia ? adForm.competitorModelId : '';
+      let competitorModelName = '';
+      let competitorBrandName = '';
       let finalTargetCategory = isCatalogoFiltros ? adForm.targetCategory : 'Todas';
       let finalTargetCombustible = isCatalogoFiltros ? adForm.targetCombustible : 'Todas';
       let modelName = '';
@@ -2083,6 +2188,23 @@ export default function AdminDashboardPage() {
           brandName = brand?.name || '';
           modelName = selectedModel.name || '';
           finalHeadline = `Opción Patrocinada: ${brandName} ${modelName}`.trim();
+          if (isComparadorCompetencia && finalCompetitorModelId) {
+            const compModel = modelosList.find(m => m.id === finalCompetitorModelId);
+            if (compModel) {
+              const compBrand = marcasList.find(b => b.id === compModel.brandId);
+              competitorBrandName = compBrand?.name || '';
+              competitorModelName = compModel.name || '';
+              finalHeadline = `Competencia: ${competitorBrandName} ${competitorModelName} → Sugerir ${brandName} ${modelName}`.trim();
+            }
+          }
+          if (isCatalogoDestaque) {
+            const names = cleanDestaqueIds.map(id => {
+              const m = modelosList.find(mod => mod.id === id);
+              const b = m ? marcasList.find(br => br.id === m.brandId) : null;
+              return m ? `${b?.name || ''} ${m.name}`.trim() : id;
+            });
+            finalHeadline = `Destaque Catálogo (${ names.join(' / ') })`;
+          }
           finalImg = selectedModel.imgUrl || '';
         }
       } else if (!finalHeadline) {
@@ -2105,6 +2227,11 @@ export default function AdminDashboardPage() {
         targetCombustible: finalTargetCombustible,
         modelName,
         brandName,
+        competitorModelId: finalCompetitorModelId,
+        competitorModelName,
+        competitorBrandName,
+        modelIds: cleanDestaqueIds,
+        catalogoScope: isCatalogoDestaque ? (adForm.catalogoScope || 'general') : 'general',
         isActive: existingAd ? (existingAd.isActive ?? true) : true,
         updatedAt: serverTimestamp(),
         createdAt: existingAd?.createdAt || serverTimestamp() 
@@ -2116,7 +2243,10 @@ export default function AdminDashboardPage() {
         id: '',
         sponsor: '', headline: '', highlight: '', price: '', link: '', img: '', 
         location: adForm.location, targetCategory: 'Todas', targetCombustible: 'Todas', modelId: '', startDate: '', endDate: '', 
-        ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF' 
+        ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF',
+    competitorModelId: '',
+    modelIds: [] as string[],
+    catalogoScope: 'general' as 'general' | 'filtros' 
       });
       setAdModelFilterConcesionaria('Todas');
       setAdModelFilterMarca('Todas');
@@ -2157,7 +2287,10 @@ export default function AdminDashboardPage() {
       ctaEnabled: camp.ctaEnabled || false,
       ctaText: camp.ctaText || '',
       ctaUrl: camp.ctaUrl || '',
-      ctaColor: camp.ctaColor || '#00BFFF'
+      ctaColor: camp.ctaColor || '#00BFFF',
+      competitorModelId: camp.competitorModelId || '',
+      modelIds: Array.isArray(camp.modelIds) ? camp.modelIds.slice(0, 3) : (camp.modelId ? [camp.modelId] : []),
+      catalogoScope: (camp.catalogoScope === 'filtros' || (camp.targetCategory && camp.targetCategory !== 'Todas') || (camp.targetCombustible && camp.targetCombustible !== 'Todas')) ? 'filtros' : 'general'
     });
     setAdModelFilterConcesionaria('Todas');
     setAdModelFilterMarca('Todas');
@@ -2169,7 +2302,10 @@ export default function AdminDashboardPage() {
       id: '',
       sponsor: '', headline: '', highlight: '', price: '', link: '', img: '',
       location: 'home', targetCategory: 'Todas', targetCombustible: 'Todas', modelId: '', startDate: '', endDate: '',
-      ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF'
+      ctaEnabled: false, ctaText: '', ctaUrl: '', ctaColor: '#00BFFF',
+    competitorModelId: '',
+    modelIds: [] as string[],
+    catalogoScope: 'general' as 'general' | 'filtros'
     });
     setAdModelFilterConcesionaria('Todas');
     setAdModelFilterMarca('Todas');
@@ -2949,6 +3085,12 @@ export default function AdminDashboardPage() {
           
           <span className="text-[#C0C0C0] px-6 mt-6 mb-3">Herramientas</span>
           <button onClick={() => { setActiveTab('inyector'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'inyector' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Inyector CSV</button>
+          <button onClick={() => { setActiveTab('exportar_csv'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 flex items-center justify-between ${activeTab === 'exportar_csv' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>
+            <span>📥 Descargar DB (CSV)</span>
+            <span className={`text-[8px] font-black px-1.5 py-0.5 ${activeTab === 'exportar_csv' ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#00BFFF]/20 text-[#00BFFF]'}`}>
+              ZIP
+            </span>
+          </button>
           <button onClick={() => { setActiveTab('ads'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'ads' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Ads Manager</button>
           <button onClick={() => { setActiveTab('slider_home'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 flex items-center justify-between ${activeTab === 'slider_home' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>
             <span>🎠 Slider Home</span>
@@ -2967,7 +3109,18 @@ export default function AdminDashboardPage() {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="bg-[#FFFFFF] border-b border-[#C0C0C0] p-6 flex justify-between items-center shrink-0">
           <h1 className="font-black text-2xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Módulo Activo: <span className="text-[#00BFFF]">{activeTab}</span></h1>
-          <button onClick={fetchAllData} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest border border-[#C0C0C0] px-4 py-2 hover:border-[#0A1F33] transition-colors rounded-none outline-none">{loading ? 'Sincronizando...' : 'Sincronizar DB'}</button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('exportar_csv')}
+              className="text-[10px] font-black text-[#0A1F33] bg-[#00BFFF] hover:bg-[#0A1F33] hover:text-[#FFFFFF] uppercase tracking-widest px-4 py-2 transition-colors rounded-none outline-none flex items-center gap-1.5 shadow-sm"
+              title="Descargar base de datos completa en formato CSV y ZIP"
+            >
+              <span>📥</span>
+              <span>Descargar DB (CSV)</span>
+            </button>
+            <button onClick={fetchAllData} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest border border-[#C0C0C0] px-4 py-2 hover:border-[#0A1F33] transition-colors rounded-none outline-none">{loading ? 'Sincronizando...' : 'Sincronizar DB'}</button>
+          </div>
         </header>
 
         {feedback.message && <div className={`m-6 mb-0 p-4 text-xs font-bold uppercase tracking-widest border shrink-0 ${feedback.type === 'error' ? 'bg-[#FFE6E6] text-[#D93025] border-[#D93025]' : 'bg-[#E6F4EA] text-[#1E8E3E] border-[#1E8E3E]'}`}>{feedback.message}</div>}
@@ -3377,7 +3530,21 @@ export default function AdminDashboardPage() {
                             <span className="inline-block bg-[#F5F5F5] border border-[#C0C0C0] px-2 py-0.5 text-[8px] font-bold text-[#3A3A3C] uppercase tracking-widest">{lead.origen}</span>
                           </td>
                           <td className="p-4 border-r border-[#C0C0C0]/50 align-top max-w-[300px] whitespace-normal">
-                            <span className="block font-bold text-[#0A1F33] uppercase leading-tight mb-1">{lead.vehiculo}</span><span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block">Ruteo: {lead.concesionaria_destino}</span>
+                            <span className="block font-bold text-[#0A1F33] uppercase leading-tight mb-1">{lead.vehiculo}</span>
+                            <span className="text-[9px] text-[#C0C0C0] font-bold uppercase tracking-widest block">Ruteo: {lead.concesionaria_destino}</span>
+                            {lead.datos_usado && (
+                              <div className="mt-2 p-2.5 bg-[#F0FBFF] border border-[#00BFFF]/40 text-[10px] text-[#0A1F33] flex flex-col gap-1">
+                                <span className="font-black text-[#0080B0] uppercase tracking-wider block">
+                                  🔄 Usado en Parte de Pago: {lead.datos_usado.vehiculo_entregar} ({lead.datos_usado.anio})
+                                </span>
+                                <span className="text-[#3A3A3C]">
+                                  <strong>Origen:</strong> {lead.datos_usado.origen_unidad} • <strong>Color:</strong> {lead.datos_usado.color} • <strong>Caja:</strong> {lead.datos_usado.transmision}
+                                </span>
+                                <span className="text-[#3A3A3C]">
+                                  <strong>KM:</strong> {lead.datos_usado.kilometraje} • <strong>Estado:</strong> {lead.datos_usado.estado_general} • <strong>Valor Solicitado:</strong> USD {Number(lead.datos_usado.valor_solicitado_usd || 0).toLocaleString('es-PY')}
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td className="p-4 align-top w-40">
                             <select 
@@ -5151,6 +5318,273 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
+          {/* ======================================= */}
+          {/* VISTA: EXPORTAR TODA LA BASE DE DATOS EN CSV / ZIP */}
+          {/* ======================================= */}
+          {activeTab === 'exportar_csv' && (
+            <div className="flex flex-col gap-6 h-full pb-10">
+              {/* HERO MASTER: DESCARGA TOTAL (ZIP CON TODAS LAS TABLAS) */}
+              <div className="bg-[#0A1F33] text-white border-2 border-[#00BFFF] p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 shadow-xl">
+                <div className="max-w-3xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5">
+                      BACKUP TOTAL DEL SISTEMA
+                    </span>
+                    <span className="text-[10px] text-[#C0C0C0] font-mono">
+                      UTF-8 BOM • Compatible con Microsoft Excel y Google Sheets
+                    </span>
+                  </div>
+                  <h2
+                    className="font-black text-2xl sm:text-3xl uppercase tracking-wider text-white mb-2"
+                    style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}
+                  >
+                    Descargar Toda la Base de Datos en CSV
+                  </h2>
+                  <p className="text-xs text-[#C0C0C0] leading-relaxed">
+                    Exportá en 1 clic el 100% de la información de DATACAR: catálogo unificado de vehículos,
+                    fichas técnicas, leads de clientes (incluyendo vehículos usados recibidos como parte de pago),
+                    marcas, modelos, versiones, concesionarias, campañas publicitarias y suscriptores de newsletter.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleExportAllZip}
+                    disabled={isExportingZip}
+                    className="bg-[#00BFFF] hover:bg-white text-[#0A1F33] font-black text-xs uppercase tracking-widest py-4 px-6 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>{isExportingZip ? '⏳' : '📦'}</span>
+                    <span>{isExportingZip ? 'Generando ZIP...' : 'DESCARGAR TODO EN ZIP (10 CSVs)'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const csv = generateCatalogoCompletoCSV(versionesList, modelosList, marcasList);
+                      const d = new Date().toISOString().slice(0, 10);
+                      downloadCSV(`DATACAR_Catalogo_Completo_${d}.csv`, csv);
+                    }}
+                    className="bg-transparent hover:bg-white/10 text-white border border-white/30 font-bold text-[10px] uppercase tracking-widest py-3 px-5 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>🚗</span>
+                    <span>Solo Catálogo Completo (.csv)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* GRID DE TABLAS INDIVIDUALES (DESCARGA 1 A 1) */}
+              <div>
+                <div className="flex items-center justify-between mb-4 border-b border-[#C0C0C0] pb-2">
+                  <div>
+                    <h3
+                      className="font-black text-sm uppercase text-[#0A1F33] tracking-wider"
+                      style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}
+                    >
+                      Descargas Individuales por Colección
+                    </h3>
+                    <p className="text-[10px] text-[#3A3A3C]">
+                      Podés descargar cualquier tabla individualmente con 1 solo clic en formato .CSV estándar.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-black uppercase bg-[#0A1F33] text-[#00BFFF] px-3 py-1">
+                    10 Colecciones Disponibles
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {[
+                    {
+                      id: 'catalogo',
+                      icon: '🚗',
+                      title: 'Catálogo Completo Unificado',
+                      filename: 'catalogo_completo_vehiculos.csv',
+                      count: `${versionesList.length} versiones`,
+                      badge: 'Matriz Enriquecida',
+                      badgeColor: 'bg-[#00BFFF] text-[#0A1F33]',
+                      desc: 'Versiones con Marca, Modelo, Precio USD, Concesionaria, Carrocería, Motor, Consumos, Seguridad (Airbags/ESP/ABS) y Equipamiento.',
+                      onDownload: () => {
+                        const csv = generateCatalogoCompletoCSV(versionesList, modelosList, marcasList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Catalogo_Completo_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'leads',
+                      icon: '📋',
+                      title: 'Leads & Entrega de Usados',
+                      filename: 'leads_contactos_y_usados.csv',
+                      count: `${leadsList.length} leads`,
+                      badge: 'Comercial & CRM',
+                      badgeColor: 'bg-[#1E8E3E] text-white',
+                      desc: 'Contactos generados, vehículo 0km de interés y datos de usados en parte de pago (modelo, año, kilometraje, valor, estado).',
+                      onDownload: () => {
+                        const csv = generateLeadsCSV(leadsList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Leads_y_Usados_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'marcas',
+                      icon: '🏷️',
+                      title: 'Marcas de Vehículos',
+                      filename: 'marcas.csv',
+                      count: `${marcasList.length} marcas`,
+                      badge: 'Estructura Core',
+                      badgeColor: 'bg-[#0A1F33] text-white',
+                      desc: 'Directorio de marcas registradas en DATACAR, país de origen, segmento comercial y URLs de sus logotipos.',
+                      onDownload: () => {
+                        const csv = generateMarcasCSV(marcasList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Marcas_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'modelos',
+                      icon: '🚘',
+                      title: 'Modelos de Autos',
+                      filename: 'modelos.csv',
+                      count: `${modelosList.length} modelos`,
+                      badge: 'Estructura Core',
+                      badgeColor: 'bg-[#0A1F33] text-white',
+                      desc: 'Nombres de modelos asociados a cada marca, tipo de carrocería (SUV, Sedán, Pick-up, etc.), estado destacado y fotos.',
+                      onDownload: () => {
+                        const csv = generateModelosCSV(modelosList, marcasList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Modelos_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'versiones_raw',
+                      icon: '🔢',
+                      title: 'Versiones (Estructura Base)',
+                      filename: 'versiones_raw.csv',
+                      count: `${versionesList.length} versiones`,
+                      badge: 'Base de Datos',
+                      badgeColor: 'bg-[#3A3A3C] text-white',
+                      desc: 'Listado base de versiones con sus IDs de vinculación a modelos, precio contado en USD, año y concesionaria asignada.',
+                      onDownload: () => {
+                        const csv = generateVersionesRawCSV(versionesList, modelosList, marcasList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Versiones_Base_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'concesionarias',
+                      icon: '🏢',
+                      title: 'Concesionarias y Agencias',
+                      filename: 'concesionarias.csv',
+                      count: `${concesionariasList.length} concesionarias`,
+                      badge: 'Red B2B',
+                      badgeColor: 'bg-[#0A1F33] text-white',
+                      desc: 'Directorio de concesionarias aliadas, direcciones, teléfonos, emails, slugs de perfil e insignia DATACAR Check.',
+                      onDownload: () => {
+                        const csv = generateConcesionariasCSV(concesionariasList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Concesionarias_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'campaigns',
+                      icon: '📢',
+                      title: 'Pautas Publicitarias (ADS)',
+                      filename: 'pautas_publicitarias_ads.csv',
+                      count: `${campaignsList.length} campañas`,
+                      badge: 'Publicidad & Bóveda',
+                      badgeColor: 'bg-[#B45309] text-white',
+                      desc: 'Campañas de anuncios en los 8 espacios: Home, Catálogo General/Filtros, Recomendador, Comparador por Competencia y Destaque.',
+                      onDownload: () => {
+                        const csv = generateCampaignsCSV(campaignsList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Campanas_ADS_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'newsletter',
+                      icon: '✉️',
+                      title: 'Suscriptores de Newsletter',
+                      filename: 'suscriptores_newsletter.csv',
+                      count: `${newsletterSubscribers.length} suscriptores`,
+                      badge: 'Audiencia Email',
+                      badgeColor: 'bg-[#0080B0] text-white',
+                      desc: 'Base consolidada y deduplicada de suscriptores para boletines, novedades y campañas masivas por correo.',
+                      onDownload: () => {
+                        const csv = generateNewsletterCSV(newsletterSubscribers);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Suscriptores_Newsletter_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'solicitudes',
+                      icon: '🤝',
+                      title: 'Solicitudes de Concesionarias',
+                      filename: 'solicitudes_concesionarias.csv',
+                      count: `${solicitudesList.length} solicitudes`,
+                      badge: 'Prospección B2B',
+                      badgeColor: 'bg-[#3A3A3C] text-white',
+                      desc: 'Formularios recibidos de concesionarias y agencias interesadas en publicar su stock en la plataforma DATACAR.',
+                      onDownload: () => {
+                        const csv = generateSolicitudesCSV(solicitudesList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Solicitudes_Concesionarias_${d}.csv`, csv);
+                      }
+                    },
+                    {
+                      id: 'wizard',
+                      icon: '🧠',
+                      title: 'Telemetría del Recomendador',
+                      filename: 'telemetria_recomendador.csv',
+                      count: `${wizardStatsList.length} sesiones`,
+                      badge: 'Telemetría & BI',
+                      badgeColor: 'bg-[#0A1F33] text-white',
+                      desc: 'Preferencias de compra de usuarios: presupuesto, uso principal, movilidad y modelo recomendado.',
+                      onDownload: () => {
+                        const csv = generateWizardStatsCSV(wizardStatsList);
+                        const d = new Date().toISOString().slice(0, 10);
+                        downloadCSV(`DATACAR_Telemetria_Recomendador_${d}.csv`, csv);
+                      }
+                    }
+                  ].map((table) => (
+                    <div
+                      key={table.id}
+                      className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between hover:border-[#00BFFF] transition-all hover:shadow-md"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 ${table.badgeColor}`}>
+                            {table.badge}
+                          </span>
+                          <span className="text-[9px] font-black text-[#0A1F33] bg-[#F0FBFF] border border-[#00BFFF]/40 px-2 py-0.5">
+                            {table.count}
+                          </span>
+                        </div>
+                        <h4
+                          className="font-black text-sm text-[#0A1F33] uppercase flex items-center gap-1.5 mb-1"
+                          style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}
+                        >
+                          <span>{table.icon}</span>
+                          <span>{table.title}</span>
+                        </h4>
+                        <p className="text-[10px] text-[#3A3A3C] leading-snug mb-3">
+                          {table.desc}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={table.onDownload}
+                        className="w-full bg-[#0A1F33] hover:bg-[#00BFFF] text-white hover:text-[#0A1F33] font-black text-[9px] uppercase tracking-widest py-2.5 px-3 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <span>📥</span>
+                        <span>Descargar {table.filename}</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* VISTAS INYECTOR & ADS */}
           {activeTab === 'inyector' && (
             <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col h-full overflow-hidden">
@@ -5244,6 +5678,8 @@ export default function AdminDashboardPage() {
                         { id: 'recomendador', num: '4', title: 'Recomendador (Slot Modelo)', badge: 'Sin dimensiones', desc: 'Inyecta el modelo como 4ta opción "⭐ Opción Patrocinada" con su CTA nativo.' },
                         { id: 'comparador', num: '5', title: 'Comparador (Slot Modelo)', badge: 'Sin dimensiones', desc: 'Resalta el modelo como "⭐ Opción Patrocinada" con su CTA nativo.' },
                         { id: 'recomendador_banner', num: '6', title: 'Banner Recomendador', badge: '1200x400 px', desc: 'Banner inferior debajo de los resultados (apaga auto-pauta DATACAR).' },
+                        { id: 'comparador_competencia', num: '7', title: 'Comparador por Competencia', badge: 'Sin gráfica', desc: 'Al elegir el modelo competidor en Slot 1 o 2, sugiere comparar con tu modelo anunciado.' },
+                        { id: 'catalogo_destaque', num: '8', title: 'Destaque en el Catálogo', badge: 'Top 3 Slots', desc: 'Ubica hasta 3 modelos patrocinados en los primeros 3 lugares del catálogo.' },
                       ].map(space => {
                         const isSelected = adForm.location === space.id;
                         return (
@@ -5253,8 +5689,8 @@ export default function AdminDashboardPage() {
                             onClick={() => setAdForm({
                               ...adForm,
                               location: space.id,
-                              targetCategory: space.id === 'catalogo_filtros' ? adForm.targetCategory : 'Todas',
-                              targetCombustible: space.id === 'catalogo_filtros' ? adForm.targetCombustible : 'Todas',
+                              targetCategory: (space.id === 'catalogo_filtros' || space.id === 'catalogo_destaque') ? adForm.targetCategory : 'Todas',
+                              targetCombustible: (space.id === 'catalogo_filtros' || space.id === 'catalogo_destaque') ? adForm.targetCombustible : 'Todas',
                             })}
                             className={`w-full text-left p-2.5 border transition-colors flex items-center justify-between gap-2 ${
                               isSelected
@@ -5307,6 +5743,12 @@ export default function AdminDashboardPage() {
                       {adForm.location === 'recomendador_banner' && (
                         <p><strong>6. Banner Recomendador (1200x400):</strong> Se ubica debajo de las opciones recomendadas. Mientras esté activa, apaga el banner institucional de DATACAR.</p>
                       )}
+                      {adForm.location === 'comparador_competencia' && (
+                        <p><strong>7. Comparador por Competencia (Sin gráfica):</strong> Elegís un <strong>Modelo Competidor</strong> y el <strong>Modelo Anunciante</strong>. Cuando el usuario cargue el competidor en el Slot 1 o Slot 2 del comparador, en el slot libre aparecerá un botón sugiriendo comparar con el modelo anunciado (desplegando sus versiones + precio contado). Si lo carga, el slot tendrá borde diferenciado y etiqueta &ldquo;⭐ Opción Patrocinada&rdquo;.</p>
+                      )}
+                      {adForm.location === 'catalogo_destaque' && (
+                        <p><strong>8. Destaque en el Catálogo (Top 3 Slots • Sin gráfica):</strong> Posiciona hasta <strong>3 modelos patrocinados</strong> en los primeros 3 espacios del catálogo (General o en un filtro de Carrocería/Motorización) con recuadro distintivo y etiqueta &ldquo;⭐ Modelo Patrocinado&rdquo;. Si solo hay 1 o 2 modelos patrocinados, los demás puestos se completan automáticamente con modelos orgánicos sin dejar slots vacíos.</p>
+                      )}
                     </div>
                   </div>
 
@@ -5355,6 +5797,351 @@ export default function AdminDashboardPage() {
                       <span className="text-[9px] text-[#3A3A3C] leading-snug">
                         Podés elegir solo Carrocería (ej: SUV), solo Movilidad (ej: HEV), o combinar ambos filtros a la vez.
                       </span>
+                    </div>
+                  )}
+
+                  {/* CONFIGURACIÓN ESPECÍFICA PARA #7 COMPARADOR POR COMPETENCIA */}
+                  {adForm.location === 'comparador_competencia' && (
+                    <div className="bg-[#F8F9FA] border border-[#00BFFF] p-3.5 flex flex-col gap-4">
+                      {/* BLOQUE A: MODELO COMPETIDOR */}
+                      <div className="bg-white border border-[#C0C0C0] p-3 flex flex-col gap-2.5">
+                        <span className="text-[10px] font-black text-[#D93025] uppercase tracking-wider block border-b border-[#C0C0C0]/60 pb-1">
+                          🎯 Paso A: Modelo Competidor (Disparador en Slot 1 o 2)
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                              Filtrar por Concesionaria
+                            </label>
+                            <select
+                              className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                              value={adCompFilterConcesionaria}
+                              onChange={e => {
+                                setAdCompFilterConcesionaria(e.target.value);
+                                setAdCompFilterMarca('Todas');
+                              }}
+                            >
+                              <option value="Todas">Todas las Concesionarias</option>
+                              {concesionariasParaAds.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                              Filtrar por Marca
+                            </label>
+                            <select
+                              className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                              value={adCompFilterMarca}
+                              onChange={e => setAdCompFilterMarca(e.target.value)}
+                            >
+                              <option value="Todas">Todas las Marcas ({marcasParaCompetidorAds.length})</option>
+                              {marcasParaCompetidorAds.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                            Modelo Competidor *
+                          </label>
+                          <select
+                            className="w-full border border-[#0A1F33] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-bold text-[#0A1F33]"
+                            value={adForm.competitorModelId || ''}
+                            onChange={e => setAdForm({ ...adForm, competitorModelId: e.target.value })}
+                            required
+                          >
+                            <option value="">-- Seleccioná el modelo competidor ({modelosParaCompetidorAds.length} disponibles) --</option>
+                            {modelosParaCompetidorAds.map(m => {
+                              const b = marcasList.find(brand => brand.id === m.brandId);
+                              const dealerVer = versionesList.find(v => v.modelId === m.id && v.concesionaria);
+                              const dealerTag = dealerVer?.concesionaria ? ` (${dealerVer.concesionaria})` : '';
+                              const label = b ? `${b.name} - ${m.name}${dealerTag}` : `${m.name}${dealerTag}`;
+                              return <option key={m.id} value={m.id}>{label}</option>;
+                            })}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* BLOQUE B: MODELO ANUNCIANTE */}
+                      <div className="bg-white border border-[#00BFFF] p-3 flex flex-col gap-2.5">
+                        <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block border-b border-[#C0C0C0]/60 pb-1">
+                          ⭐ Paso B: Modelo Anunciante (Sugerido para Comparar)
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                              Filtrar por Concesionaria
+                            </label>
+                            <select
+                              className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                              value={adModelFilterConcesionaria}
+                              onChange={e => {
+                                setAdModelFilterConcesionaria(e.target.value);
+                                setAdModelFilterMarca('Todas');
+                              }}
+                            >
+                              <option value="Todas">Todas las Concesionarias</option>
+                              {concesionariasParaAds.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                              Filtrar por Marca
+                            </label>
+                            <select
+                              className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                              value={adModelFilterMarca}
+                              onChange={e => setAdModelFilterMarca(e.target.value)}
+                            >
+                              <option value="Todas">Todas las Marcas ({marcasParaAds.length})</option>
+                              {marcasParaAds.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                            Modelo Anunciante a Sugerir *
+                          </label>
+                          <select
+                            className="w-full border border-[#0A1F33] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-bold text-[#0A1F33]"
+                            value={adForm.modelId || ''}
+                            onChange={e => {
+                              const mId = e.target.value;
+                              const sel = modelosList.find(m => m.id === mId);
+                              const brand = sel ? marcasList.find(b => b.id === sel.brandId) : null;
+                              const dealerVer = versionesList.find(v => v.modelId === mId && v.concesionaria);
+                              const suggestedSponsor = adModelFilterConcesionaria !== 'Todas'
+                                ? adModelFilterConcesionaria
+                                : (brand?.name || dealerVer?.concesionaria || '');
+                              setAdForm({
+                                ...adForm,
+                                modelId: mId,
+                                sponsor: adForm.sponsor || suggestedSponsor
+                              });
+                            }}
+                            required
+                          >
+                            <option value="">-- Seleccioná el modelo anunciante ({modelosParaAds.length} disponibles) --</option>
+                            {modelosParaAds.map(m => {
+                              const b = marcasList.find(brand => brand.id === m.brandId);
+                              const dealerVer = versionesList.find(v => v.modelId === m.id && v.concesionaria);
+                              const dealerTag = dealerVer?.concesionaria ? ` (${dealerVer.concesionaria})` : '';
+                              const label = b ? `${b.name} - ${m.name}${dealerTag}` : `${m.name}${dealerTag}`;
+                              return <option key={m.id} value={m.id}>{label}</option>;
+                            })}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CONFIGURACIÓN ESPECÍFICA PARA #8 DESTAQUE EN EL CATÁLOGO */}
+                  {adForm.location === 'catalogo_destaque' && (
+                    <div className="bg-[#F8F9FA] border border-[#00BFFF] p-3.5 flex flex-col gap-3">
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block border-b border-[#C0C0C0]/60 pb-1.5">
+                        ⭐ Configuración de Destaque en el Catálogo (Hasta 3 Modelos)
+                      </span>
+
+                      {/* ALCANCE DEL CATÁLOGO */}
+                      <div className="bg-white border border-[#C0C0C0] p-3 flex flex-col gap-2.5">
+                        <span className="text-[9px] font-black text-[#0A1F33] uppercase tracking-wider block">
+                          ¿En qué parte del catálogo se aplica? *
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAdForm({ ...adForm, catalogoScope: 'general', targetCategory: 'Todas', targetCombustible: 'Todas' })}
+                            className={`p-2.5 text-[10px] font-black uppercase border text-left transition-colors ${
+                              adForm.catalogoScope !== 'filtros'
+                                ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+                                : 'bg-[#F8F9FA] text-[#0A1F33] border-[#C0C0C0] hover:border-[#00BFFF]'
+                            }`}
+                          >
+                            🌐 Catálogo General
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAdForm({ ...adForm, catalogoScope: 'filtros' })}
+                            className={`p-2.5 text-[10px] font-black uppercase border text-left transition-colors ${
+                              adForm.catalogoScope === 'filtros'
+                                ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+                                : 'bg-[#F8F9FA] text-[#0A1F33] border-[#C0C0C0] hover:border-[#00BFFF]'
+                            }`}
+                          >
+                            🎯 Filtro de Tipo de Auto / Motorización
+                          </button>
+                        </div>
+
+                        {adForm.catalogoScope === 'filtros' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-[#E5E7EB]">
+                            <div>
+                              <label className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                                Tipo de Auto (Carrocería)
+                              </label>
+                              <select
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-semibold text-[#0A1F33]"
+                                value={adForm.targetCategory}
+                                onChange={e => setAdForm({ ...adForm, targetCategory: e.target.value })}
+                              >
+                                <option value="Todas">Cualquiera (Sin filtro de carrocería)</option>
+                                {categoriasUnicas.map(cat => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                                Tipo de Motorización
+                              </label>
+                              <select
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-semibold text-[#0A1F33]"
+                                value={adForm.targetCombustible}
+                                onChange={e => setAdForm({ ...adForm, targetCombustible: e.target.value })}
+                              >
+                                <option value="Todas">Cualquiera (Sin filtro de motorización)</option>
+                                {combustiblesUnicos.map(comb => (
+                                  <option key={comb} value={comb}>
+                                    {comb} — {combustibleLabel(comb)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* FILTROS Y SELECCIÓN DE HASTA 3 MODELOS */}
+                      <div className="bg-white border border-[#00BFFF] p-3 flex flex-col gap-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-[#0A1F33] uppercase tracking-wider">
+                            Modelos Anunciantes (Hasta 3 modelos) *
+                          </span>
+                          <span className="text-[9px] font-black uppercase bg-[#0A1F33] text-[#00BFFF] px-2 py-0.5">
+                            {(adForm.modelIds || []).length} / 3 seleccionados
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                              Filtrar por Concesionaria
+                            </label>
+                            <select
+                              className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                              value={adModelFilterConcesionaria}
+                              onChange={e => {
+                                setAdModelFilterConcesionaria(e.target.value);
+                                setAdModelFilterMarca('Todas');
+                              }}
+                            >
+                              <option value="Todas">Todas las Concesionarias</option>
+                              {concesionariasParaAds.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                              Filtrar por Marca
+                            </label>
+                            <select
+                              className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33]"
+                              value={adModelFilterMarca}
+                              onChange={e => setAdModelFilterMarca(e.target.value)}
+                            >
+                              <option value="Todas">Todas las Marcas ({marcasParaAds.length})</option>
+                              {marcasParaAds.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* AGREGAR MODELO A LA LISTA (MÁX 3) */}
+                        <div>
+                          <select
+                            className="w-full border border-[#0A1F33] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white font-bold text-[#0A1F33]"
+                            value=""
+                            disabled={(adForm.modelIds || []).length >= 3}
+                            onChange={e => {
+                              const mId = e.target.value;
+                              if (!mId) return;
+                              const current = adForm.modelIds || [];
+                              if (current.includes(mId) || current.length >= 3) return;
+                              const nextIds = [...current, mId];
+                              const sel = modelosList.find(m => m.id === mId);
+                              const brand = sel ? marcasList.find(b => b.id === sel.brandId) : null;
+                              const dealerVer = versionesList.find(v => v.modelId === mId && v.concesionaria);
+                              const suggestedSponsor = adModelFilterConcesionaria !== 'Todas'
+                                ? adModelFilterConcesionaria
+                                : (brand?.name || dealerVer?.concesionaria || '');
+                              setAdForm({
+                                ...adForm,
+                                modelIds: nextIds,
+                                modelId: nextIds[0] || '',
+                                sponsor: adForm.sponsor || suggestedSponsor
+                              });
+                            }}
+                          >
+                            <option value="">
+                              {(adForm.modelIds || []).length >= 3
+                                ? '✓ Límite de 3 modelos alcanzado'
+                                : `-- Seleccioná modelo para agregar al Top 3 (${modelosParaAds.length} disponibles) --`}
+                            </option>
+                            {modelosParaAds.map(m => {
+                              const b = marcasList.find(brand => brand.id === m.brandId);
+                              const dealerVer = versionesList.find(v => v.modelId === m.id && v.concesionaria);
+                              const dealerTag = dealerVer?.concesionaria ? ` (${dealerVer.concesionaria})` : '';
+                              const label = b ? `${b.name} - ${m.name}${dealerTag}` : `${m.name}${dealerTag}`;
+                              const alreadyPicked = (adForm.modelIds || []).includes(m.id);
+                              return (
+                                <option key={m.id} value={m.id} disabled={alreadyPicked}>
+                                  {alreadyPicked ? `✓ ${label} (Seleccionado)` : label}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+
+                        {/* LISTA DE MODELOS SELECCIONADOS (SLOTS 1 A 3) */}
+                        {(adForm.modelIds || []).length > 0 && (
+                          <div className="flex flex-col gap-1.5 mt-1">
+                            {(adForm.modelIds || []).map((id, idx) => {
+                              const m = modelosList.find(mod => mod.id === id);
+                              const b = m ? marcasList.find(br => br.id === m.brandId) : null;
+                              return (
+                                <div key={id} className="flex items-center justify-between bg-[#F0FBFF] border border-[#00BFFF] px-3 py-2 text-xs">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="bg-[#0A1F33] text-[#00BFFF] text-[9px] font-black uppercase px-2 py-0.5 shrink-0">
+                                      Slot #{idx + 1}
+                                    </span>
+                                    <span className="font-black text-[#0A1F33] uppercase truncate">
+                                      {b ? `${b.name} ${m?.name}` : (m?.name || id)}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextIds = (adForm.modelIds || []).filter(x => x !== id);
+                                      setAdForm({ ...adForm, modelIds: nextIds, modelId: nextIds[0] || '' });
+                                    }}
+                                    className="text-[10px] font-black text-[#D93025] hover:underline uppercase ml-2 shrink-0"
+                                  >
+                                    Quitar ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -5464,7 +6251,7 @@ export default function AdminDashboardPage() {
                   </div>
 
                   {/* PASO 3: IMAGEN 1200x400 Y ENLACE DE REDIRECCIÓN (SOLO BANNERS 1, 2, 3 Y 6) */}
-                  {adForm.location !== 'comparador' && adForm.location !== 'recomendador' && (
+                  {adForm.location !== 'comparador' && adForm.location !== 'recomendador' && adForm.location !== 'comparador_competencia' && adForm.location !== 'catalogo_destaque' && (
                     <div className="border border-[#C0C0C0] p-3.5 bg-[#F8F9FA] flex flex-col gap-3">
                       <div className="flex items-center justify-between border-b border-[#C0C0C0]/60 pb-1.5">
                         <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider">
@@ -5493,7 +6280,7 @@ export default function AdminDashboardPage() {
                           className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#0A1F33] bg-white"
                           value={adForm.link}
                           onChange={e => setAdForm({ ...adForm, link: e.target.value })}
-                          required={adForm.location !== 'comparador' && adForm.location !== 'recomendador'}
+                          required={adForm.location !== 'comparador' && adForm.location !== 'recomendador' && adForm.location !== 'comparador_competencia' && adForm.location !== 'catalogo_destaque'}
                         />
                         <span className="text-[9px] text-[#3A3A3C] block mt-1">
                           Web a la que será dirigido el usuario al hacer clic en el banner.
@@ -5505,7 +6292,7 @@ export default function AdminDashboardPage() {
                   {/* PASO 4: VIGENCIA DE LA CAMPAÑA (INICIO / FIN) */}
                   <div className="border border-[#C0C0C0] p-3.5 bg-[#FFFFFF]">
                     <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block mb-2">
-                      {(adForm.location === 'comparador' || adForm.location === 'recomendador') ? '3. Inicio y Fin de la Campaña *' : '4. Inicio y Fin de la Campaña *'}
+                      {(adForm.location === 'comparador' || adForm.location === 'recomendador' || adForm.location === 'comparador_competencia' || adForm.location === 'catalogo_destaque') ? '3. Inicio y Fin de la Campaña *' : '4. Inicio y Fin de la Campaña *'}
                     </span>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -5574,6 +6361,8 @@ export default function AdminDashboardPage() {
                       { id: 'recomendador', label: '4. Recomendador (Slot Modelo)' },
                       { id: 'comparador', label: '5. Comparador (Slot Modelo)' },
                       { id: 'recomendador_banner', label: '6. Banner Recomendador' },
+                      { id: 'comparador_competencia', label: '7. Comp. por Competencia' },
+                      { id: 'catalogo_destaque', label: '8. Destaque Catálogo (Top 3)' },
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -5615,7 +6404,9 @@ export default function AdminDashboardPage() {
                       const isRecomendadorBanner = camp.location === 'recomendador_banner' || (camp.location === 'recomendador' && !camp.modelId);
                       if (adVaultFilterLocation === 'recomendador') return isRecomendadorModel;
                       if (adVaultFilterLocation === 'recomendador_banner') return isRecomendadorBanner;
-                      if (adVaultFilterLocation === 'comparador') return camp.location === 'comparador' || (Boolean(camp.modelId) && !isRecomendadorModel);
+                      if (adVaultFilterLocation === 'comparador_competencia') return camp.location === 'comparador_competencia';
+                      if (adVaultFilterLocation === 'catalogo_destaque') return camp.location === 'catalogo_destaque';
+                      if (adVaultFilterLocation === 'comparador') return camp.location === 'comparador' || (Boolean(camp.modelId) && !isRecomendadorModel && camp.location !== 'comparador_competencia' && camp.location !== 'catalogo_destaque');
                       return camp.location === adVaultFilterLocation || camp.location === 'ambos';
                     });
 
@@ -5661,9 +6452,13 @@ export default function AdminDashboardPage() {
 
                             const isFilterAd = camp.location === 'catalogo_filtros' || (camp.location === 'catalogo' && ((camp.targetCategory && camp.targetCategory !== 'Todas') || (camp.targetCombustible && camp.targetCombustible !== 'Todas')));
                             const isRecomendadorModel = (camp.location === 'recomendador' || camp.location === 'recomendador_slot') && Boolean(camp.modelId);
-                            const isCompAd = camp.location === 'comparador' || (Boolean(camp.modelId) && !isRecomendadorModel && camp.location !== 'home' && camp.location !== 'catalogo');
+                            const isCompCompetencia = camp.location === 'comparador_competencia';
+                            const isCatDestaque = camp.location === 'catalogo_destaque';
+                            const isCompAd = camp.location === 'comparador' || (Boolean(camp.modelId) && !isRecomendadorModel && !isCompCompetencia && !isCatDestaque && camp.location !== 'home' && camp.location !== 'catalogo');
 
                             const locationLabel = (() => {
+                              if (isCompCompetencia) return '7. Comparador por Competencia (Sin gráfica)';
+                              if (isCatDestaque) return '8. Destaque en el Catálogo (Top 3 Slots)';
                               if (isRecomendadorModel) return '4. Recomendador (Slot Modelo Patrocinado)';
                               if (isCompAd) return '5. Comparador (Modelo Patrocinado • Sin dimensiones)';
                               if (isFilterAd) return '3. Catálogo Filtros (1200x400)';
@@ -5703,6 +6498,48 @@ export default function AdminDashboardPage() {
                                     </p>
 
                                     {/* DETALLES SEGÚN EL ESPACIO */}
+                                    {isCompCompetencia && (
+                                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                        <span className="bg-[#FEF2F2] border border-[#D93025] text-[#D93025] text-[9px] font-black uppercase px-2 py-0.5">
+                                          🎯 Competidor: {camp.competitorBrandName ? `${camp.competitorBrandName} ` : ''}{camp.competitorModelName || camp.competitorModelId}
+                                        </span>
+                                        <span className="text-[10px] font-black text-[#0A1F33]">➔</span>
+                                        <span className="bg-[#00BFFF]/15 border border-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase px-2 py-0.5">
+                                          ⭐ Sugiere: {camp.brandName ? `${camp.brandName} ` : ''}{camp.modelName || camp.modelId}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {isCatDestaque && (
+                                      <div className="flex flex-col gap-1 mt-1">
+                                        <div className="flex flex-wrap gap-1.5">
+                                          <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5">
+                                            Alcance: {camp.catalogoScope === 'filtros' ? 'Filtro Específico' : 'Catálogo General'}
+                                          </span>
+                                          {camp.catalogoScope === 'filtros' && camp.targetCategory && camp.targetCategory !== 'Todas' && (
+                                            <span className="bg-white border border-[#0A1F33] text-[#0A1F33] text-[8px] font-bold uppercase px-2 py-0.5">
+                                              Carrocería: {camp.targetCategory}
+                                            </span>
+                                          )}
+                                          {camp.catalogoScope === 'filtros' && camp.targetCombustible && camp.targetCombustible !== 'Todas' && (
+                                            <span className="bg-white border border-[#00BFFF] text-[#0A1F33] text-[8px] font-bold uppercase px-2 py-0.5">
+                                              Motorización: {camp.targetCombustible}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {(Array.isArray(camp.modelIds) && camp.modelIds.length > 0 ? camp.modelIds : (camp.modelId ? [camp.modelId] : [])).map((mId: string, i: number) => {
+                                            const m = modelosList.find(mod => mod.id === mId);
+                                            const b = m ? marcasList.find(br => br.id === m.brandId) : null;
+                                            return (
+                                              <span key={mId} className="bg-[#00BFFF]/15 border border-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase px-2 py-0.5">
+                                                Slot #{i + 1}: {b ? `${b.name} ${m?.name}` : (m?.name || mId)}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
                                     {isFilterAd && (
                                       <div className="flex flex-wrap gap-1.5 mt-1">
                                         {camp.targetCategory && camp.targetCategory !== 'Todas' && (

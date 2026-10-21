@@ -33,6 +33,7 @@ interface AutoModel {
   img: string;
   isPopular?: boolean;
   combustible?: string;
+  allCombustibles?: string[];
   transmision?: string;
   plazas?: number;
   concesionaria?: string;
@@ -82,6 +83,7 @@ const Footer = () => {
               <li><Link href="/recomendador" className="hover:text-[#00BFFF] transition-colors">Recomendador Interactivo</Link></li>
               <li><Link href="/comparador" className="hover:text-[#00BFFF] transition-colors">Comparador de Versiones</Link></li>
               <li><Link href="/negociamos-por-vos" className="hover:text-[#00BFFF] transition-colors">Servicio: Negociamos por vos</Link></li>
+              <li><Link href="/entregar-usado" className="hover:text-[#00BFFF] transition-colors font-bold text-[#00BFFF]">Entregá tu Usado (Parte de Pago)</Link></li>
               <li><Link href="/concesionarias" className="hover:text-[#00BFFF] transition-colors">Portal de Concesionarias (B2B)</Link></li>
               <li><Link href="/blog" className="hover:text-[#00BFFF] transition-colors">Blog & Noticias</Link></li>
             </ul>
@@ -213,6 +215,7 @@ export default function HomeClient() {
             img: data.imgUrl || '',
             isPopular: data.isPopular || false,
             combustible: cleanComb,
+            allCombustibles: Array.from(new Set(mVers.map((v: any) => normalizeCombustible(v.specs?.combustible)).filter(Boolean))),
             transmision: transmision,
             plazas: plazas,
             concesionaria: concesionaria,
@@ -440,6 +443,60 @@ export default function HomeClient() {
     return autos.filter(auto => currentTab.filter(auto.price)).slice(0, 10);
   }, [autos, activePriceTab, priceTabs]);
 
+  // Agrupación de marcas y conteo de modelos únicos para "Sólo EV" y "Sólo HEV / PHEV"
+  const { evBrandItems, hevPhevBrandItems } = useMemo(() => {
+    const evMap = new Map<string, Set<string>>();
+    const hevMap = new Map<string, Set<string>>();
+
+    autos.forEach((auto) => {
+      const brandName = (auto.brand || '').trim();
+      if (!brandName || brandName === 'MARCA') return;
+      const modelKey = `${auto.brandId}_${(auto.name || '').trim().toLowerCase()}`;
+      const combs = auto.allCombustibles && auto.allCombustibles.length > 0
+        ? auto.allCombustibles
+        : [normalizeCombustible(auto.combustible)];
+
+      if (combs.includes('EV')) {
+        if (!evMap.has(brandName)) evMap.set(brandName, new Set());
+        evMap.get(brandName)!.add(modelKey);
+      }
+
+      if (combs.includes('HEV') || combs.includes('PHEV')) {
+        if (!hevMap.has(brandName)) hevMap.set(brandName, new Set());
+        hevMap.get(brandName)!.add(modelKey);
+      }
+    });
+
+    const evList = Array.from(evMap.entries())
+      .map(([brand, set]) => ({ brand, count: set.size }))
+      .sort((a, b) => b.count - a.count || a.brand.localeCompare(b.brand))
+      .map((item) => ({
+        label: item.brand,
+        badge: `${item.count} ${item.count === 1 ? 'modelo' : 'modelos'}`,
+        href: `/catalogo?marca=${encodeURIComponent(item.brand)}&combustible=EV`,
+      }));
+
+    const hevList = Array.from(hevMap.entries())
+      .map(([brand, set]) => ({ brand, count: set.size }))
+      .sort((a, b) => b.count - a.count || a.brand.localeCompare(b.brand))
+      .map((item) => ({
+        label: item.brand,
+        badge: `${item.count} ${item.count === 1 ? 'modelo' : 'modelos'}`,
+        href: `/catalogo?marca=${encodeURIComponent(item.brand)}&combustible=HEV&combustible=PHEV`,
+      }));
+
+    return {
+      evBrandItems: [
+        ...evList,
+        { label: 'Ver todos los 100% Eléctricos (EV)', href: '/catalogo?combustible=EV', highlight: true },
+      ],
+      hevPhevBrandItems: [
+        ...hevList,
+        { label: 'Ver todos los Híbridos (HEV / PHEV)', href: '/catalogo?combustible=HEV&combustible=PHEV', highlight: true },
+      ],
+    };
+  }, [autos]);
+
   const navItems: NavItem[] = useMemo(() => [
     {
       type: 'megamenu', label: 'Por Tipo', columns: 2, width: 400,
@@ -448,6 +505,14 @@ export default function HomeClient() {
     {
       type: 'megamenu', label: 'Por Marca', columns: 3, width: 600,
       items: marcas.map(marca => ({ label: marca.name, href: `/catalogo?marca=${encodeURIComponent(marca.name)}` })),
+    },
+    {
+      type: 'megamenu', label: 'Sólo EV', columns: 2, width: 440,
+      items: evBrandItems,
+    },
+    {
+      type: 'megamenu', label: 'Sólo HEV / PHEV', columns: 2, width: 460,
+      items: hevPhevBrandItems,
     },
     {
       type: 'megamenu', label: 'Herramientas', columns: 1, width: 300,
@@ -459,7 +524,8 @@ export default function HomeClient() {
     },
     { type: 'link', label: 'Negociamos por vos', href: '/negociamos-por-vos' },
     { type: 'link', label: 'Blog & Noticias', href: '/blog' },
-  ], [tiposDisponibles, marcas]);
+    { type: 'link', label: 'ENTREGÁ TU USADO', href: '/entregar-usado', highlightStyle: 'underline-caps' },
+  ], [tiposDisponibles, marcas, evBrandItems, hevPhevBrandItems]);
 
   return (
     <main className="min-h-screen bg-[#F8F9FA] text-[#3A3A3C] font-sans flex flex-col relative">

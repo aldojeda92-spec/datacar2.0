@@ -12,6 +12,22 @@ export interface LeadNotificationParams {
   origen: string;
   concesionariaDestino: string;
   wizardAnswers?: Record<string, any>;
+  tradeInData?: {
+    vehiculoEntregar: string;
+    marca: string;
+    modelo: string;
+    version: string;
+    anio: string;
+    origenUnidad: string;
+    color: string;
+    transmision: string;
+    kilometraje: string;
+    estadoGeneral: string;
+    valorSolicitadoUsd: number;
+    vehiculoInteres0km: string;
+    diferenciaEstimadaUsd?: number | null;
+    comentarios?: string | null;
+  };
   topMatches?: Array<{
     brandName: string;
     modelName: string;
@@ -64,6 +80,8 @@ export const sendLeadNotificationEmail = async (params: LeadNotificationParams) 
           waLink,
           wizardAnswers: params.wizardAnswers,
           topMatches: params.topMatches,
+          origen: params.origen,
+          tradeInData: params.tradeInData,
         },
       }),
     });

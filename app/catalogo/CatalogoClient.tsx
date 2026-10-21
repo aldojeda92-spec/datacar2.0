@@ -32,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { type: 'link', label: 'Negociamos por vos', href: '/negociamos-por-vos' },
   { type: 'link', label: 'Blog & Noticias', href: '/blog' },
+  { type: 'link', label: 'ENTREGÁ TU USADO', href: '/entregar-usado', highlightStyle: 'underline-caps' },
   { type: 'link', label: 'Catálogo', href: '/catalogo', current: true },
 ];
 
@@ -50,6 +51,7 @@ interface AutoModel {
   img: string;
   transmision: string;
   combustible: string;
+  allCombustibles?: string[];
   traccion: string;
   plazas: string;
   origen_marca: string;
@@ -71,6 +73,8 @@ interface AdCampaign {
   price: string; link: string; img: string; location: string; 
   targetCategory?: string; // Filtro por tipo de carrocería
   targetCombustible?: string; // Filtro por tipo de movilidad (EV, PHEV, HEV, MHEV, NAFTA, DIESEL, FLEX)
+  modelId?: string;
+  modelIds?: string[];
   startDate: string; endDate: string; isActive: boolean; 
 }
 
@@ -82,6 +86,7 @@ function CatalogoContent() {
 
   // INYECCIÓN: Bóveda de Campañas Activas
   const [activeCampaigns, setActiveCampaigns] = useState<AdCampaign[]>([]);
+  const [destaqueCampaigns, setDestaqueCampaigns] = useState<AdCampaign[]>([]);
 
   // DATACAR CHECK: concesionarias oficiales verificadas, se propaga a sus productos
   const [checkedDealershipSet, setCheckedDealershipSet] = useState<Set<string>>(new Set());
@@ -295,6 +300,7 @@ function CatalogoContent() {
             img: mData.imgUrl || '',
             transmision: specs.transmision || '',
             combustible: normalizeCombustible(specs.combustible),
+            allCombustibles: Array.from(new Set(modelVersions.map(v => normalizeCombustible(v.specs?.combustible)).filter(Boolean))),
             traccion: specs.traccion || '',
             plazas: specs.plazas?.toString() || '',
             origen_marca: brandInfo.origen,
@@ -308,6 +314,9 @@ function CatalogoContent() {
 
           if (modelsTemp.has(uniqueKey)) {
             const existing = modelsTemp.get(uniqueKey)!;
+            const mergedCombs = Array.from(new Set([...(existing.allCombustibles || []), ...(autoData.allCombustibles || [])]));
+            existing.allCombustibles = mergedCombs;
+            autoData.allCombustibles = mergedCombs;
             if (price > 0 && (price < existing.price || existing.price === 0)) {
               modelsTemp.set(uniqueKey, autoData);
             }
@@ -318,6 +327,9 @@ function CatalogoContent() {
           if (mData.tipo_carroceria) tempTipos.add(normalizeCarroceria(mData.tipo_carroceria));
           if (specs.plazas) tempPlazas.add(specs.plazas.toString());
           if (specs.combustible) tempCombustibles.add(normalizeCombustible(specs.combustible));
+          modelVersions.forEach(v => {
+            if (v.specs?.combustible) tempCombustibles.add(normalizeCombustible(v.specs.combustible));
+          });
         });
 
         setAutos(Array.from(modelsTemp.values()));
@@ -337,6 +349,14 @@ function CatalogoContent() {
           (!c.endDate || c.endDate >= today)
         );
         setActiveCampaigns(validAds);
+
+        const validDestaqueAds = (campaignsData as AdCampaign[]).filter(c =>
+          c.isActive !== false &&
+          c.location === 'catalogo_destaque' &&
+          (!c.startDate || c.startDate <= today) &&
+          (!c.endDate || c.endDate >= today)
+        );
+        setDestaqueCampaigns(validDestaqueAds);
 
       } catch (error) { console.error("Error Firebase:", error); } finally { setIsLoading(false); }
     };
@@ -398,7 +418,11 @@ function CatalogoContent() {
       
       if (activeFilters.tipos.length > 0 && !activeFilters.tipos.map(t=>t.toLowerCase()).includes(auto.tipo_carroceria.toLowerCase())) return false;
       if (activeFilters.marcas.length > 0 && !activeFilters.marcas.map(m=>m.toLowerCase()).includes(auto.brand.toLowerCase())) return false;
-      if (activeFilters.combustibles.length > 0 && !activeFilters.combustibles.map(c=>c.toLowerCase()).includes(auto.combustible.toLowerCase())) return false;
+      if (activeFilters.combustibles.length > 0) {
+        const wantedCombs = activeFilters.combustibles.map(c => c.toLowerCase());
+        const modelCombs = (auto.allCombustibles && auto.allCombustibles.length > 0 ? auto.allCombustibles : [auto.combustible]).map(c => c.toLowerCase());
+        if (!modelCombs.some(mc => wantedCombs.includes(mc))) return false;
+      }
       if (activeFilters.plazas.length > 0 && !activeFilters.plazas.includes(auto.plazas)) return false;
       if (activeFilters.origenes.length > 0 && !activeFilters.origenes.map(o=>o.toLowerCase()).includes(auto.origen_marca.toLowerCase())) return false;
       
@@ -428,8 +452,88 @@ function CatalogoContent() {
 
   // Orden aplicado sobre el resultado filtrado. "relevancia" respeta el orden
   // de origen (destacados primero como desempate suave).
+  // ==========================================
+  // 2.5. ESPACIO ADICIONAL #2: DESTAQUE EN EL CATÁLOGO (TOP 3 SLOTS PATROCINADOS)
+  // ==========================================
+  const sponsoredModelsMap = useMemo(() => {
+    const map = new Map<string, string>(); // modelId -> sponsor
+    if (destaqueCampaigns.length === 0) return map;
+
+    const activeTipos = activeFilters.tipos.map(t => normalizeCarroceria(t).toUpperCase());
+    const activeCombs = activeFilters.combustibles.map(c => normalizeCombustible(c).toUpperCase());
+    const hasTipoFilter = activeTipos.length > 0;
+    const hasCombFilter = activeCombs.length > 0;
+
+    // Filtrar campañas de destaque según si el usuario está en Catálogo General o aplicando filtros de Tipo/Motorización
+    const matchingCampaigns = destaqueCampaigns.filter(c => {
+      const cat = c.targetCategory && c.targetCategory !== 'Todas' ? normalizeCarroceria(c.targetCategory).toUpperCase() : '';
+      const comb = c.targetCombustible && c.targetCombustible !== 'Todas' ? normalizeCombustible(c.targetCombustible).toUpperCase() : '';
+      const isCampaignForFilters = Boolean(cat || comb);
+
+      if (hasTipoFilter || hasCombFilter) {
+        if (!isCampaignForFilters) return false;
+        const catOk = !cat || (hasTipoFilter && activeTipos.includes(cat));
+        const combOk = !comb || (hasCombFilter && activeCombs.includes(comb));
+        return catOk && combOk;
+      } else {
+        return !isCampaignForFilters;
+      }
+    });
+
+    for (const camp of matchingCampaigns) {
+      const ids: string[] = Array.isArray(camp.modelIds) && camp.modelIds.length > 0
+        ? camp.modelIds
+        : camp.modelId
+          ? [camp.modelId]
+          : [];
+      for (const mId of ids) {
+        if (mId && !map.has(mId) && map.size < 3) {
+          map.set(mId, camp.sponsor || 'Patrocinado');
+        }
+      }
+      if (map.size >= 3) break;
+    }
+
+    return map;
+  }, [destaqueCampaigns, activeFilters.tipos, activeFilters.combustibles]);
+
   const autosOrdenados = useMemo(() => {
     const list = [...autosFiltrados];
+    const sorted = (() => {
+      switch (sortBy) {
+        case 'precio_asc':
+          return list.sort((a, b) => a.price - b.price);
+        case 'precio_desc':
+          return list.sort((a, b) => b.price - a.price);
+        case 'nombre':
+          return list.sort((a, b) => `${a.brand} ${a.name}`.localeCompare(`${b.brand} ${b.name}`, 'es'));
+        default:
+          return list.sort((a, b) => Number(b.destacado) - Number(a.destacado));
+      }
+    })();
+
+    if (sponsoredModelsMap.size > 0) {
+      const sponsoredAutos: AutoModel[] = [];
+      sponsoredModelsMap.forEach((_sponsor, mId) => {
+        const foundInFiltered = sorted.find(a => a.id === mId);
+        const foundInAll = !selectedSearchModelId && !similarModel ? autos.find(a => a.id === mId) : undefined;
+        const chosen = foundInFiltered || foundInAll;
+        if (chosen && sponsoredAutos.length < 3) {
+          sponsoredAutos.push(chosen);
+        }
+      });
+
+      if (sponsoredAutos.length > 0) {
+        const sponsoredIds = new Set(sponsoredAutos.map(a => a.id));
+        const organicAutos = sorted.filter(a => !sponsoredIds.has(a.id));
+        return [...sponsoredAutos, ...organicAutos];
+      }
+    }
+
+    return sorted;
+  }, [autosFiltrados, sortBy, sponsoredModelsMap, autos, selectedSearchModelId, similarModel]);
+
+  const _unusedAutosOrdenados = (() => { const list: AutoModel[] = [];
     switch (sortBy) {
       case 'precio_asc':
         return list.sort((a, b) => a.price - b.price);
@@ -440,7 +544,7 @@ function CatalogoContent() {
       default:
         return list.sort((a, b) => Number(b.destacado) - Number(a.destacado));
     }
-  }, [autosFiltrados, sortBy]);
+  })();
 
   // ==========================================
   // 3. MOTOR DE INYECCIÓN CONTEXTUAL (ADS)
@@ -838,14 +942,31 @@ function CatalogoContent() {
                 const verSel = versionAComparar(auto);
                 const enCompare = !!verSel && compareIds.has(verSel.id);
                 const multiVersion = auto.versiones.length > 1;
+                const sponsorDestaque = currentPage === 1 && index < 3 ? sponsoredModelsMap.get(auto.id) : undefined;
+                const isSponsoredSlot = Boolean(sponsorDestaque);
 
                 return (
                   <React.Fragment key={auto.id}>
                     {/* Renderizamos el Ad justo ANTES de la tarjeta número 7 */}
                     {showAdHere && index === 6 && renderAdBanner()}
 
-                    <div className="relative h-full bg-[#FFFFFF] border border-[#0A1F33]/10 flex flex-col hover:border-[#00BFFF] transition-all duration-300 group shadow-sm hover:shadow-xl hover:-translate-y-1 rounded-2xl overflow-hidden">
-                      <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-2">
+                    <div className={`relative h-full flex flex-col transition-all duration-300 group hover:-translate-y-1 rounded-2xl overflow-hidden ${
+                      isSponsoredSlot
+                        ? 'bg-gradient-to-b from-[#F0FBFF] via-[#FFFFFF] to-[#FFFFFF] border-2 border-[#00BFFF] ring-2 ring-[#00BFFF]/25 shadow-xl'
+                        : 'bg-[#FFFFFF] border border-[#0A1F33]/10 hover:border-[#00BFFF] shadow-sm hover:shadow-xl'
+                    }`}>
+                      {isSponsoredSlot && (
+                        <div className="bg-[#0A1F33] text-[#FFFFFF] px-4 py-2 border-b-2 border-[#00BFFF] flex items-center justify-between gap-2 z-20">
+                          <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#00BFFF]">
+                            <span>⭐</span>
+                            <span>Modelo Patrocinado</span>
+                          </span>
+                          <span className="bg-[#00BFFF]/20 border border-[#00BFFF]/40 text-[#FFFFFF] text-[8px] font-bold uppercase px-2 py-0.5 rounded-full tracking-wider truncate max-w-[130px]">
+                            {sponsorDestaque}
+                          </span>
+                        </div>
+                      )}
+                      <div className={`absolute ${isSponsoredSlot ? 'top-12' : 'top-3'} right-3 z-20 flex flex-col items-end gap-2`}>
                         <button
                           type="button"
                           onClick={() => toggleCompare(auto)}

@@ -350,6 +350,7 @@ function ComparadorContent() {
 
   // Campañas Publicitarias / Pautas Activas (Para Opción Patrocinada B2B)
   const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [compAdVersionsOpen, setCompAdVersionsOpen] = useState(false);
 
   useEffect(() => {
     getCachedCampaigns().then(c => {
@@ -359,20 +360,74 @@ function ComparadorContent() {
     });
   }, []);
 
-  const getVehicleSponsorship = useCallback((veh: VersionDetail | undefined) => {
+  const getVehicleSponsorship = useCallback((veh: VersionDetail | undefined, slotIndex?: number) => {
     if (!veh || !campaigns || campaigns.length === 0) return null;
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     return campaigns.find(c => {
       if (c.isActive === false) return false;
-      if (c.location && c.location !== 'comparador' && c.location !== 'ambos') return false;
+      if (c.location && c.location !== 'comparador' && c.location !== 'comparador_competencia' && c.location !== 'ambos') return false;
       if (!c.modelId) return false;
       if (c.modelId !== veh.modelId) return false;
       if (c.startDate && c.startDate > today) return false;
       if (c.endDate && c.endDate < today) return false;
+      if (c.location === 'comparador_competencia') {
+        if (typeof slotIndex === 'number' && slotIndex === 0) {
+          return false;
+        }
+        const otherVehicles = vehiclesData.filter((_, i) => i !== slotIndex);
+        const hasCompetitor = otherVehicles.some(v => v.modelId === c.competitorModelId);
+        if (!hasCompetitor) return false;
+      }
       return true;
     }) || null;
-  }, [campaigns]);
+  }, [campaigns, vehiclesData]);
+
+  // Espacio Adicional #1: Comparador por Competencia
+  // Cuando el usuario agrega en el 1er o 2do slot el modelo competidor elegido por el anunciante,
+  // en el slot sobrante aparece el botón sugiriendo comparar el modelo anunciado y al hacer clic
+  // despliega las versiones (nombre + precio contado) para cargar el slot.
+  const competitorAdSuggestion = useMemo(() => {
+    if (!campaigns || campaigns.length === 0 || vehiclesData.length === 0 || vehiclesData.length >= 3) {
+      return null;
+    }
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const slot1Or2ModelIds = [vehiclesData[0]?.modelId, vehiclesData[1]?.modelId].filter(Boolean);
+    if (slot1Or2ModelIds.length === 0) return null;
+
+    const matchedAd = campaigns.find((c) => {
+      if (c.isActive === false) return false;
+      if (c.location !== 'comparador_competencia') return false;
+      if (!c.competitorModelId || !c.modelId) return false;
+      if (c.startDate && c.startDate > today) return false;
+      if (c.endDate && c.endDate < today) return false;
+      // El competidor debe estar en el slot 1 o slot 2
+      if (!slot1Or2ModelIds.includes(c.competitorModelId)) return false;
+      // Y el modelo anunciante aún no debe estar cargado en los slots
+      if (vehiclesData.some((v) => v.modelId === c.modelId)) return false;
+      return true;
+    });
+
+    if (!matchedAd) return null;
+
+    const versionsForModel = allVersions
+      .filter((v) => v.modelId === matchedAd.modelId)
+      .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+
+    if (versionsForModel.length === 0) return null;
+
+    const rep = versionsForModel[0];
+    return {
+      campaign: matchedAd,
+      brandName: matchedAd.brandName || rep.brandName || '',
+      modelName: matchedAd.modelName || rep.modelName || '',
+      imgUrl: matchedAd.img || rep.imgUrl || '',
+      sponsor: matchedAd.sponsor || matchedAd.brandName || 'Patrocinado',
+      versions: versionsForModel,
+    };
+  }, [campaigns, vehiclesData, allVersions]);
 
   // ==========================================
   // 1. CARGA DE DATOS Y LECTURA DE URL
@@ -437,7 +492,7 @@ function ComparadorContent() {
         const formattedAll = allVersions.map(data => {
           const modelObj = modelsMap[data.modelId] || { name: '', img: '', brandId: '' };
           const bName = brandsMap[modelObj.brandId] || '';
-          return { id: data.id, brandName: bName, modelName: modelObj.name, versionName: data.name, price: Number(data.price) || 0 };
+          return { id: data.id, modelId: data.modelId, imgUrl: modelObj.img || '', brandName: bName, modelName: modelObj.name, versionName: data.name, price: Number(data.price) || 0 };
         });
 
         setAllVersions(formattedAll.filter(v => v.price > 0));
@@ -688,7 +743,7 @@ function ComparadorContent() {
                 const veh = vehiclesData[idx];
                 const vehScore = veh ? attributeScores.find(s => s.vehicleId === veh.id) : null;
                 const isHighestMatch = veh && winnerId === veh.id && vehiclesData.length >= 2;
-                const sponsorship = veh ? getVehicleSponsorship(veh) : null;
+                const sponsorship = veh ? getVehicleSponsorship(veh, idx) : null;
                 const isSponsored = !!sponsorship;
 
                 return (
@@ -838,7 +893,83 @@ function ComparadorContent() {
                         </div>
                       </>
                     ) : (
-                      /* Slot Vacío para Agregar Auto */
+                      /* Slot Vacío: Si aplica Comparador por Competencia en el primer slot libre, mostrar sugerencia patrocinada */
+                      competitorAdSuggestion && idx === vehiclesData.length ? (
+                        <div className="h-full min-h-[240px] sm:min-h-[260px] flex flex-col justify-between bg-[#F0FBFF] border-2 border-[#00BFFF] p-4 relative">
+                          <div className="bg-[#0A1F33] text-[#FFFFFF] text-[9px] font-black uppercase tracking-widest px-3 py-1.5 -mx-4 -mt-4 mb-3 flex items-center justify-between border-b-2 border-[#00BFFF]">
+                            <span className="text-[#00BFFF]">⭐ Sugerencia Patrocinada</span>
+                            <span className="text-[8px] text-[#C0C0C0]">{competitorAdSuggestion.sponsor}</span>
+                          </div>
+
+                          <div className="flex flex-col items-center text-center my-auto py-1">
+                            {isValidImageSrc(competitorAdSuggestion.imgUrl) && (
+                              <div className="relative w-32 h-20 mb-2">
+                                <Image
+                                  src={competitorAdSuggestion.imgUrl}
+                                  alt={`${competitorAdSuggestion.brandName} ${competitorAdSuggestion.modelName}`}
+                                  fill
+                                  className="object-contain"
+                                  unoptimized={!isOptimizableImageSrc(competitorAdSuggestion.imgUrl)}
+                                />
+                              </div>
+                            )}
+                            <span className="text-[9px] font-bold text-[#0080B0] uppercase tracking-widest">
+                              Alternativa recomendada para comparar
+                            </span>
+                            <h4
+                              className="font-black text-base text-[#0A1F33] uppercase mt-0.5 mb-2"
+                              style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}
+                            >
+                              {competitorAdSuggestion.brandName} {competitorAdSuggestion.modelName}
+                            </h4>
+
+                            <button
+                              type="button"
+                              onClick={() => setCompAdVersionsOpen((prev) => !prev)}
+                              className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#0A1F33] hover:text-[#FFFFFF] font-black text-[10px] uppercase tracking-widest py-2.5 px-4 transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <span>
+                                Comparar con {competitorAdSuggestion.brandName} {competitorAdSuggestion.modelName}
+                              </span>
+                              <span>{compAdVersionsOpen ? '▲' : '▼'}</span>
+                            </button>
+
+                            {compAdVersionsOpen && (
+                              <div className="w-full mt-2 bg-[#FFFFFF] border border-[#0A1F33]/20 max-h-40 overflow-y-auto text-left divide-y divide-[#E6E6E6] shadow-md">
+                                <div className="px-3 py-1.5 bg-[#F8F9FA] text-[9px] font-black text-[#0A1F33] uppercase tracking-wider">
+                                  Elegí una versión para cargar al slot:
+                                </div>
+                                {competitorAdSuggestion.versions.map((ver: any) => (
+                                  <button
+                                    key={ver.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setCompAdVersionsOpen(false);
+                                      handleAddVersion(ver);
+                                    }}
+                                    className="w-full px-3 py-2 text-[10px] hover:bg-[#F0FBFF] flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <span className="font-bold text-[#0A1F33] uppercase truncate">
+                                      {ver.versionName}
+                                    </span>
+                                    <span className="font-black text-[#0080B0] shrink-0">
+                                      US$ {Number(ver.price || 0).toLocaleString()}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setSearchModalOpen(true)}
+                            className="mt-3 pt-2 border-t border-[#00BFFF]/30 text-[9px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest text-center cursor-pointer"
+                          >
+                            + O buscar otro vehículo manualmente
+                          </button>
+                        </div>
+                      ) : (
                       <button
                         type="button"
                         onClick={() => setSearchModalOpen(true)}
@@ -854,6 +985,7 @@ function ComparadorContent() {
                           Hasta 3 vehículos simultáneos
                         </span>
                       </button>
+                      )
                     )}
                   </div>
                 );

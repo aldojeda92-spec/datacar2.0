@@ -52,7 +52,67 @@ function buildLeadHtml(d: any): string {
   };
 
   const hasWizardData = !!d?.wizardAnswers || (d?.topMatches && d.topMatches.length > 0);
+  const t = d?.tradeInData;
   let extraHtml = '';
+
+  if (t) {
+    extraHtml += `
+      <div style="margin-top: 28px; background-color: #FFFFFF; border: 2px solid #00BFFF; border-radius: 10px; overflow: hidden;">
+        <div style="background-color: #0A1F33; color: #FFFFFF; padding: 14px 18px; border-bottom: 2px solid #00BFFF;">
+          <span style="color: #00BFFF; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; display: block;">
+            🔄 OPERACIÓN CON PARTE DE PAGO
+          </span>
+          <h3 style="margin: 4px 0 0 0; font-size: 15px; font-weight: 900; text-transform: uppercase; font-family: 'Montserrat', sans-serif; color: #FFFFFF;">
+            El interesado quiere entregar su auto usado
+          </h3>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #3A3A3C;">
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 40%; text-transform: uppercase; color: #71717A;">Auto a entregar:</td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33; font-size: 13px; text-transform: uppercase;">${escapeHtml(t.vehiculoEntregar)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A;">Año del vehículo:</td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 800; color: #0A1F33;">${escapeHtml(t.anio)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A;">Origen de la unidad:</td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 800; color: #0A1F33;">${escapeHtml(t.origenUnidad)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A;">Color / Transmisión:</td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; color: #0A1F33;">${escapeHtml(t.color)} • ${escapeHtml(t.transmision)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A;">Kilometraje:</td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 800; color: #0A1F33;">${escapeHtml(t.kilometraje)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A;">Estado general:</td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0080B0; text-transform: uppercase;">${escapeHtml(t.estadoGeneral)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A;">Valor solicitado (Usado):</td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #1E8E3E; font-size: 14px;">USD ${escapeHtml(Number(t.valorSolicitadoUsd || 0).toLocaleString('es-PY'))}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; ${t.diferenciaEstimadaUsd || t.comentarios ? 'border-bottom: 1px solid #E6E6E6;' : ''} font-weight: 700; text-transform: uppercase; color: #71717A;">0KM de Interés:</td>
+            <td style="padding: 12px 16px; ${t.diferenciaEstimadaUsd || t.comentarios ? 'border-bottom: 1px solid #E6E6E6;' : ''} font-weight: 900; color: #0A1F33; text-transform: uppercase;">${escapeHtml(t.vehiculoInteres0km)}</td>
+          </tr>
+          ${t.diferenciaEstimadaUsd ? `
+          <tr>
+            <td style="padding: 12px 16px; ${t.comentarios ? 'border-bottom: 1px solid #E6E6E6;' : ''} font-weight: 700; text-transform: uppercase; color: #71717A;">Diferencia estimada:</td>
+            <td style="padding: 12px 16px; ${t.comentarios ? 'border-bottom: 1px solid #E6E6E6;' : ''} font-weight: 800; color: #0A1F33;">USD ${escapeHtml(Number(t.diferenciaEstimadaUsd).toLocaleString('es-PY'))}</td>
+          </tr>` : ''}
+          ${t.comentarios ? `
+          <tr>
+            <td style="padding: 12px 16px; font-weight: 700; text-transform: uppercase; color: #71717A;">Comentarios:</td>
+            <td style="padding: 12px 16px; color: #3A3A3C;">${escapeHtml(t.comentarios)}</td>
+          </tr>` : ''}
+        </table>
+      </div>
+    `;
+  }
   if (hasWizardData) {
     extraHtml += `
       <h2 style="color: #0A1F33; font-size: 16px; text-transform: uppercase; font-weight: 900; margin-top: 32px; border-bottom: 1px solid #C0C0C0; padding-bottom: 8px; font-family: 'Montserrat', sans-serif;">
@@ -340,7 +400,9 @@ export async function POST(request: Request) {
   let subject: string;
   let html: string;
   if (type === 'lead_notification') {
-    subject = `🔥 NUEVO LEAD DATACAR: ${escapeHtml(data?.vehicleOfInterest || 'Consulta Web')}`;
+    subject = data?.tradeInData
+      ? `🔄 LEAD PARTE DE PAGO: Quiere entregar ${escapeHtml(data.tradeInData.vehiculoEntregar)} (${escapeHtml(data.tradeInData.anio)}) por ${escapeHtml(data.tradeInData.vehiculoInteres0km)}`
+      : `🔥 NUEVO LEAD DATACAR: ${escapeHtml(data?.vehicleOfInterest || 'Consulta Web')}`;
     html = buildLeadHtml(data);
   } else if (type === 'welcome') {
     subject = 'Bienvenido a DATACAR 🚘';
