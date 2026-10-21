@@ -1,14 +1,19 @@
 import type { MetadataRoute } from 'next';
 
-// El panel administrativo y su login no deben indexarse ni rastrearse.
-// La protección real de datos vive en firestore.rules; esto solo evita que
-// /admin aparezca en buscadores.
+// Configuración de rastreo para motores de búsqueda (Googlebot, Bingbot, etc.).
+// - Protege el panel administrativo y los endpoints internos de la API.
+// - Optimiza el Crawl Budget de Google para centrarse 100% en el catálogo, comparador y blog.
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/admin', '/admin/'],
+      disallow: [
+        '/admin',
+        '/admin/',
+        '/api/',
+        '/api/*',
+      ],
     },
     sitemap: 'https://datacarpy.com/sitemap.xml',
   };
