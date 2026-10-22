@@ -79,6 +79,31 @@ interface AdCampaign {
 }
 
 
+const toSlug = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+const findSimilarAuto = (list: AutoModel[], target: string): AutoModel | null => {
+  if (!target || !list.length) return null;
+  const t = decodeURIComponent(target).trim().toLowerCase();
+  const slug = toSlug(t);
+
+  let match = list.find(a => a.id.toLowerCase() === t);
+  if (match) return match;
+
+  match = list.find(a => toSlug(a.id) === slug);
+  if (match) return match;
+
+  match = list.find(a => a.name.toLowerCase() === t);
+  if (match) return match;
+
+  match = list.find(a => toSlug(a.name) === slug);
+  if (match) return match;
+
+  match = list.find(a => `${a.brand.toLowerCase()} ${a.name.toLowerCase()}` === t || toSlug(`${a.brand} ${a.name}`) === slug);
+  if (match) return match;
+
+  return list.find(a => a.name.toLowerCase().includes(t) || t.includes(a.name.toLowerCase())) || null;
+};
+
 function CatalogoContent() {
   const searchParams = useSearchParams();
   const [autos, setAutos] = useState<AutoModel[]>([]);
@@ -179,7 +204,54 @@ function CatalogoContent() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSearchModelId, setSelectedSearchModelId] = useState<string | null>(null);
   const [similarModel, setSimilarModel] = useState<AutoModel | null>(null);
+  const initialSimilarRef = useRef<string | null>(searchParams?.get('similar') || null);
+  const [similarModelId, setSimilarModelId] = useState<string | null>(() => searchParams?.get('similar') || null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const similarParam = searchParams?.get('similar');
+
+  // Hidratar búsqueda de similares desde la URL (/catalogo?similar=MODEL_ID)
+  useEffect(() => {
+    const target = similarModelId || initialSimilarRef.current || similarParam;
+    if (target && autos.length > 0) {
+      const found = findSimilarAuto(autos, target);
+      if (found) {
+        setSimilarModel(found);
+        setSimilarModelId(found.id);
+        setSelectedSearchModelId(null);
+        setGlobalSearchQuery('');
+        setShowSuggestions(false);
+        setActiveFilters(prev => ({ ...prev, marcas: [], origenes: [] }));
+        topRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+      initialSimilarRef.current = null;
+    }
+  }, [similarParam, similarModelId, autos]);
+
+  // Selección de modelo similar desde la lupa de cualquier card
+  const handleSelectSimilar = (auto: AutoModel) => {
+    setSimilarModel(auto);
+    setSimilarModelId(auto.id);
+    setSelectedSearchModelId(null);
+    setGlobalSearchQuery('');
+    setShowSuggestions(false);
+    if (activeFilters.marcas.length > 0 || activeFilters.origenes.length > 0) {
+      setActiveFilters(prev => ({ ...prev, marcas: [], origenes: [] }));
+    }
+    setCurrentPage(1);
+    topRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Quitar filtro de similares
+  const handleClearSimilar = () => {
+    setSimilarModel(null);
+    setSimilarModelId(null);
+    initialSimilarRef.current = null;
+    setCurrentPage(1);
+    const params = new URLSearchParams(window.location.search);
+    params.delete('similar');
+    const qs = params.toString();
+    window.history.replaceState(null, '', qs ? `/catalogo?${qs}` : '/catalogo');
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -217,6 +289,7 @@ function CatalogoContent() {
 
   // ESCRIBIR EL ESTADO EN LA URL (sin re-navegar)
   useEffect(() => {
+    if (isLoading && (similarModelId || initialSimilarRef.current)) return;
     const params = new URLSearchParams();
     if (priceRange.from) params.set('minPrice', priceRange.from);
     if (priceRange.to) params.set('maxPrice', priceRange.to);
@@ -228,10 +301,12 @@ function CatalogoContent() {
     activeFilters.plazas.forEach(v => params.append('plazas', v));
     activeFilters.origenes.forEach(v => params.append('origen', v));
     if (sortBy !== 'relevancia') params.set('orden', sortBy);
+    const currentSim = similarModel?.id || similarModelId || initialSimilarRef.current;
+    if (currentSim) params.set('similar', currentSim);
     if (currentPage > 1) params.set('pagina', String(currentPage));
     const qs = params.toString();
     window.history.replaceState(null, '', qs ? `/catalogo?${qs}` : '/catalogo');
-  }, [activeFilters, priceRange, sortBy, currentPage]);
+  }, [activeFilters, priceRange, sortBy, currentPage, similarModel, similarModelId, isLoading]);
 
   // ==========================================
   // 1. SINCRONIZACIÓN Y DEDUPLICACIÓN
@@ -403,28 +478,45 @@ function CatalogoContent() {
   const autosFiltrados = useMemo(() => {
     return autos.filter(auto => {
       // Filtros especiales
-      if (selectedSearchModelId && auto.id !== selectedSearchModelId) return false;
+
       
       if (similarModel) {
-        if (auto.tipo_carroceria !== similarModel.tipo_carroceria) return false;
-        const minPrice = similarModel.price * 0.8;
-        const maxPrice = similarModel.price * 1.2;
-        if (auto.price < minPrice || auto.price > maxPrice) return false;
-        if (similarModel.combustible && similarModel.combustible !== 'No Definido' && auto.combustible !== similarModel.combustible) return false;
+        const autoTipo = normalizeCarroceria(auto.tipo_carroceria);
+        const simTipo = normalizeCarroceria(similarModel.tipo_carroceria);
+        const matchBody = autoTipo === simTipo ||
+          ((autoTipo === 'SUV' || autoTipo === 'CROSSOVER') && (simTipo === 'SUV' || simTipo === 'CROSSOVER')) ||
+          (autoTipo.includes('PICKUP') && simTipo.includes('PICKUP'));
+        if (!matchBody) return false;
+
+        if (similarModel.price > 0 && auto.price > 0) {
+          const minPrice = similarModel.price * 0.70;
+          const maxPrice = similarModel.price * 1.30;
+          if (auto.price < minPrice || auto.price > maxPrice) return false;
+  
+        }
+      } else {
+        // Modo regular (Buscador general)
+        if (selectedSearchModelId) {
+          if (auto.id !== selectedSearchModelId) return false;
+        } else if (globalSearchQuery.trim().length >= 2) {
+          const q = globalSearchQuery.trim().toLowerCase();
+          const matches = auto.brand.toLowerCase().includes(q) || auto.name.toLowerCase().includes(q);
+          if (!matches) return false;
+        }
       }
 
       if (priceRange.from && auto.price < Number(priceRange.from)) return false;
       if (priceRange.to && auto.price > Number(priceRange.to)) return false;
       
-      if (activeFilters.tipos.length > 0 && !activeFilters.tipos.map(t=>t.toLowerCase()).includes(auto.tipo_carroceria.toLowerCase())) return false;
-      if (activeFilters.marcas.length > 0 && !activeFilters.marcas.map(m=>m.toLowerCase()).includes(auto.brand.toLowerCase())) return false;
+      if (!similarModel && activeFilters.tipos.length > 0 && !activeFilters.tipos.map(t=>t.toLowerCase()).includes(auto.tipo_carroceria.toLowerCase())) return false;
+      if (!similarModel && activeFilters.marcas.length > 0 && !activeFilters.marcas.map(m=>m.toLowerCase()).includes(auto.brand.toLowerCase())) return false;
       if (activeFilters.combustibles.length > 0) {
         const wantedCombs = activeFilters.combustibles.map(c => c.toLowerCase());
         const modelCombs = (auto.allCombustibles && auto.allCombustibles.length > 0 ? auto.allCombustibles : [auto.combustible]).map(c => c.toLowerCase());
         if (!modelCombs.some(mc => wantedCombs.includes(mc))) return false;
       }
       if (activeFilters.plazas.length > 0 && !activeFilters.plazas.includes(auto.plazas)) return false;
-      if (activeFilters.origenes.length > 0 && !activeFilters.origenes.map(o=>o.toLowerCase()).includes(auto.origen_marca.toLowerCase())) return false;
+      if (!similarModel && activeFilters.origenes.length > 0 && !activeFilters.origenes.map(o=>o.toLowerCase()).includes(auto.origen_marca.toLowerCase())) return false;
       
       if (activeFilters.transmisiones.length > 0) {
         const transText = (auto.transmision || '').toLowerCase();
@@ -448,7 +540,7 @@ function CatalogoContent() {
 
       return true;
     });
-  }, [activeFilters, priceRange, autos, selectedSearchModelId, similarModel]);
+  }, [activeFilters, priceRange, autos, selectedSearchModelId, similarModel, globalSearchQuery]);
 
   // Orden aplicado sobre el resultado filtrado. "relevancia" respeta el orden
   // de origen (destacados primero como desempate suave).
@@ -508,6 +600,15 @@ function CatalogoContent() {
         case 'nombre':
           return list.sort((a, b) => `${a.brand} ${a.name}`.localeCompare(`${b.brand} ${b.name}`, 'es'));
         default:
+          if (similarModel) {
+            return list.sort((a, b) => {
+              if (a.id === similarModel.id) return -1;
+              if (b.id === similarModel.id) return 1;
+              const diffA = Math.abs(a.price - similarModel.price);
+              const diffB = Math.abs(b.price - similarModel.price);
+              return diffA - diffB;
+            });
+          }
           return list.sort((a, b) => Number(b.destacado) - Number(a.destacado));
       }
     })();
@@ -855,12 +956,12 @@ function CatalogoContent() {
                 <div>
                   <p className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest mb-1">Búsqueda de Similares</p>
                   <p className="text-sm font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
-                    Mostrando alternativas a <span className="font-bold">{similarModel.brand} {similarModel.name}</span>
+                    Mostrando alternativas a <span className="font-bold text-[#00BFFF]">{similarModel.brand} {similarModel.name}</span> ({normalizeCarroceria(similarModel.tipo_carroceria)}{similarModel.price > 0 ? ` · US$ ${similarModel.price.toLocaleString()}` : ''})
                   </p>
                 </div>
               </div>
               <button 
-                onClick={() => setSimilarModel(null)} 
+                onClick={handleClearSimilar} 
                 className="text-[10px] font-bold text-[#FFFFFF] hover:text-[#00BFFF] border border-[#FFFFFF]/20 hover:border-[#00BFFF] px-4 py-2 uppercase tracking-widest transition-colors w-full sm:w-auto rounded-xl"
               >
                 ✕ Quitar Filtro
@@ -881,7 +982,7 @@ function CatalogoContent() {
                   <input 
                     type="text" 
                     value={globalSearchQuery}
-                    onChange={(e) => { setGlobalSearchQuery(e.target.value); setShowSuggestions(true); }}
+                    onChange={(e) => { setGlobalSearchQuery(e.target.value); setShowSuggestions(true); if (similarModel) setSimilarModel(null); }}
                     onFocus={() => setShowSuggestions(true)}
                     placeholder="Buscar marca o modelo"
                     className="w-full border border-[#0A1F33]/15 bg-[#FFFFFF] text-[#0A1F33] text-[11px] font-bold uppercase tracking-widest py-2.5 px-3.5 pr-8 focus:outline-none focus:border-[#00BFFF] rounded-xl shadow-xs"
@@ -901,6 +1002,7 @@ function CatalogoContent() {
                       <button
                         key={s.id}
                         onClick={() => {
+                          if (similarModel) setSimilarModel(null);
                           setSelectedSearchModelId(s.id);
                           setGlobalSearchQuery(`${s.brand} ${s.name}`);
                           setShowSuggestions(false);
@@ -966,7 +1068,18 @@ function CatalogoContent() {
                           </span>
                         </div>
                       )}
-                      <div className={`absolute ${isSponsoredSlot ? 'top-12' : 'top-3'} right-3 z-20 flex flex-col items-end gap-2`}>
+                      {similarModel && auto.id === similarModel.id && (
+                        <div className="bg-[#0A1F33] text-[#FFFFFF] px-4 py-2 border-b-2 border-[#00BFFF] flex items-center justify-between gap-2 z-20">
+                          <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[#00BFFF]">
+                            <span>🎯</span>
+                            <span>Modelo de Referencia</span>
+                          </span>
+                          <span className="bg-[#00BFFF]/20 border border-[#00BFFF]/40 text-[#FFFFFF] text-[8px] font-bold uppercase px-2 py-0.5 rounded-full tracking-wider">
+                            Tu Selección
+                          </span>
+                        </div>
+                      )}
+                      <div className={`absolute ${isSponsoredSlot || (similarModel && auto.id === similarModel.id) ? 'top-12' : 'top-3'} right-3 z-20 flex flex-col items-end gap-2`}>
                         <button
                           type="button"
                           onClick={() => toggleCompare(auto)}
@@ -1008,12 +1121,12 @@ function CatalogoContent() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                setSimilarModel(auto);
-                                topRef.current?.scrollIntoView({ behavior: 'smooth' });
+                                handleSelectSimilar(auto);
+
                               }}
                               title={`Buscar similares a ${auto.brand} ${auto.name}`}
                               aria-label={`Buscar similares a ${auto.brand} ${auto.name}`}
-                              className="p-1.5 text-[#C0C0C0] hover:text-[#00BFFF] hover:bg-[#F5FBFF] border border-[#0A1F33]/10 hover:border-[#00BFFF] transition-colors shrink-0 rounded-lg"
+                              className={`p-1.5 border transition-colors shrink-0 rounded-lg ${similarModel?.id === auto.id ? 'bg-[#00BFFF] text-[#0A1F33] border-[#00BFFF]' : 'text-[#C0C0C0] hover:text-[#00BFFF] hover:bg-[#F5FBFF] border-[#0A1F33]/10 hover:border-[#00BFFF]'}`}
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />

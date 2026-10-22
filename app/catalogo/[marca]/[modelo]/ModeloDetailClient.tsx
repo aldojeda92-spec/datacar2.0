@@ -224,6 +224,19 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
       <section className="max-w-[1200px] mx-auto px-4 lg:px-8 py-4 mb-8">
         <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col md:flex-row">
           <div className="md:w-3/5 p-10 flex items-center justify-center border-b md:border-b-0 md:border-r border-[#C0C0C0] bg-[#FFFFFF] relative">
+            {/* CTA LLAMATIVO FLOTANTE SOBRE LA FOTO: Ver opciones similares */}
+            <div className="absolute top-4 right-4 z-20">
+              <Link
+                href={`/catalogo?similar=${encodeURIComponent(model.id || modeloSlug)}`}
+                className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#00BFFF] hover:bg-[#0A1F33] text-[#0A1F33] hover:text-[#FFFFFF] text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all duration-200 border border-[#00BFFF] hover:border-[#0A1F33] shadow-md hover:shadow-lg rounded-none group"
+                title={`Ver opciones similares a ${brand?.name} ${model.name} en el catálogo`}
+              >
+                <svg className="w-4 h-4 text-[#0A1F33] group-hover:text-[#00BFFF] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <span>Ver opciones similares</span>
+              </Link>
+            </div>
             <div className="relative w-full max-w-xl aspect-[4/3]">
               {isValidImageSrc(model.imgUrl) ? (
                 <Image
