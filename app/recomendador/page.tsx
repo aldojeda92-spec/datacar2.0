@@ -1417,16 +1417,32 @@ export default function RecomendadorPage() {
     const nombreLead = leadForm.nombre.trim() || 'Sin nombre (Recomendador)';
 
     try {
+      const finalTop3 = runAlgorithm();
+      const topModelNames = finalTop3.map(m => `${m.brandName} ${m.modelName}`).join(' / ');
+      const recommendedSummary = finalTop3.map((m, idx) => ({
+        rank: idx + 1,
+        modelId: m.id,
+        modelName: m.modelName,
+        brandId: m.brandId,
+        brandName: m.brandName,
+        startingPrice: m.startingPrice,
+        matchPercentage: m.matchPercentage,
+        badge: m.badge || null,
+      }));
+      const recommendedModelIds = finalTop3.map(m => m.id);
+
       await addDoc(collection(db, 'leads'), {
         nombre: nombreLead,
         telefono: leadForm.telefono,
         email: emailIngresado,
-        vehiculo: 'Perfilado por Recomendador Interactivo',
+        vehiculo: topModelNames ? `Recomendados: ${topModelNames}` : 'Perfilado por Recomendador Interactivo',
         origen: 'Recomendador Interactivo',
         estado: 'Nuevo',
         preferencias_wizard: answers,
         concesionaria_destino: 'A designar (Central DATACAR)',
         concesionaria_destino_norm: 'A DESIGNAR',
+        topMatches: recommendedSummary,
+        recommendedModelIds,
         createdAt: serverTimestamp()
       });
 
@@ -1445,6 +1461,11 @@ export default function RecomendadorPage() {
           prioridad: answers['prioridad'] || null,
           uso: answers['uso'] || null,
           terreno: answers['terreno'] || null,
+          recommendedModels: recommendedSummary,
+          recommendedModelIds,
+          topMatchModelId: finalTop3[0]?.id || null,
+          topMatchModelName: finalTop3[0]?.modelName || null,
+          topMatchBrandName: finalTop3[0]?.brandName || null,
           createdAt: serverTimestamp()
         });
       } catch (telemetryErr) {
@@ -1452,8 +1473,6 @@ export default function RecomendadorPage() {
       }
 
       track('lead_submit_success', { origen: 'Recomendador Interactivo', canal: 'wizard' });
-
-      const finalTop3 = runAlgorithm();
 
       // Disparo de correo B2B a la gerencia (fail-safe: el lead ya está guardado
       // en DB, sendLeadNotificationEmail nunca throwea, solo loguea si falla).

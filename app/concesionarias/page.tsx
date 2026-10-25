@@ -15,7 +15,8 @@ import { generarSlug } from '../../lib/slug';
 import { parseCSVRow } from '../../lib/csv';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { useToast } from '../context/ToastContext';
-import { sendDealershipRequestEmail } from '../../lib/mailer';
+import { sendDealershipRequestEmail, sendReportsAccessRequestEmail } from '../../lib/mailer';
+import DealershipReportsView from './DealershipReportsView';
 import { invalidateCatalogCache } from '../../lib/catalogCache';
 import Modal from '../components/a11y/Modal';
 
@@ -26,6 +27,8 @@ interface UserData {
   role: string;
   dealershipName: string;
   marcasPermitidas: string[];
+  canAccessReports?: boolean;
+  reportsRequested?: boolean;
 }
 
 interface RequestForm {
@@ -35,6 +38,8 @@ interface RequestForm {
   marcas: string;
   telefono: string;
   email: string;
+  password?: string;
+  confirmPassword?: string;
 }
 
 // ==========================================
@@ -183,10 +188,10 @@ export default function PortalConcesionariasPage() {
   // Formularios Login
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [reqForm, setReqForm] = useState<RequestForm>({ nombre: '', cargo: '', concesionaria: '', marcas: '', telefono: '', email: '' });
+  const [reqForm, setReqForm] = useState<RequestForm>({ nombre: '', cargo: '', concesionaria: '', marcas: '', telefono: '', email: '', password: '', confirmPassword: '' });
 
   // Dashboard State
-  const [activeTab, setActiveTab] = useState<'leads' | 'inventario'>('leads');
+  const [activeTab, setActiveTab] = useState<'leads' | 'inventario' | 'reportes'>('leads');
   const [invSubTab, setInvSubTab] = useState<'versiones' | 'modelos' | 'csv'>('versiones');
   
   // Datos relacionales
@@ -194,6 +199,10 @@ export default function PortalConcesionariasPage() {
   const [inventario, setInventario] = useState<any[]>([]);
   const [marcasList, setMarcasList] = useState<any[]>([]);
   const [modelosList, setModelosList] = useState<any[]>([]);
+  const [allVersiones, setAllVersiones] = useState<any[]>([]);
+  const [comparisonStats, setComparisonStats] = useState<any[]>([]);
+  const [wizardStats, setWizardStats] = useState<any[]>([]);
+  const [isRequestingReportsAccess, setIsRequestingReportsAccess] = useState(false);
   
   // ==========================================
   // ESTADOS DE FILTRO PARA INVENTARIO
@@ -259,19 +268,25 @@ export default function PortalConcesionariasPage() {
       const permitidasNormalizadas = uData.marcasPermitidas.map(m => m.toUpperCase().trim());
       const dealershipNameNorm = uData.dealershipName.toUpperCase().trim();
 
-      // Obtenemos Catálogo Global
-      const [bSnap, mSnap, vSnap, leadsSnap] = await Promise.all([
+      // Obtenemos Catálogo Global y Métricas BI
+      const [bSnap, mSnap, vSnap, leadsSnap, compSnap, wizSnap] = await Promise.all([
         getDocs(collection(db, 'brands')),
         getDocs(collection(db, 'models')),
         getDocs(collection(db, 'versions')),
-        getDocs(query(collection(db, 'leads'), where('concesionaria_destino_norm', '==', dealershipNameNorm)))
+        getDocs(query(collection(db, 'leads'), where('concesionaria_destino_norm', '==', dealershipNameNorm))),
+        getDocs(collection(db, 'comparison_stats')),
+        getDocs(collection(db, 'wizard_stats'))
       ]);
 
       const bList: any[] = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const mList: any[] = mSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const rawVersions: any[] = vSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       
       setMarcasList(bList);
       setModelosList(mList);
+      setAllVersiones(rawVersions);
+      setComparisonStats(compSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setWizardStats(wizSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
       const brandsMap: Record<string, string> = {};
       bList.forEach(b => brandsMap[b.id] = b.name);
@@ -341,7 +356,9 @@ export default function PortalConcesionariasPage() {
             const data: UserData = {
               role: rawData.role,
               dealershipName: rawData.dealershipName,
-              marcasPermitidas: parsedMarcas
+              marcasPermitidas: parsedMarcas,
+              canAccessReports: Boolean(rawData.canAccessReports),
+              reportsRequested: Boolean(rawData.reportsRequested)
             };
 
             if (isMounted) {
@@ -389,6 +406,33 @@ export default function PortalConcesionariasPage() {
   };
 
   // ==========================================
+  // SOLICITUD DE ACCESO A REPORTES BI
+  // ==========================================
+  const handleRequestReportsAccess = async () => {
+    if (!user) return;
+    setIsRequestingReportsAccess(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        reportsRequested: true,
+        reportsRequestedAt: serverTimestamp(),
+      });
+      await sendReportsAccessRequestEmail({
+        dealershipName: userData?.dealershipName || '',
+        userName: user.displayName || user.email || '',
+        userEmail: user.email || '',
+        marcas: userData?.marcasPermitidas || [],
+      });
+      setUserData(prev => prev ? { ...prev, reportsRequested: true } : null);
+      showToast("✅ Solicitud enviada a la gerencia de DATACAR. Te notificaremos al habilitar tu acceso.");
+    } catch (e: any) {
+      console.error("Error al solicitar acceso a reportes:", e);
+      showToast(e.message || "Error al solicitar acceso.");
+    } finally {
+      setIsRequestingReportsAccess(false);
+    }
+  };
+
+  // ==========================================
   // 4. ALTA Y LOGIN
   // ==========================================
   const handleLogin = async (e: React.FormEvent) => {
@@ -406,22 +450,77 @@ export default function PortalConcesionariasPage() {
     e.preventDefault();
     setLoading(true); setFeedback({ type: '', message: '' });
     try {
+      if (!reqForm.password || reqForm.password.length < 6) {
+        setFeedback({ type: 'error', message: 'La contraseña debe tener al menos 6 caracteres.' });
+        setLoading(false);
+        return;
+      }
+      if (reqForm.password !== reqForm.confirmPassword) {
+        setFeedback({ type: 'error', message: 'Las contraseñas no coinciden. Por favor revisá ambos campos.' });
+        setLoading(false);
+        return;
+      }
+
+      // 1. Registro automático en Firebase Authentication mediante API del servidor
+      const regRes = await fetch('/api/auth/register-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: reqForm.nombre,
+          cargo: reqForm.cargo,
+          concesionaria: reqForm.concesionaria,
+          marcas: reqForm.marcas,
+          telefono: reqForm.telefono,
+          email: reqForm.email,
+          password: reqForm.password,
+        }),
+      });
+
+      const regData = await regRes.json();
+      if (!regRes.ok) {
+        setFeedback({ type: 'error', message: regData.message || regData.error || 'Error al procesar el registro.' });
+        setLoading(false);
+        return;
+      }
+
+      const authUid = regData.uid;
+
+      // 2. Guardar en Firestore con el UID ya vinculado (sin guardar la contraseña en texto plano)
       await addDoc(collection(db, 'dealership_requests'), {
-        ...reqForm,
+        uid: authUid,
+        nombre: reqForm.nombre.trim(),
+        cargo: reqForm.cargo.trim(),
+        concesionaria: reqForm.concesionaria.trim(),
+        marcas: reqForm.marcas.trim(),
+        telefono: reqForm.telefono.trim(),
+        email: reqForm.email.trim(),
         estado: 'Pendiente',
         createdAt: serverTimestamp()
       });
 
-      const emailSent = await sendDealershipRequestEmail(reqForm);
+      // 3. Notificación a gerencia por correo como siempre
+      const emailSent = await sendDealershipRequestEmail({
+        nombre: reqForm.nombre,
+        cargo: reqForm.cargo,
+        concesionaria: reqForm.concesionaria,
+        marcas: reqForm.marcas,
+        telefono: reqForm.telefono,
+        email: reqForm.email,
+      });
+
       if (!emailSent) {
-        console.error('La solicitud de alta B2B se guardó, pero no se pudo notificar por correo a la gerencia.');
+        console.error('La solicitud de alta B2B se guardó, pero hubo una advertencia al enviar el correo.');
       }
 
-      setFeedback({ type: 'success', message: 'Solicitud enviada a la gerencia de DATACAR. Nos pondremos en contacto.' });
-      setReqForm({ nombre: '', cargo: '', concesionaria: '', marcas: '', telefono: '', email: '' });
-      setTimeout(() => setAuthView('login'), 5000);
+      setFeedback({
+        type: 'success',
+        message: '¡Solicitud enviada con éxito! Tu cuenta está registrada y pendiente de activación por la administración de DATACAR. Te notificaremos a tu correo corporativo cuando tus permisos sean asignados.'
+      });
+      setReqForm({ nombre: '', cargo: '', concesionaria: '', marcas: '', telefono: '', email: '', password: '', confirmPassword: '' });
+      setTimeout(() => setAuthView('login'), 6000);
     } catch (error: any) {
-      setFeedback({ type: 'error', message: 'Error enviando solicitud. Intenta más tarde.' });
+      console.error('Error enviando solicitud:', error);
+      setFeedback({ type: 'error', message: error?.message || 'Error enviando solicitud. Intenta más tarde.' });
     } finally {
       setLoading(false);
     }
@@ -894,6 +993,16 @@ export default function PortalConcesionariasPage() {
                 <div><label htmlFor="req-telefono" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Teléfono Directo</label><input id="req-telefono" type="tel" required className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.telefono} onChange={e=>setReqForm({...reqForm, telefono: e.target.value})} /></div>
                 <div><label htmlFor="req-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email Corporativo</label><input id="req-email" type="email" required className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.email} onChange={e=>setReqForm({...reqForm, email: e.target.value})} /></div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="req-password" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Crear Contraseña</label>
+                  <input id="req-password" type="password" required minLength={6} placeholder="Mínimo 6 caracteres" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.password || ''} onChange={e=>setReqForm({...reqForm, password: e.target.value})} />
+                </div>
+                <div>
+                  <label htmlFor="req-confirm-password" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Confirmar Contraseña</label>
+                  <input id="req-confirm-password" type="password" required minLength={6} placeholder="Repetir contraseña" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.confirmPassword || ''} onChange={e=>setReqForm({...reqForm, confirmPassword: e.target.value})} />
+                </div>
+              </div>
               <button type="submit" disabled={loading} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors mt-2 border border-transparent rounded-none">{loading ? 'Procesando...' : 'Enviar Solicitud'}</button>
               <button type="button" onClick={() => { setAuthView('login'); setFeedback({type:'', message:''}); }} className="text-[10px] font-bold text-[#C0C0C0] hover:text-[#0A1F33] uppercase tracking-widest mt-2 transition-colors border-none outline-none">← Volver al Login</button>
             </form>
@@ -934,6 +1043,14 @@ export default function PortalConcesionariasPage() {
       <div className="bg-[#FFFFFF] border-b border-[#C0C0C0] px-6 flex gap-8">
         <button onClick={() => setActiveTab('leads')} className={`py-4 text-xs font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'leads' ? 'border-[#00BFFF] text-[#0A1F33]' : 'border-transparent text-[#C0C0C0] hover:text-[#3A3A3C]'}`}>Recepción de Leads</button>
         <button onClick={() => setActiveTab('inventario')} className={`py-4 text-xs font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'inventario' ? 'border-[#00BFFF] text-[#0A1F33]' : 'border-transparent text-[#C0C0C0] hover:text-[#3A3A3C]'}`}>Gestión de Inventario</button>
+        <button onClick={() => setActiveTab('reportes')} className={`py-4 text-xs font-bold uppercase tracking-widest border-b-4 transition-colors flex items-center gap-2 ${activeTab === 'reportes' ? 'border-[#00BFFF] text-[#0A1F33]' : 'border-transparent text-[#C0C0C0] hover:text-[#3A3A3C]'}`}>
+          <span>Reportes &amp; BI de Mercado</span>
+          {userData?.canAccessReports ? (
+            <span className="bg-[#E6F4EA] text-[#1E8E3E] text-[8.5px] font-black px-1.5 py-0.5 border border-[#1E8E3E]/30">PRO</span>
+          ) : (
+            <span className="bg-[#F5F5F5] text-[#3A3A3C] text-[8.5px] font-black px-1.5 py-0.5 border border-[#C0C0C0]">🔒</span>
+          )}
+        </button>
       </div>
 
       <main className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar">
@@ -1450,6 +1567,24 @@ export default function PortalConcesionariasPage() {
             )}
 
           </div>
+        )}
+
+        {/* ======================================= */}
+        {/* VISTA: REPORTES Y BUSINESS INTELLIGENCE */}
+        {/* ======================================= */}
+        {activeTab === 'reportes' && userData && (
+          <DealershipReportsView
+            userData={userData}
+            userEmail={user?.email || ''}
+            comparisonStatsList={comparisonStats}
+            wizardStatsList={wizardStats}
+            leadsList={leads}
+            marcasList={marcasList}
+            modelosList={modelosList}
+            versionesList={allVersiones}
+            onRequestAccess={handleRequestReportsAccess}
+            isRequestingAccess={isRequestingReportsAccess}
+          />
         )}
         
       </main>

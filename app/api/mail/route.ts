@@ -223,7 +223,107 @@ function buildDealershipRequestHtml(d: any): string {
       <p><strong>Teléfono:</strong> ${escapeHtml(d?.telefono)}</p>
       <p><strong>Email:</strong> ${escapeHtml(d?.email)}</p>
       <hr style="margin: 20px 0; border: none; border-top: 1px solid #C0C0C0;" />
-      <p style="font-size: 12px; color: #3A3A3C;">Ingresa a Firebase Auth y crea manualmente este usuario. Luego, asígnale sus permisos en el panel de administrador.</p>
+      <div style="background-color: #F0F9FF; border: 1px solid #B9E6FE; padding: 12px; border-radius: 4px;">
+        <p style="font-size: 13px; font-weight: bold; color: #026AA2; margin: 0 0 6px 0;">⚡ Aprobación en un solo clic:</p>
+        <p style="font-size: 12px; color: #3A3A3C; margin: 0;">
+          Podés ingresar directamente a tu panel de administración (<strong>/admin</strong> &gt; <strong>Usuarios</strong>) para <strong>ACEPTAR</strong> o <strong>RECHAZAR</strong> esta solicitud y asignarle sus marcas autorizadas de forma automática.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+function buildDealershipApprovedHtml(d: any): string {
+  const marcasList = Array.isArray(d?.marcas) ? d.marcas.join(', ') : (d?.marcas || 'Todas');
+  const portalUrl = d?.portalUrl || 'https://datacarpy.com/concesionarias';
+
+  return `
+    <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #FFFFFF;">
+      <div style="background-color: #0A1F33; border-bottom: 4px solid #00BFFF; padding: 28px 24px; text-align: center;">
+        <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 900; letter-spacing: 2px; margin: 0;">
+          DATA<span style="font-weight: 300;">CAR</span>
+        </h1>
+        <p style="color: #00BFFF; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin: 8px 0 0 0;">
+          Portal B2B • Red de Concesionarias Oficiales
+        </p>
+      </div>
+      <div style="padding: 32px 28px; text-align: left; color: #3A3A3C;">
+        <h2 style="color: #0A1F33; font-size: 18px; font-weight: 900; text-transform: uppercase; margin-top: 0; margin-bottom: 12px;">
+          ¡Tu cuenta comercial ha sido activada!
+        </h2>
+        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+          Hola <strong>${escapeHtml(d?.nombre || 'Colega')}</strong>, nos complace informarte que la administración de DATACAR ha aprobado tu solicitud de acceso para <strong>${escapeHtml(d?.concesionaria)}</strong>.
+        </p>
+        <div style="background-color: #F8F9FA; border-left: 4px solid #00BFFF; padding: 16px; margin-bottom: 24px;">
+          <p style="margin: 0 0 8px 0; font-size: 13px;"><strong>🏢 Concesionaria:</strong> ${escapeHtml(d?.concesionaria)}</p>
+          <p style="margin: 0 0 8px 0; font-size: 13px;"><strong>🚗 Marcas autorizadas:</strong> ${escapeHtml(marcasList)}</p>
+          <p style="margin: 0 0 8px 0; font-size: 13px;"><strong>📧 Correo de acceso:</strong> ${escapeHtml(d?.email)}</p>
+          ${d?.tempPassword ? `<p style="margin: 0; font-size: 13px;"><strong>🔑 Contraseña temporal:</strong> <code style="background: #EAEAEA; padding: 2px 6px; font-weight: bold;">${escapeHtml(d.tempPassword)}</code></p>` : `<p style="margin: 0; font-size: 12px; color: #71717A;">Accedé con la contraseña que configuraste al solicitar tu registro.</p>`}
+        </div>
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${portalUrl}" style="background-color: #0A1F33; color: #FFFFFF; padding: 14px 28px; text-decoration: none; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-block; border-bottom: 3px solid #00BFFF;">
+            Ingresar al Portal B2B →
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #71717A; line-height: 1.5; margin-top: 24px; border-top: 1px solid #E6E6E6; padding-top: 16px;">
+          Desde el portal podrás gestionar tu inventario 0km, actualizar precios oficiales de tus modelos y recibir leads calificados de compradores interesados.
+        </p>
+      </div>
+      <div style="background-color: #F8F9FA; padding: 16px; text-align: center; font-size: 11px; color: #71717A; border-top: 1px solid #C0C0C0;">
+        © ${new Date().getFullYear()} DATACAR Paraguay • Soporte Comercial: soporte@datacarpy.com
+      </div>
+    </div>
+  `;
+}
+
+function buildReportsAccessRequestHtml(d: any): string {
+  const marcasList = Array.isArray(d?.marcas) ? d.marcas.join(', ') : (d?.marcas || 'Todas');
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #C0C0C0;">
+      <h2 style="color: #0A1F33; border-bottom: 2px solid #00BFFF; padding-bottom: 10px;">SOLICITUD DE ACCESO A REPORTES & BI</h2>
+      <p><strong>Concesionaria:</strong> ${escapeHtml(d?.dealershipName)}</p>
+      <p><strong>Usuario Solicitante:</strong> ${escapeHtml(d?.userName)} (${escapeHtml(d?.userEmail)})</p>
+      <p><strong>Marcas Asignadas:</strong> ${escapeHtml(marcasList)}</p>
+      <hr style="margin: 20px 0; border: none; border-top: 1px solid #C0C0C0;" />
+      <div style="background-color: #F0F9FF; border: 1px solid #B9E6FE; padding: 12px; border-radius: 4px;">
+        <p style="font-size: 13px; font-weight: bold; color: #026AA2; margin: 0 0 6px 0;">⚡ Habilitación en un solo clic:</p>
+        <p style="font-size: 12px; color: #3A3A3C; margin: 0;">
+          Podés ingresar directamente a tu panel de administración (<strong>/admin</strong> &gt; <strong>Accesos y Permisos</strong>) y pulsar <strong>[ ✓ Habilitar BI ]</strong> en la fila de este usuario para activarle los reportes inmediatamente.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+function buildDealershipRejectedHtml(d: any): string {
+  return `
+    <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #FFFFFF;">
+      <div style="background-color: #0A1F33; border-bottom: 4px solid #D93025; padding: 28px 24px; text-align: center;">
+        <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 900; letter-spacing: 2px; margin: 0;">
+          DATA<span style="font-weight: 300;">CAR</span>
+        </h1>
+        <p style="color: #FFFFFF; opacity: 0.8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin: 8px 0 0 0;">
+          Actualización de Solicitud Comercial B2B
+        </p>
+      </div>
+      <div style="padding: 32px 28px; text-align: left; color: #3A3A3C;">
+        <h2 style="color: #0A1F33; font-size: 18px; font-weight: 900; text-transform: uppercase; margin-top: 0; margin-bottom: 12px;">
+          Estado de tu solicitud de alta B2B
+        </h2>
+        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 16px;">
+          Hola <strong>${escapeHtml(d?.nombre || 'Colega')}</strong>, te informamos que hemos revisado tu solicitud de acceso comercial para <strong>${escapeHtml(d?.concesionaria)}</strong>.
+        </p>
+        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 16px;">
+          En esta ocasión, la solicitud no ha podido ser aprobada.
+          ${d?.motivo ? `<br /><br /><strong>Motivo:</strong> ${escapeHtml(d.motivo)}` : ''}
+        </p>
+        <p style="font-size: 13px; line-height: 1.5; color: #71717A; margin-top: 24px; border-top: 1px solid #E6E6E6; padding-top: 16px;">
+          Si crees que esto se debe a un error o deseas comunicarte directamente con nuestro equipo de gerencia, podés escribirnos a <a href="mailto:soporte@datacarpy.com" style="color: #00BFFF;">soporte@datacarpy.com</a>.
+        </p>
+      </div>
+      <div style="background-color: #F8F9FA; padding: 16px; text-align: center; font-size: 11px; color: #71717A; border-top: 1px solid #C0C0C0;">
+        © ${new Date().getFullYear()} DATACAR Paraguay
+      </div>
     </div>
   `;
 }
@@ -413,6 +513,15 @@ export async function POST(request: Request) {
   } else if (type === 'dealership_request') {
     subject = `🚨 ALTA B2B: ${escapeHtml(data?.concesionaria)} quiere unirse a DATACAR`;
     html = buildDealershipRequestHtml(data);
+  } else if (type === 'dealership_approved') {
+    subject = `✅ Tu cuenta ha sido activada en DATACAR - ${escapeHtml(data?.concesionaria)}`;
+    html = buildDealershipApprovedHtml(data);
+  } else if (type === 'dealership_rejected') {
+    subject = `Actualización sobre tu solicitud comercial - DATACAR`;
+    html = buildDealershipRejectedHtml(data);
+  } else if (type === 'reports_access_request') {
+    subject = `📊 SOLICITUD DE REPORTES BI: ${escapeHtml(data?.dealershipName)} solicita acceso`;
+    html = buildReportsAccessRequestHtml(data);
   } else if (type === 'recommendation_results') {
     subject = 'Tus resultados del Recomendador - DATACAR';
     html = buildRecommendationResultsHtml(data);

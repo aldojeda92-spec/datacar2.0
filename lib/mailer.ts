@@ -205,9 +205,90 @@ export const sendDealershipRequestEmail = async (params: DealershipRequestParams
   }
 };
 
+export interface DealershipApprovedParams {
+  email: string;
+  nombre: string;
+  concesionaria: string;
+  marcas: string[];
+  tempPassword?: string;
+  portalUrl?: string;
+}
+
+export const sendDealershipApprovedEmail = async (params: DealershipApprovedParams): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'dealership_approved',
+        destinatarios: [params.email],
+        data: params,
+      }),
+    });
+
+    if (!response.ok) throw new Error('Fallo al enviar notificación de aprobación');
+    return true;
+  } catch (error) {
+    console.error("❌ Error enviando aprobación de concesionaria:", error);
+    return false;
+  }
+};
+
+export interface DealershipRejectedParams {
+  email: string;
+  nombre: string;
+  concesionaria: string;
+  motivo?: string;
+}
+
+export const sendDealershipRejectedEmail = async (params: DealershipRejectedParams): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'dealership_rejected',
+        destinatarios: [params.email],
+        data: params,
+      }),
+    });
+
+    if (!response.ok) throw new Error('Fallo al enviar notificación de rechazo');
+    return true;
+  } catch (error) {
+    console.error("❌ Error enviando rechazo de concesionaria:", error);
+    return false;
+  }
+};
+
 // ==========================================
 // 6. MAILING PARA DIFUSIÓN DE NEWSLETTER (ADMIN)
 // ==========================================
+export interface ReportsAccessRequestParams {
+  dealershipName: string;
+  userName: string;
+  userEmail: string;
+  marcas: string[];
+}
+
+export const sendReportsAccessRequestEmail = async (params: ReportsAccessRequestParams): Promise<boolean> => {
+  try {
+    const response = await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'reports_access_request',
+        destinatarios: ['aldo.ojeda@datacarpy.com'],
+        data: params,
+      }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.error("❌ Error enviando solicitud de reportes:", error);
+    return false;
+  }
+};
+
 export interface NewsletterBroadcastParams {
   subject: string;
   headline?: string;

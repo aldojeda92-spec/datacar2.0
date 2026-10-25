@@ -18,7 +18,7 @@ import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarChec
 import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { useToast } from '../context/ToastContext';
 import { DEFAULT_REELS } from '../components/InstagramReelsSection';
-import { sendNewsletterBroadcast } from '../../lib/mailer';
+import { sendNewsletterBroadcast, sendDealershipApprovedEmail, sendDealershipRejectedEmail } from '../../lib/mailer';
 import {
   downloadCSV,
   exportAllDatabasesZip,
@@ -263,9 +263,63 @@ export default function AdminDashboardPage() {
   const [filterPrefCombustible, setFilterPrefCombustible] = useState('Todos');
   const [filterPrefOrigen, setFilterPrefOrigen] = useState('Todos');
 
+  // Sub-pestañas de Analítica & Demanda
+  const [analiticaSubTab, setAnaliticaSubTab] = useState<'general' | 'modelo_rango' | 'duelos' | 'recomendador' | 'todos'>('general');
+
+  // Estados para Auditoría de Modelo en Rango de Fechas
+  const [auditBrandId, setAuditBrandId] = useState<string>('');
+  const [auditModelId, setAuditModelId] = useState<string>('');
+  const [auditDateFrom, setAuditDateFrom] = useState<string>('');
+  const [auditDateTo, setAuditDateTo] = useState<string>('');
+
+  // Estados para Duelos Head-to-Head (Modelo vs Modelo / Marca vs Marca)
+  const [duelMode, setDuelMode] = useState<'modelos' | 'marcas'>('modelos');
+  const [duelBrandFilterA, setDuelBrandFilterA] = useState<string>('');
+  const [duelModelA, setDuelModelA] = useState<string>('');
+  const [duelBrandFilterB, setDuelBrandFilterB] = useState<string>('');
+  const [duelModelB, setDuelModelB] = useState<string>('');
+  const [duelBrandA, setDuelBrandA] = useState<string>('');
+  const [duelBrandB, setDuelBrandB] = useState<string>('');
+  const [duelDateFrom, setDuelDateFrom] = useState<string>('');
+  const [duelDateTo, setDuelDateTo] = useState<string>('');
+
+  // Estados para Rendimiento del Recomendador por Modelo
+  const [recomBrandId, setRecomBrandId] = useState<string>('');
+  const [recomModelId, setRecomModelId] = useState<string>('');
+  const [recomDateFrom, setRecomDateFrom] = useState<string>('');
+  const [recomDateTo, setRecomDateTo] = useState<string>('');
+
   // Estados para Accesos B2B y Admins
   const [usuariosSistemaList, setUsuariosSistemaList] = useState<any[]>([]);
   const [solicitudesList, setSolicitudesList] = useState<any[]>([]);
+
+  // Estados para Aprobación / Rechazo Automático de Solicitudes B2B
+  const [solicitudesFilterStatus, setSolicitudesFilterStatus] = useState<'todos' | 'Pendiente' | 'Aprobado' | 'Rechazado'>('todos');
+  const [approveModalReq, setApproveModalReq] = useState<any | null>(null);
+  const [approveConcesionaria, setApproveConcesionaria] = useState('');
+  const [approveMarcas, setApproveMarcas] = useState<string[]>([]);
+  const [approveCustomPassword, setApproveCustomPassword] = useState('');
+  const [approveCanAccessReports, setApproveCanAccessReports] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [rejectModalReq, setRejectModalReq] = useState<any | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isRejecting, setIsRejecting] = useState(false);
+
+  // Estados para Edición de Usuario Activo y Nuevo Admin
+  const [editUserModal, setEditUserModal] = useState<{
+    id: string;
+    email: string;
+    dealershipName: string;
+    marcasPermitidas: string[];
+    canAccessReports?: boolean;
+    nombre?: string;
+  } | null>(null);
+  const [isSavingEditUser, setIsSavingEditUser] = useState(false);
+
+  const [isAddAdminModalOpen, setIsAddAdminModalOpen] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
 
   // Formularios ABM
   const [marcaForm, setMarcaForm] = useState({ id: '', name: '', origen_marca: '', logoUrl: '' });
@@ -1791,6 +1845,154 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Apertura del modal de aprobación con auto-detección inteligente de Concesionaria y Marcas
+  const handleOpenApproveModal = (req: any) => {
+    setApproveModalReq(req);
+
+    // 1. Auto-detección de concesionaria más cercana en base de datos
+    const reqConcNorm = (req.concesionaria || '').trim().toUpperCase();
+    const matchedConc = concesionariasList.find(c => (c.name || '').trim().toUpperCase() === reqConcNorm);
+    const concName = matchedConc ? matchedConc.name : (concesionariasList[0]?.name || req.concesionaria || '');
+    setApproveConcesionaria(concName);
+
+    // 2. Auto-detección de marcas solicitadas en base de datos
+    const marcasTexto = (req.marcas || '').toUpperCase();
+    const detectadas: string[] = [];
+    marcasList.forEach(m => {
+      const mName = (m.name || '').toUpperCase().trim();
+      if (mName && marcasTexto.includes(mName)) {
+        detectadas.push(m.name);
+      }
+    });
+
+    setApproveMarcas(detectadas);
+    setApproveCustomPassword(`Datacar${Math.floor(1000 + Math.random() * 9000)}!`);
+    setApproveCanAccessReports(false);
+  };
+
+  const handleToggleApproveMarca = (marcaName: string) => {
+    setApproveMarcas(prev =>
+      prev.includes(marcaName)
+        ? prev.filter(m => m !== marcaName)
+        : [...prev, marcaName]
+    );
+  };
+
+  // Aprobación y asignación automática de permisos
+  const handleConfirmApprove = async () => {
+    if (!approveModalReq) return;
+    if (!approveConcesionaria) {
+      showToast("Seleccioná una concesionaria.");
+      return;
+    }
+    if (approveMarcas.length === 0) {
+      showToast("Debes autorizar al menos 1 marca para esta concesionaria.");
+      return;
+    }
+
+    setIsApproving(true);
+    try {
+      let targetUid = approveModalReq.uid;
+      let tempPasswordGenerated = '';
+
+      // Si la solicitud no tiene UID (solicitud previa o sin cuenta Auth creada), la creamos automáticamente
+      if (!targetUid) {
+        const createRes = await fetch('/api/admin/users/create-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: approveModalReq.email,
+            nombre: approveModalReq.nombre,
+            password: approveCustomPassword,
+          }),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) {
+          throw new Error(createData.message || createData.error || 'No se pudo crear el usuario en Firebase Auth.');
+        }
+        targetUid = createData.uid;
+        tempPasswordGenerated = createData.temporaryPassword;
+      }
+
+      // 1. Guardar rol y permisos en colección 'users/{uid}'
+      await setDoc(doc(db, 'users', targetUid), {
+        email: approveModalReq.email.trim(),
+        role: 'concesionaria',
+        dealershipName: approveConcesionaria,
+        marcasPermitidas: approveMarcas,
+        canAccessReports: Boolean(approveCanAccessReports),
+        nombre: approveModalReq.nombre || '',
+        cargo: approveModalReq.cargo || '',
+        telefono: approveModalReq.telefono || '',
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      // 2. Actualizar estado de la solicitud en 'dealership_requests/{id}'
+      await updateDoc(doc(db, 'dealership_requests', approveModalReq.id), {
+        estado: 'Aprobado',
+        uid: targetUid,
+        concesionariaAsignada: approveConcesionaria,
+        marcasAsignadas: approveMarcas,
+        aprobadoPor: adminUser?.email || 'admin',
+        aprobadoAt: serverTimestamp(),
+      });
+
+      // 3. Enviar notificación por correo al nuevo usuario
+      const portalUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/concesionarias`
+        : 'https://datacarpy.com/concesionarias';
+
+      await sendDealershipApprovedEmail({
+        email: approveModalReq.email,
+        nombre: approveModalReq.nombre,
+        concesionaria: approveConcesionaria,
+        marcas: approveMarcas,
+        tempPassword: tempPasswordGenerated || undefined,
+        portalUrl,
+      });
+
+      showToast(`✅ Solicitud aprobada. ${approveModalReq.email} ya tiene acceso a ${approveConcesionaria}.`);
+      setApproveModalReq(null);
+      fetchAllData();
+    } catch (err: any) {
+      console.error("Error al aprobar solicitud:", err);
+      showToast(err.message || "Error al aprobar la solicitud.");
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  // Rechazo de solicitud
+  const handleConfirmReject = async () => {
+    if (!rejectModalReq) return;
+    setIsRejecting(true);
+    try {
+      await updateDoc(doc(db, 'dealership_requests', rejectModalReq.id), {
+        estado: 'Rechazado',
+        motivoRechazo: rejectReason || 'Solicitud desestimada por la administración.',
+        rechazadoPor: adminUser?.email || 'admin',
+        rechazadoAt: serverTimestamp(),
+      });
+
+      await sendDealershipRejectedEmail({
+        email: rejectModalReq.email,
+        nombre: rejectModalReq.nombre,
+        concesionaria: rejectModalReq.concesionaria,
+        motivo: rejectReason || undefined,
+      });
+
+      showToast(`Solicitud de ${rejectModalReq.email} rechazada.`);
+      setRejectModalReq(null);
+      setRejectReason('');
+      fetchAllData();
+    } catch (err: any) {
+      console.error("Error al rechazar solicitud:", err);
+      showToast("Error al rechazar la solicitud.");
+    } finally {
+      setIsRejecting(false);
+    }
+  };
+
   const triggerEditUserB2B = (u: any) => {
     let parsedMarcas: string[] = [];
     if (typeof u.marcasPermitidas === 'string') {
@@ -1800,13 +2002,133 @@ export default function AdminDashboardPage() {
       parsedMarcas = u.marcasPermitidas;
     }
 
-    setUserB2BForm({
-      uid: u.id,
+    setEditUserModal({
+      id: u.id,
       email: u.email || '',
-      dealershipName: u.dealershipName || '',
-      marcasPermitidas: parsedMarcas
+      dealershipName: u.dealershipName || (concesionariasList[0]?.name || ''),
+      marcasPermitidas: parsedMarcas,
+      canAccessReports: Boolean(u.canAccessReports),
+      nombre: u.nombre || '',
     });
-    window.scrollTo(0, 0);
+  };
+
+  const handleToggleEditUserMarca = (marcaName: string) => {
+    if (!editUserModal) return;
+    setEditUserModal(prev => {
+      if (!prev) return null;
+      const exists = prev.marcasPermitidas.includes(marcaName);
+      return {
+        ...prev,
+        marcasPermitidas: exists
+          ? prev.marcasPermitidas.filter(m => m !== marcaName)
+          : [...prev.marcasPermitidas, marcaName]
+      };
+    });
+  };
+
+  const handleSaveEditUserModal = async () => {
+    if (!editUserModal) return;
+    if (!editUserModal.dealershipName || editUserModal.marcasPermitidas.length === 0) {
+      showToast("Seleccioná la concesionaria y al menos 1 marca permitida.");
+      return;
+    }
+    setIsSavingEditUser(true);
+    try {
+      await setDoc(doc(db, 'users', editUserModal.id), {
+        dealershipName: editUserModal.dealershipName,
+        marcasPermitidas: editUserModal.marcasPermitidas,
+        canAccessReports: Boolean(editUserModal.canAccessReports),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      setUsuariosSistemaList(prev => prev.map(u => {
+        if (u.id !== editUserModal.id) return u;
+        return {
+          ...u,
+          dealershipName: editUserModal.dealershipName,
+          marcasPermitidas: editUserModal.marcasPermitidas,
+          canAccessReports: Boolean(editUserModal.canAccessReports),
+        };
+      }));
+
+      showToast(`Permisos actualizados para ${editUserModal.email}.`);
+      setEditUserModal(null);
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Error al actualizar permisos.");
+    } finally {
+      setIsSavingEditUser(false);
+    }
+  };
+
+  const handleToggleUserReports = async (u: any) => {
+    const newStatus = !u.canAccessReports;
+    try {
+      await setDoc(doc(db, 'users', u.id), {
+        canAccessReports: newStatus,
+        reportsRequested: false,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      setUsuariosSistemaList(prev => prev.map(item => item.id === u.id ? { ...item, canAccessReports: newStatus, reportsRequested: false } : item));
+      showToast(newStatus ? `✅ Acceso a Reportes habilitado para ${u.email}.` : `Acceso a Reportes revocado para ${u.email}.`);
+    } catch (err: any) {
+      showToast("Error al actualizar permisos de reportes.");
+    }
+  };
+
+  const handleOpenAddAdmin = () => {
+    setNewAdminEmail('');
+    setNewAdminPassword(`Datacar${Math.floor(1000 + Math.random() * 9000)}!`);
+    setIsAddAdminModalOpen(true);
+  };
+
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminEmail) {
+      showToast("Ingresá el email del administrador.");
+      return;
+    }
+    setIsCreatingAdmin(true);
+    try {
+      // 1. Crear o verificar usuario en Firebase Auth automáticamente
+      const res = await fetch('/api/admin/users/create-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newAdminEmail.trim(),
+          password: newAdminPassword,
+          nombre: 'Administrador DATACAR',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok && data.error !== 'EMAIL_EXISTS') {
+        throw new Error(data.message || data.error || 'Error al crear usuario en Auth');
+      }
+
+      const uid = data.uid || data.localId;
+      if (!uid) {
+        throw new Error("No se pudo obtener el UID del usuario.");
+      }
+
+      // 2. Asignar rol admin en Firestore
+      await setDoc(doc(db, 'users', uid), {
+        email: newAdminEmail.trim(),
+        role: 'admin',
+        dealershipName: 'DATACAR CENTRAL',
+        marcasPermitidas: ['ALL'],
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      showToast(`✅ Administrador ${newAdminEmail} habilitado.`);
+      setIsAddAdminModalOpen(false);
+      fetchAllData();
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Error creando administrador.");
+    } finally {
+      setIsCreatingAdmin(false);
+    }
   };
 
   // INYECTOR CSV (Saneamiento Avanzado)
@@ -2907,6 +3229,433 @@ export default function AdminDashboardPage() {
     };
   }, [wizardStatsList, leadsList]);
 
+  // Helper timestamp para comparaciones
+  const getCompTimestamp = useCallback((comp: any): number => {
+    if (comp.timestamp?.toDate) return comp.timestamp.toDate().getTime();
+    if (comp.timestamp?.seconds) return comp.timestamp.seconds * 1000;
+    if (comp.timestamp) {
+      const t = new Date(comp.timestamp).getTime();
+      if (!isNaN(t)) return t;
+    }
+    if (comp.createdAt?.toDate) return comp.createdAt.toDate().getTime();
+    if (comp.createdAt?.seconds) return comp.createdAt.seconds * 1000;
+    if (comp.createdAt) {
+      const t = new Date(comp.createdAt).getTime();
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  }, []);
+
+  // 1. ANALÍTICA DE CONTEO DE MODELO EN RANGO DE TIEMPO
+  const auditModelAnalytics = useMemo(() => {
+    // Filtrar primero por rango de fechas
+    const dateComps = enrichedComparisons.filter(comp => {
+      const t = getCompTimestamp(comp);
+      if (!t) return true;
+      if (auditDateFrom) {
+        const fromT = new Date(`${auditDateFrom}T00:00:00`).getTime();
+        if (t < fromT) return false;
+      }
+      if (auditDateTo) {
+        const toT = new Date(`${auditDateTo}T23:59:59.999`).getTime();
+        if (t > toT) return false;
+      }
+      return true;
+    });
+
+    const totalCompsInDateRange = dateComps.length;
+    const selectedModel = modelosList.find(m => m.id === auditModelId);
+    const selectedBrand = selectedModel ? marcasList.find(b => b.id === selectedModel.brandId) : null;
+    const modelNameUpper = (selectedModel?.name || '').trim().toUpperCase();
+    const brandNameUpper = (selectedBrand?.name || '').trim().toUpperCase();
+
+    if (!selectedModel) {
+      return {
+        selectedModel: null,
+        selectedBrand: null,
+        totalCompsInDateRange,
+        modelCount: 0,
+        slot1Count: 0,
+        challengerCount: 0,
+        slot1Pct: 0,
+        marketSharePct: '0',
+        topRivals: [],
+        recentComparisons: [],
+      };
+    }
+
+    const matchingComps: any[] = [];
+    let slot1Count = 0;
+    const rivalCountMap: Record<string, { name: string; brandName: string; count: number; modelId?: string }> = {};
+
+    dateComps.forEach(comp => {
+      const vehs: any[] = comp.vehicles || [];
+      const matchIndex = vehs.findIndex(v => {
+        if (v.modelId && v.modelId === selectedModel.id) return true;
+        if (v.modelName && v.modelName.toUpperCase() === modelNameUpper) {
+          if (!brandNameUpper || !v.brandName || v.brandName.toUpperCase() === brandNameUpper) return true;
+        }
+        return false;
+      });
+
+      if (matchIndex >= 0) {
+        matchingComps.push(comp);
+        if (matchIndex === 0) {
+          slot1Count++;
+        }
+        // Rivales en esta comparativa
+        vehs.forEach((v, idx) => {
+          if (idx !== matchIndex) {
+            const rivalKey = v.fullName || `${v.brandName || ''} ${v.modelName || ''}`.trim() || 'Rival Desconocido';
+            if (!rivalCountMap[rivalKey]) {
+              rivalCountMap[rivalKey] = {
+                name: v.modelName || rivalKey,
+                brandName: v.brandName || '',
+                count: 0,
+                modelId: v.modelId,
+              };
+            }
+            rivalCountMap[rivalKey].count++;
+          }
+        });
+      }
+    });
+
+    const modelCount = matchingComps.length;
+    const challengerCount = modelCount - slot1Count;
+    const slot1Pct = modelCount > 0 ? Math.round((slot1Count / modelCount) * 100) : 0;
+    const marketSharePct = totalCompsInDateRange > 0 ? ((modelCount / totalCompsInDateRange) * 100).toFixed(1) : '0';
+
+    const topRivals = Object.entries(rivalCountMap)
+      .map(([key, data]) => ({
+        fullName: key,
+        ...data,
+        pct: modelCount > 0 ? Math.round((data.count / modelCount) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    const recentComparisons = matchingComps.slice(0, 15).map(c => ({
+      id: c.id || Math.random().toString(),
+      combo: c.combo || 'Comparativa',
+      date: getCompTimestamp(c) ? new Date(getCompTimestamp(c)).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Fecha s/d',
+      vehicles: c.vehicles || [],
+    }));
+
+    return {
+      selectedModel,
+      selectedBrand,
+      totalCompsInDateRange,
+      modelCount,
+      slot1Count,
+      challengerCount,
+      slot1Pct,
+      marketSharePct,
+      topRivals,
+      recentComparisons,
+    };
+  }, [enrichedComparisons, auditModelId, auditDateFrom, auditDateTo, modelosList, marcasList, getCompTimestamp]);
+
+  // 2. ANALÍTICA DE DUELOS HEAD-TO-HEAD (MODELO VS MODELO & MARCA VS MARCA)
+  const duelAnalytics = useMemo(() => {
+    // Filtrar por fechas
+    const dateComps = enrichedComparisons.filter(comp => {
+      const t = getCompTimestamp(comp);
+      if (!t) return true;
+      if (duelDateFrom) {
+        const fromT = new Date(`${duelDateFrom}T00:00:00`).getTime();
+        if (t < fromT) return false;
+      }
+      if (duelDateTo) {
+        const toT = new Date(`${duelDateTo}T23:59:59.999`).getTime();
+        if (t > toT) return false;
+      }
+      return true;
+    });
+
+    // A. Duelo Modelo vs Modelo
+    const modelAObj = modelosList.find(m => m.id === duelModelA);
+    const modelBObj = modelosList.find(m => m.id === duelModelB);
+    const brandAForModel = modelAObj ? marcasList.find(b => b.id === modelAObj.brandId) : null;
+    const brandBForModel = modelBObj ? marcasList.find(b => b.id === modelBObj.brandId) : null;
+
+    let modelVsModelCount = 0;
+    let modelASlot1Count = 0;
+    let modelBSlot1Count = 0;
+    const modelDuelMatches: any[] = [];
+
+    if (modelAObj && modelBObj && modelAObj.id !== modelBObj.id) {
+      const nameAUpper = modelAObj.name.trim().toUpperCase();
+      const nameBUpper = modelBObj.name.trim().toUpperCase();
+      const brandAUpper = (brandAForModel?.name || '').trim().toUpperCase();
+      const brandBUpper = (brandBForModel?.name || '').trim().toUpperCase();
+
+      dateComps.forEach(comp => {
+        const vehs: any[] = comp.vehicles || [];
+        const hasA = vehs.some(v => v.modelId === modelAObj.id || (v.modelName && v.modelName.toUpperCase() === nameAUpper && (!brandAUpper || v.brandName === brandAUpper)));
+        const hasB = vehs.some(v => v.modelId === modelBObj.id || (v.modelName && v.modelName.toUpperCase() === nameBUpper && (!brandBUpper || v.brandName === brandBUpper)));
+
+        if (hasA && hasB) {
+          modelVsModelCount++;
+          modelDuelMatches.push(comp);
+          const firstVeh = vehs[0];
+          if (firstVeh) {
+            if (firstVeh.modelId === modelAObj.id || (firstVeh.modelName && firstVeh.modelName.toUpperCase() === nameAUpper)) {
+              modelASlot1Count++;
+            } else if (firstVeh.modelId === modelBObj.id || (firstVeh.modelName && firstVeh.modelName.toUpperCase() === nameBUpper)) {
+              modelBSlot1Count++;
+            }
+          }
+        }
+      });
+    }
+
+    // B. Duelo Marca vs Marca
+    const brandAObj = marcasList.find(b => b.id === duelBrandA);
+    const brandBObj = marcasList.find(b => b.id === duelBrandB);
+    let brandVsBrandCount = 0;
+    const brandDuelMatches: any[] = [];
+    const brandModelPairMap: Record<string, number> = {};
+
+    if (brandAObj && brandBObj) {
+      const nameAUpper = brandAObj.name.trim().toUpperCase();
+      const nameBUpper = brandBObj.name.trim().toUpperCase();
+      const sameBrand = brandAObj.id === brandBObj.id;
+
+      dateComps.forEach(comp => {
+        const vehs: any[] = comp.vehicles || [];
+        if (sameBrand) {
+          const matchingVehs = vehs.filter(v => v.brandId === brandAObj.id || v.brandName === nameAUpper);
+          if (matchingVehs.length >= 2) {
+            brandVsBrandCount++;
+            brandDuelMatches.push(comp);
+            const mKey = `${matchingVehs[0].fullName} vs ${matchingVehs[1].fullName}`;
+            brandModelPairMap[mKey] = (brandModelPairMap[mKey] || 0) + 1;
+          }
+        } else {
+          const vehsA = vehs.filter(v => v.brandId === brandAObj.id || v.brandName === nameAUpper);
+          const vehsB = vehs.filter(v => v.brandId === brandBObj.id || v.brandName === nameBUpper);
+          if (vehsA.length > 0 && vehsB.length > 0) {
+            brandVsBrandCount++;
+            brandDuelMatches.push(comp);
+            vehsA.forEach(va => {
+              vehsB.forEach(vb => {
+                const pairKey = `${va.fullName} vs ${vb.fullName}`;
+                brandModelPairMap[pairKey] = (brandModelPairMap[pairKey] || 0) + 1;
+              });
+            });
+          }
+        }
+      });
+    }
+
+    // C. Top 10 Global Duelos Modelo vs Modelo
+    const globalModelPairsCount: Record<string, { label: string; count: number; model1: string; model2: string }> = {};
+    const globalBrandPairsCount: Record<string, { label: string; count: number; brand1: string; brand2: string }> = {};
+
+    dateComps.forEach(comp => {
+      const vehs: any[] = comp.vehicles || [];
+      if (vehs.length < 2) return;
+
+      for (let i = 0; i < vehs.length; i++) {
+        for (let j = i + 1; j < vehs.length; j++) {
+          const v1 = vehs[i];
+          const v2 = vehs[j];
+          const name1 = v1.fullName || `${v1.brandName} ${v1.modelName}`.trim();
+          const name2 = v2.fullName || `${v2.brandName} ${v2.modelName}`.trim();
+          if (name1 && name2 && name1 !== name2) {
+            const [mFirst, mSecond] = [name1, name2].sort();
+            const pairKey = `${mFirst} ⚡ ${mSecond}`;
+            if (!globalModelPairsCount[pairKey]) {
+              globalModelPairsCount[pairKey] = { label: pairKey, count: 0, model1: mFirst, model2: mSecond };
+            }
+            globalModelPairsCount[pairKey].count++;
+          }
+
+          const b1 = (v1.brandName || '').trim();
+          const b2 = (v2.brandName || '').trim();
+          if (b1 && b2 && b1 !== b2) {
+            const [bFirst, bSecond] = [b1, b2].sort();
+            const bPairKey = `${bFirst} ⚡ ${bSecond}`;
+            if (!globalBrandPairsCount[bPairKey]) {
+              globalBrandPairsCount[bPairKey] = { label: bPairKey, count: 0, brand1: bFirst, brand2: bSecond };
+            }
+            globalBrandPairsCount[bPairKey].count++;
+          }
+        }
+      }
+    });
+
+    const topModelDuels = Object.values(globalModelPairsCount)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const topBrandDuels = Object.values(globalBrandPairsCount)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return {
+      totalCompsInDateRange: dateComps.length,
+      // Modelo vs Modelo
+      modelAObj,
+      modelBObj,
+      brandAForModel,
+      brandBForModel,
+      modelVsModelCount,
+      modelASlot1Count,
+      modelBSlot1Count,
+      modelDuelMatches: modelDuelMatches.slice(0, 10),
+      // Marca vs Marca
+      brandAObj,
+      brandBObj,
+      brandVsBrandCount,
+      brandDuelMatches: brandDuelMatches.slice(0, 10),
+      brandModelPairs: Object.entries(brandModelPairMap).sort((a, b) => b[1] - a[1]).slice(0, 6),
+      // Global Leaderboards
+      topModelDuels,
+      topBrandDuels,
+    };
+  }, [enrichedComparisons, duelModelA, duelModelB, duelBrandA, duelBrandB, duelDateFrom, duelDateTo, modelosList, marcasList, getCompTimestamp]);
+
+  // 3. ANALÍTICA DE RECOMENDACIONES DEL RECOMENDADOR POR MODELO
+  const recomendadorModelAnalytics = useMemo(() => {
+    const dateWizardSessions = wizardStatsList.filter(ws => {
+      let t = 0;
+      if (ws.createdAt?.toDate) t = ws.createdAt.toDate().getTime();
+      else if (ws.createdAt?.seconds) t = ws.createdAt.seconds * 1000;
+      else if (ws.createdAt) t = new Date(ws.createdAt).getTime();
+
+      if (!t) return true;
+      if (recomDateFrom) {
+        const fromT = new Date(`${recomDateFrom}T00:00:00`).getTime();
+        if (t < fromT) return false;
+      }
+      if (recomDateTo) {
+        const toT = new Date(`${recomDateTo}T23:59:59.999`).getTime();
+        if (t > toT) return false;
+      }
+      return true;
+    });
+
+    const totalWizardSessions = dateWizardSessions.length;
+
+    const modelScoreMap: Record<string, {
+      modelId: string;
+      modelName: string;
+      brandName: string;
+      carroceria: string;
+      startingPrice: number;
+      totalRecommended: number;
+      rank1Count: number;
+      alternativeCount: number;
+    }> = {};
+
+    modelosList.forEach(m => {
+      const bObj = marcasList.find(b => b.id === m.brandId);
+      modelScoreMap[m.id] = {
+        modelId: m.id,
+        modelName: m.name,
+        brandName: bObj?.name || 'Marca',
+        carroceria: m.tipo_carroceria || 'SUV',
+        startingPrice: Number(m.startingPrice) || 0,
+        totalRecommended: 0,
+        rank1Count: 0,
+        alternativeCount: 0,
+      };
+    });
+
+    const versionsByModelId = new Map<string, any[]>();
+    versionesList.forEach(v => {
+      const arr = versionsByModelId.get(v.modelId) || [];
+      arr.push(v);
+      versionsByModelId.set(v.modelId, arr);
+    });
+
+    dateWizardSessions.forEach(ws => {
+      const recIds: string[] = ws.recommendedModelIds || [];
+      const recSummary: any[] = ws.recommendedModels || [];
+      const topMatchId: string | null = ws.topMatchModelId || (recSummary[0]?.modelId || null);
+
+      if (recIds.length > 0) {
+        recIds.forEach((id, idx) => {
+          if (modelScoreMap[id]) {
+            modelScoreMap[id].totalRecommended++;
+            if (id === topMatchId || idx === 0) {
+              modelScoreMap[id].rank1Count++;
+            } else {
+              modelScoreMap[id].alternativeCount++;
+            }
+          }
+        });
+      } else {
+        const ans = ws.effectiveAnswers || ws.answers || {};
+        const pPresup = ans.presupuesto || ws.presupuesto;
+        const pCarroc = ans.carroceria || ws.carroceria;
+        const pCombust = ans.combustible || ws.combustible;
+
+        modelosList.forEach(m => {
+          let score = 0;
+          const p = Number(m.startingPrice) || 0;
+          if (pPresup && p > 0) {
+            const pNum = Number(String(pPresup).replace(/\D/g, '')) || 0;
+            if (pNum > 0 && p <= pNum * 1.15) score += 2;
+          }
+          if (pCarroc && m.tipo_carroceria) {
+            const cStr = Array.isArray(pCarroc) ? pCarroc.join(' ') : String(pCarroc);
+            if (cStr.toUpperCase().includes(m.tipo_carroceria.toUpperCase())) score += 3;
+          }
+          if (pCombust) {
+            const mVers = versionsByModelId.get(m.id) || [];
+            const hasFuel = mVers.some(v => {
+              const fuelStr = String(v.specs?.combustible || v.combustible || '').toUpperCase();
+              return Array.isArray(pCombust) ? pCombust.some(c => fuelStr.includes(String(c).toUpperCase())) : fuelStr.includes(String(pCombust).toUpperCase());
+            });
+            if (hasFuel) score += 2;
+          }
+
+          if (score >= 4 && modelScoreMap[m.id]) {
+            modelScoreMap[m.id].totalRecommended++;
+            modelScoreMap[m.id].alternativeCount++;
+          }
+        });
+      }
+    });
+
+    leadsList.forEach(lead => {
+      if (lead.origen === 'Recomendador Interactivo') {
+        const topMatches: any[] = (lead as any).topMatches || [];
+        if (topMatches.length > 0) {
+          topMatches.forEach((tm: any, idx: number) => {
+            if (tm.modelId && modelScoreMap[tm.modelId]) {
+              modelScoreMap[tm.modelId].totalRecommended++;
+              if (idx === 0) modelScoreMap[tm.modelId].rank1Count++;
+              else modelScoreMap[tm.modelId].alternativeCount++;
+            }
+          });
+        }
+      }
+    });
+
+    const leaderboard = Object.values(modelScoreMap)
+      .map(item => ({
+        ...item,
+        pctOfSessions: totalWizardSessions > 0 ? Math.round((item.totalRecommended / totalWizardSessions) * 100) : 0,
+      }))
+      .sort((a, b) => b.totalRecommended - a.totalRecommended || b.rank1Count - a.rank1Count);
+
+    const selectedModel = modelosList.find(m => m.id === recomModelId) || null;
+    const selectedModelData = selectedModel ? (modelScoreMap[selectedModel.id] || null) : null;
+    const selectedModelRank = selectedModel ? leaderboard.findIndex(item => item.modelId === selectedModel.id) + 1 : 0;
+
+    return {
+      totalWizardSessions,
+      selectedModel,
+      selectedModelData,
+      selectedModelRank,
+      leaderboard: leaderboard.slice(0, 15),
+    };
+  }, [wizardStatsList, leadsList, modelosList, marcasList, versionesList, recomModelId, recomDateFrom, recomDateTo]);
+
   const handleToggleAd = async (id: string, currentStatus: boolean) => {
     setLoading(true);
     try { 
@@ -3097,7 +3846,25 @@ export default function AdminDashboardPage() {
     });
   }, [concesionariasList, abmConcFilterStatus, abmConcFilterCheck, searchTerm]);
   const checkedDealershipSet = useMemo(() => buildCheckedDealershipSet(concesionariasList), [concesionariasList]);
-  const filteredSolicitudes = useMemo(() => solicitudesList.filter(r => r.concesionaria.toLowerCase().includes(searchTerm.toLowerCase())), [solicitudesList, searchTerm]);
+  const filteredSolicitudes = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return solicitudesList.filter(r => {
+      const matchStatus = solicitudesFilterStatus === 'todos' || r.estado === solicitudesFilterStatus;
+      if (!matchStatus) return false;
+      if (!term) return true;
+      const conc = (r.concesionaria || '').toLowerCase();
+      const nom = (r.nombre || '').toLowerCase();
+      const em = (r.email || '').toLowerCase();
+      const m = (r.marcas || '').toLowerCase();
+      return conc.includes(term) || nom.includes(term) || em.includes(term) || m.includes(term);
+    }).sort((a, b) => {
+      if (a.estado === 'Pendiente' && b.estado !== 'Pendiente') return -1;
+      if (a.estado !== 'Pendiente' && b.estado === 'Pendiente') return 1;
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+      return dateB - dateA;
+    });
+  }, [solicitudesList, searchTerm, solicitudesFilterStatus]);
 
   // Combina los 5 reels oficiales predeterminados con los que hayan sido editados o creados en Firestore
   const combinedReelsList = useMemo(() => {
@@ -3193,180 +3960,178 @@ export default function AdminDashboardPage() {
           {/* VISTA: GESTIÓN DE ACCESOS Y ROLES */}
           {/* ======================================= */}
           {activeTab === 'accesos' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 h-full">
-              
-              {/* COLUMNA IZQUIERDA: FORMULARIOS DE ALTA */}
-              <div className="xl:col-span-1 flex flex-col gap-6 max-h-full overflow-y-auto custom-scrollbar pr-2">
-                
-                {/* Formulario: Concesionarias (B2B) */}
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 shadow-none">
-                  <h2 className="font-bold text-[#0A1F33] text-sm uppercase mb-2 border-b border-[#C0C0C0] pb-2">Otorgar Acceso B2B (Concesionarias)</h2>
-                  <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest mb-4">Asigna el UID de Firebase Auth y define las marcas permitidas.</p>
-                  
-                  <form onSubmit={handleSaveUserB2B} className="flex flex-col gap-3">
-                    <div>
-                      <label htmlFor="userB2BForm-uid" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">UID de Firebase Auth</label>
-                      <input id="userB2BForm-uid" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.uid} onChange={e => setUserB2BForm({...userB2BForm, uid: e.target.value})} placeholder="Ej: g8YxZ1a2..." required disabled={!!userB2BForm.uid && userB2BForm.email !== ''} />
-                    </div>
-                    <div>
-                      <label htmlFor="userB2BForm-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email del Gerente</label>
-                      <input id="userB2BForm-email" type="email" className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none" value={userB2BForm.email} onChange={e => setUserB2BForm({...userB2BForm, email: e.target.value})} placeholder="gerente@concesionaria.com" required />
-                    </div>
-                    <div>
-                      <label htmlFor="userB2BForm-dealership" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Concesionaria Asignada</label>
-                      <select 
-                        id="userB2BForm-dealership" 
-                        className="w-full border p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none font-bold" 
-                        value={userB2BForm.dealershipName} 
-                        onChange={e => {
-                          const newDealer = e.target.value;
-                          setUserB2BForm(prev => {
-                            const dealerNorm = newDealer.trim().toUpperCase();
-                            const modelIdsOfNewDealer = new Set(
-                              versionesList.filter(v => (v.concesionaria || '').trim().toUpperCase() === dealerNorm).map(v => v.modelId)
-                            );
-                            const brandIdsOfNewDealer = new Set(
-                              modelosList.filter(m => modelIdsOfNewDealer.has(m.id)).map(m => m.brandId)
-                            );
-                            const allowedNames = new Set(
-                              marcasList.filter(b => brandIdsOfNewDealer.has(b.id)).map(b => b.name.toUpperCase().trim())
-                            );
-                            const safeMarcas = allowedNames.size > 0 
-                              ? prev.marcasPermitidas.filter(m => allowedNames.has(m.toUpperCase().trim()))
-                              : [];
-                            return { ...prev, dealershipName: newDealer, marcasPermitidas: safeMarcas };
-                          });
-                        }} 
-                        required
-                      >
-                        <option value="">Seleccionar concesionaria...</option>
-                        {concesionariasList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                      </select>
-                    </div>
+            <>
+              <div className="flex flex-col gap-8 h-full pb-10">
 
-                    <div className="border border-[#C0C0C0] p-3 bg-[#F8F9FA] mt-1">
-                      <div className="flex justify-between items-center mb-2 border-b border-[#C0C0C0]/50 pb-2">
-                        <span className="text-[10px] font-bold text-[#0A1F33] uppercase">
-                          Marcas Permitidas (Scope B2B)
+                {/* SECCIÓN 1: SOLICITUDES DE ALTA (PORTAL CONCESIONARIAS) */}
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col shadow-none rounded-none">
+                  <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex flex-wrap justify-between items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <h2 className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">
+                        Solicitudes de Alta Comercial (Portal Concesionarias)
+                      </h2>
+                      {solicitudesList.filter(s => s.estado === 'Pendiente').length > 0 && (
+                        <span className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase px-2.5 py-1 tracking-wider shadow-sm animate-pulse">
+                          {solicitudesList.filter(s => s.estado === 'Pendiente').length} PENDIENTE(S)
                         </span>
-                        {userB2BForm.dealershipName && (
-                          <span className="text-[8px] font-bold text-[#00BFFF] uppercase tracking-wider">
-                            {marcasParaConcesionariaB2B.length} de {userB2BForm.dealershipName}
-                          </span>
-                        )}
-                      </div>
-                      
-                      {!userB2BForm.dealershipName ? (
-                        <p className="text-[9px] text-[#C0C0C0] uppercase tracking-wider py-4 text-center">
-                          ⚠️ Primero seleccioná una concesionaria para habilitar sus marcas.
-                        </p>
-                      ) : marcasParaConcesionariaB2B.length === 0 ? (
-                        <p className="text-[9px] text-[#C0C0C0] uppercase tracking-wider py-4 text-center">
-                          Esta concesionaria aún no tiene marcas con inventario cargado.
-                        </p>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto custom-scrollbar pr-2">
-                          {marcasParaConcesionariaB2B.map(m => (
-                            <label key={m.id} className="flex items-center gap-2 cursor-pointer group p-1 hover:bg-white transition-colors">
-                              <div className={`w-3.5 h-3.5 border flex items-center justify-center shrink-0 transition-colors ${userB2BForm.marcasPermitidas.includes(m.name) ? 'bg-[#00BFFF] border-[#00BFFF]' : 'bg-[#FFFFFF] border-[#C0C0C0] group-hover:border-[#0A1F33]'}`}>
-                                {userB2BForm.marcasPermitidas.includes(m.name) && <svg className="w-2.5 h-2.5 text-[#FFFFFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
-                              </div>
-                              <input type="checkbox" className="hidden" checked={userB2BForm.marcasPermitidas.includes(m.name)} onChange={() => handleMarcaToggle(m.name)} />
-                              <span className={`text-[9px] uppercase tracking-wider truncate ${userB2BForm.marcasPermitidas.includes(m.name) ? 'font-black text-[#0A1F33]' : 'text-[#3A3A3C]'}`}>{m.name}</span>
-                            </label>
-                          ))}
-                        </div>
                       )}
                     </div>
 
-                    <div className="flex gap-2 mt-2">
-                      {userB2BForm.email && <button type="button" onClick={() => setUserB2BForm({uid: '', email: '', dealershipName: '', marcasPermitidas: []})} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-[10px] font-bold uppercase transition-colors hover:bg-[#F5F5F5] rounded-none">Cancelar</button>}
-                      <button type="submit" disabled={loading} className="flex-1 bg-[#0A1F33] text-[#FFFFFF] text-xs font-bold uppercase py-3 hover:bg-[#00BFFF] transition-colors border border-transparent rounded-none">Guardar Permisos B2B</button>
-                    </div>
-                  </form>
-                </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* FILTROS POR ESTADO */}
+                      <div className="flex border border-[#C0C0C0] bg-[#FFFFFF] p-0.5 text-[9px] font-bold uppercase tracking-wider">
+                        {(['todos', 'Pendiente', 'Aprobado', 'Rechazado'] as const).map(st => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => setSolicitudesFilterStatus(st)}
+                            className={`px-3 py-1 transition-colors ${solicitudesFilterStatus === st ? 'bg-[#0A1F33] text-[#FFFFFF]' : 'text-[#3A3A3C] hover:text-[#0A1F33]'}`}
+                          >
+                            {st === 'todos' ? 'Todas' : st}
+                          </button>
+                        ))}
+                      </div>
 
-                {/* Formulario: Administradores Internos */}
-                <div className="bg-[#0A1F33] border-t-4 border-[#00BFFF] p-6 shadow-none">
-                  <h2 className="font-bold text-[#FFFFFF] text-sm uppercase mb-2 border-b border-[#FFFFFF]/20 pb-2">Añadir Administrador Interno</h2>
-                  <p className="text-[9px] text-[#C0C0C0] uppercase tracking-widest mb-4">Otorga control total sobre la plataforma a tu equipo central.</p>
-                  
-                  <form onSubmit={handleSaveAdminAccess} className="flex flex-col gap-3">
-                    <div>
-                      <label htmlFor="adminAccessForm-uid" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">UID de Firebase Auth</label>
-                      <input id="adminAccessForm-uid" type="text" className="w-full border-none p-2 text-xs focus:outline-none bg-[#FFFFFF] rounded-none text-[#0A1F33]" value={adminAccessForm.uid} onChange={e => setAdminAccessForm({...adminAccessForm, uid: e.target.value})} placeholder="Copiar desde Auth..." required />
+                      <input
+                        type="text"
+                        aria-label="Buscar solicitud"
+                        placeholder="Buscar por concesionaria, email, marcas..."
+                        className="border border-[#C0C0C0] px-3 py-1.5 text-xs w-full sm:w-64 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                      />
                     </div>
-                    <div>
-                      <label htmlFor="adminAccessForm-email" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Email del Administrador</label>
-                      <input id="adminAccessForm-email" type="email" className="w-full border-none p-2 text-xs focus:outline-none bg-[#FFFFFF] rounded-none text-[#0A1F33]" value={adminAccessForm.email} onChange={e => setAdminAccessForm({...adminAccessForm, email: e.target.value})} placeholder="equipo@datacarpy.com" required />
-                    </div>
-                    
-                    <button type="submit" disabled={loading} className="w-full bg-[#00BFFF] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#FFFFFF] transition-colors border border-transparent rounded-none mt-2">Dar Acceso Total</button>
-                  </form>
-                </div>
-
-              </div>
-
-              {/* COLUMNA DERECHA: TABLAS DE VISUALIZACIÓN */}
-              <div className="xl:col-span-2 flex flex-col gap-8 h-full min-h-[600px]">
-                
-                {/* SOLICITUDES ENTRANTES */}
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col shadow-none rounded-none h-1/2">
-                  <div className="p-4 bg-[#F5F5F5] border-b border-[#C0C0C0] flex justify-between items-center shrink-0">
-                    <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Solicitudes de Alta (Portal)</span>
-                    <input type="text" aria-label="Buscar solicitud" placeholder="Buscar solicitud..." className="border border-[#C0C0C0] px-3 py-2 text-xs w-full md:w-48 focus:outline-none focus:border-[#0A1F33] bg-[#FFFFFF] rounded-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   </div>
-                  <div className="overflow-auto flex-grow custom-scrollbar">
-                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[700px]">
+
+                  <div className="overflow-auto custom-scrollbar max-h-[460px]">
+                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[750px]">
                       <thead className="bg-[#FFFFFF] sticky top-0 z-10 border-b border-[#C0C0C0]">
                         <tr className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">
-                          <th className="p-4 border-r border-[#C0C0C0]/50">Solicitante</th>
-                          <th className="p-4 border-r border-[#C0C0C0]/50">Concesionaria / Marcas</th>
-                          <th className="p-4 text-center">Estado de Solicitud</th>
+                          <th className="p-3 border-r border-[#C0C0C0]/50">Solicitante</th>
+                          <th className="p-3 border-r border-[#C0C0C0]/50">Concesionaria / Marcas</th>
+                          <th className="p-3 border-r border-[#C0C0C0]/50">Fecha Solicitud</th>
+                          <th className="p-3 text-center w-52">Decisión / Permisos</th>
                         </tr>
                       </thead>
                       <tbody className="text-[11px] text-[#3A3A3C]">
                         {filteredSolicitudes.length === 0 ? (
-                          <tr><td colSpan={3} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No hay solicitudes pendientes.</td></tr>
-                        ) : filteredSolicitudes.map((req: any) => (
-                          <tr key={req.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors">
-                            <td className="p-4 border-r border-[#C0C0C0]/50 align-top">
-                              <span className="block font-bold text-[#0A1F33] uppercase">{req.nombre}</span>
-                              <span className="block text-[9px] text-[#C0C0C0] uppercase mb-1">{req.cargo}</span>
-                              <a href={`mailto:${req.email}`} className="text-[#00BFFF] hover:underline block">{req.email}</a>
-                              <span className="text-[#3A3A3C]">Tel: {req.telefono}</span>
-                            </td>
-                            <td className="p-4 border-r border-[#C0C0C0]/50 align-top">
-                              <span className="block font-black text-[#0A1F33] uppercase">{req.concesionaria}</span>
-                              <span className="block text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest mt-1">Marcas solicitadas:</span>
-                              <span className="text-[10px] text-[#C0C0C0] whitespace-normal">{req.marcas}</span>
-                            </td>
-                            <td className="p-4 align-top w-40 text-center">
-                              <select 
-                                className={`w-full border p-2 text-[10px] font-bold uppercase tracking-widest focus:outline-none appearance-none cursor-pointer text-center rounded-none ${req.estado === 'Pendiente' ? 'border-[#00BFFF] bg-[#00BFFF]/10 text-[#0A1F33]' : 'border-[#1E8E3E] bg-[#E6F4EA] text-[#1E8E3E]'}`}
-                                value={req.estado} onChange={(e) => handleUpdateReqStatus(req.id, e.target.value)}>
-                                <option value="Pendiente">Pendiente</option><option value="Procesado">Procesado ✓</option>
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
+                          <tr><td colSpan={4} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No hay solicitudes con este filtro.</td></tr>
+                        ) : filteredSolicitudes.map((req: any) => {
+                          const isPendiente = req.estado === 'Pendiente' || !req.estado;
+                          const isAprobado = req.estado === 'Aprobado' || req.estado === 'Procesado';
+                          const isRechazado = req.estado === 'Rechazado';
+
+                          return (
+                            <tr key={req.id} className={`border-b border-[#C0C0C0]/50 hover:bg-[#F8F9FA] transition-colors ${isPendiente ? 'bg-[#F0F9FF]/30' : ''}`}>
+                              <td className="p-3 border-r border-[#C0C0C0]/50 align-top">
+                                <span className="block font-bold text-[#0A1F33] uppercase">{req.nombre}</span>
+                                <span className="block text-[9px] text-[#C0C0C0] uppercase mb-1">{req.cargo || 'Responsable Comercial'}</span>
+                                <a href={`mailto:${req.email}`} className="text-[#00BFFF] hover:underline block font-mono text-[10px]">{req.email}</a>
+                                <span className="text-[#3A3A3C] text-[10px] block mt-0.5">Tel: {req.telefono}</span>
+                              </td>
+                              <td className="p-3 border-r border-[#C0C0C0]/50 align-top">
+                                <span className="block font-black text-[#0A1F33] uppercase">{req.concesionaria}</span>
+                                <span className="block text-[9px] font-bold text-[#3A3A3C] uppercase tracking-widest mt-1">Marcas solicitadas:</span>
+                                <span className="text-[10px] text-[#71717A] whitespace-normal block">{req.marcas}</span>
+                                {isAprobado && req.concesionariaAsignada && (
+                                  <div className="mt-1.5 pt-1 border-t border-[#E6E6E6] text-[9px]">
+                                    <span className="font-bold text-[#1E8E3E] uppercase block">Asignada: {req.concesionariaAsignada}</span>
+                                    {Array.isArray(req.marcasAsignadas) && (
+                                      <span className="text-[#3A3A3C] font-mono text-[8px]">{req.marcasAsignadas.join(', ')}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3 border-r border-[#C0C0C0]/50 align-top text-[10px] text-[#71717A] whitespace-normal">
+                                {formatLastModified(req.createdAt)}
+                              </td>
+                              <td className="p-3 align-top w-52 text-center">
+                                {isPendiente && (
+                                  <div className="flex flex-col gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenApproveModal(req)}
+                                      className="w-full bg-[#1E8E3E] hover:bg-[#15732e] text-[#FFFFFF] font-black text-[10px] uppercase tracking-wider py-2 px-3 transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                                    >
+                                      <span>✓</span> ACEPTAR
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setRejectModalReq(req); setRejectReason(''); }}
+                                      className="w-full border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] font-bold text-[9px] uppercase tracking-wider py-1.5 px-3 transition-colors cursor-pointer"
+                                    >
+                                      ✕ RECHAZAR
+                                    </button>
+                                  </div>
+                                )}
+
+                                {isAprobado && (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="bg-[#E6F4EA] text-[#1E8E3E] border border-[#1E8E3E]/30 text-[9px] font-black uppercase px-2.5 py-1 tracking-widest inline-flex items-center gap-1">
+                                      ✓ Aprobado
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenApproveModal(req)}
+                                      className="text-[9px] text-[#00BFFF] hover:underline uppercase tracking-wider font-bold mt-1 cursor-pointer"
+                                    >
+                                      Reasignar Marcas
+                                    </button>
+                                  </div>
+                                )}
+
+                                {isRechazado && (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="bg-[#FCE8E6] text-[#D93025] border border-[#D93025]/30 text-[9px] font-black uppercase px-2.5 py-1 tracking-widest inline-flex items-center gap-1">
+                                      ✕ Rechazado
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenApproveModal(req)}
+                                      className="text-[9px] text-[#3A3A3C] hover:text-[#00BFFF] uppercase tracking-wider font-bold mt-1 cursor-pointer"
+                                    >
+                                      Reconsiderar
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
 
-                {/* USUARIOS ACTIVOS (CONCESIONARIAS Y ADMINS) */}
-                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col shadow-none rounded-none h-1/2">
-                  <div className="p-4 bg-[#FFFFFF] border-b border-[#C0C0C0] flex justify-between items-center shrink-0">
-                    <span className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">Todos los Usuarios Activos</span>
+                {/* SECCIÓN 2: TODOS LOS USUARIOS ACTIVOS */}
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] flex flex-col shadow-none rounded-none">
+                  <div className="p-4 bg-[#FFFFFF] border-b border-[#C0C0C0] flex flex-wrap justify-between items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <h2 className="font-bold text-xs uppercase tracking-widest text-[#0A1F33]">
+                        Todos los Usuarios Activos en el Sistema
+                      </h2>
+                      <span className="text-[10px] text-[#71717A] font-semibold">
+                        ({usuariosSistemaList.length} usuarios registrados)
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenAddAdmin}
+                      className="bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-wider px-3 py-2 transition-colors flex items-center gap-1.5 rounded-none cursor-pointer"
+                    >
+                      <span>+</span> Añadir Administrador Interno
+                    </button>
                   </div>
-                  <div className="overflow-auto flex-grow custom-scrollbar">
-                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[700px]">
+
+                  <div className="overflow-auto custom-scrollbar max-h-[460px]">
+                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[750px]">
                       <thead className="bg-[#F8F9FA] sticky top-0 z-10 border-b border-[#C0C0C0]">
                         <tr className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">
                           <th className="p-4 border-r border-[#C0C0C0]/50">Email / UID</th>
                           <th className="p-4 border-r border-[#C0C0C0]/50">Rol de Acceso</th>
                           <th className="p-4 border-r border-[#C0C0C0]/50">Permisos (Marcas)</th>
+                          <th className="p-4 border-r border-[#C0C0C0]/50 text-center">Reportes BI</th>
                           <th className="p-4 text-right">Acción</th>
                         </tr>
                       </thead>
@@ -3374,7 +4139,6 @@ export default function AdminDashboardPage() {
                         {usuariosSistemaList.length === 0 ? (
                           <tr><td colSpan={4} className="p-10 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No hay usuarios dados de alta.</td></tr>
                         ) : usuariosSistemaList.map((u: any) => {
-                          // Self-healing display for arrays
                           let displayMarcas: string[] = [];
                           if (typeof u.marcasPermitidas === 'string') {
                             try { displayMarcas = JSON.parse(u.marcasPermitidas); } 
@@ -3412,12 +4176,56 @@ export default function AdminDashboardPage() {
                                   </div>
                                 )}
                               </td>
+                              <td className="p-4 border-r border-[#C0C0C0]/50 align-top text-center">
+                                {isAdmin ? (
+                                  <span className="text-[9px] font-bold text-[#71717A] uppercase">Total</span>
+                                ) : u.canAccessReports ? (
+                                  <span className="bg-[#E6F4EA] text-[#1E8E3E] border border-[#1E8E3E]/30 text-[9px] font-black uppercase px-2 py-0.5 tracking-wider inline-flex items-center gap-1">
+                                    ✓ Activo
+                                  </span>
+                                ) : u.reportsRequested ? (
+                                  <span className="bg-[#FEF3C7] text-[#D97706] border border-[#D97706]/40 text-[9px] font-black uppercase px-2 py-0.5 tracking-wider inline-flex items-center gap-1 animate-pulse" title="Solicitó acceso">
+                                    ⚠️ Solicitado
+                                  </span>
+                                ) : (
+                                  <span className="bg-[#F3F4F6] text-[#9CA3AF] text-[9px] font-bold uppercase px-2 py-0.5 tracking-wider">
+                                    Inactivo
+                                  </span>
+                                )}
+                              </td>
                               <td className="p-4 text-right align-top">
                                 {!isAdmin && (
-                                  <button onClick={() => triggerEditUserB2B(u)} className="text-[#00BFFF] font-bold uppercase hover:underline text-[9px] tracking-widest outline-none">Editar B2B</button>
+                                  <div className="inline-flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => triggerEditUserB2B(u)}
+                                      className="bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-[#FFFFFF] font-bold uppercase text-[9px] tracking-wider px-2.5 py-1.5 transition-colors cursor-pointer"
+                                    >
+                                      Editar Permisos
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleUserReports(u)}
+                                      className={`text-[9px] font-bold uppercase px-2 py-1.5 border transition-colors cursor-pointer ${
+                                        u.canAccessReports
+                                          ? 'border-[#D93025]/40 text-[#D93025] hover:bg-[#D93025] hover:text-white'
+                                          : u.reportsRequested
+                                            ? 'bg-[#1E8E3E] text-white border-[#1E8E3E] hover:bg-[#15732e]'
+                                            : 'border-[#1E8E3E]/40 text-[#1E8E3E] hover:bg-[#1E8E3E] hover:text-white'
+                                      }`}
+                                    >
+                                      {u.canAccessReports ? 'Quitar BI' : 'Habilitar BI'}
+                                    </button>
+                                  </div>
                                 )}
                                 {isAdmin && u.email !== 'aldojeda92@gmail.com' && (
-                                  <button onClick={() => handleDelete('users', u.id)} className="text-[#D93025] font-bold uppercase hover:underline text-[9px] tracking-widest outline-none">Revocar Admin</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete('users', u.id)}
+                                    className="text-[#D93025] font-bold uppercase hover:underline text-[9px] tracking-widest outline-none ml-2 cursor-pointer"
+                                  >
+                                    Revocar Admin
+                                  </button>
                                 )}
                               </td>
                             </tr>
@@ -3429,7 +4237,433 @@ export default function AdminDashboardPage() {
                 </div>
 
               </div>
-            </div>
+
+            {/* MODAL: APROBACIÓN DE SOLICITUD Y ASIGNACIÓN DE PERMISOS B2B */}
+            {approveModalReq && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                <div className="bg-[#FFFFFF] border-t-4 border-[#1E8E3E] border-l border-r border-b border-[#C0C0C0] w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6 shadow-2xl custom-scrollbar flex flex-col gap-4">
+                  <div className="flex justify-between items-center border-b border-[#C0C0C0] pb-3">
+                    <div>
+                      <h3 className="font-black text-[#0A1F33] text-sm uppercase tracking-wide">
+                        Aprobar Solicitud y Asignar Permisos B2B
+                      </h3>
+                      <p className="text-[10px] text-[#71717A] mt-0.5">
+                        Asigna la concesionaria oficial y las marcas que tendrá habilitadas en el portal.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setApproveModalReq(null)}
+                      className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold outline-none"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Resumen de la Solicitud */}
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[9px] font-bold text-[#71717A] uppercase block">Solicitante:</span>
+                        <span className="font-bold text-[#0A1F33]">{approveModalReq.nombre}</span>
+                        <span className="text-[10px] text-[#71717A] block">{approveModalReq.cargo || 'Responsable Comercial'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-[#71717A] uppercase block">Contacto:</span>
+                        <span className="font-mono text-[10px] text-[#00BFFF] block">{approveModalReq.email}</span>
+                        <span className="text-[10px] text-[#3A3A3C] block">Tel: {approveModalReq.telefono}</span>
+                      </div>
+                      <div className="sm:col-span-2 pt-2 border-t border-[#E6E6E6]">
+                        <span className="text-[9px] font-bold text-[#71717A] uppercase block">Solicitó alta para:</span>
+                        <p className="font-bold text-[#0A1F33] text-xs uppercase">{approveModalReq.concesionaria}</p>
+                        <p className="text-[10px] text-[#3A3A3C] mt-0.5">
+                          <span className="font-bold">Marcas solicitadas:</span> {approveModalReq.marcas}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-[#E6E6E6] flex items-center justify-between text-[10px]">
+                      {approveModalReq.uid ? (
+                        <span className="text-[#1E8E3E] font-bold flex items-center gap-1">
+                          ✓ Usuario Auth vinculado automáticamente (UID: <code className="font-mono">{approveModalReq.uid.slice(0, 10)}...</code>)
+                        </span>
+                      ) : (
+                        <span className="text-[#026AA2] font-bold">
+                          ⚡ Se creará automáticamente la cuenta en Firebase Authentication.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Configuración de Concesionaria */}
+                  <div>
+                    <label htmlFor="approve-dealership" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Concesionaria Oficial Asignada
+                    </label>
+                    <select
+                      id="approve-dealership"
+                      className="w-full border p-2.5 text-xs font-bold focus:outline-none focus:border-[#00BFFF] rounded-none bg-white"
+                      value={approveConcesionaria}
+                      onChange={e => setApproveConcesionaria(e.target.value)}
+                      required
+                    >
+                      <option value="">Seleccionar concesionaria...</option>
+                      {concesionariasList.map(c => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* HABILITACIÓN DE REPORTES B2B */}
+                  <div className="p-3 bg-[#F8F9FA] border border-[#C0C0C0] flex items-start gap-2.5">
+                    <input
+                      id="approve-can-reports"
+                      type="checkbox"
+                      checked={approveCanAccessReports}
+                      onChange={e => setApproveCanAccessReports(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 accent-[#00BFFF]"
+                    />
+                    <label htmlFor="approve-can-reports" className="cursor-pointer">
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block">
+                        Habilitar Acceso al Módulo de Reportes & BI
+                      </span>
+                      <span className="text-[9px] text-[#71717A] block leading-tight mt-0.5">
+                        Permite a la concesionaria ver telemetría de sus marcas, tasa de consideración de mercado y comparativas rivales. (Por defecto: deshabilitado).
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Selección de Marcas Autorizadas */}
+                  <div className="border border-[#C0C0C0] p-3 bg-[#F8F9FA]">
+                    <div className="flex justify-between items-center mb-2 border-b border-[#C0C0C0]/50 pb-2">
+                      <span className="text-[10px] font-bold text-[#0A1F33] uppercase">
+                        Marcas Autorizadas (Scope B2B)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setApproveMarcas(marcasList.map(m => m.name))}
+                          className="text-[9px] text-[#00BFFF] hover:underline uppercase font-bold"
+                        >
+                          Marcar Todas
+                        </button>
+                        <span className="text-[#C0C0C0]">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setApproveMarcas([])}
+                          className="text-[9px] text-[#71717A] hover:underline uppercase font-bold"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                      {marcasList.map(m => {
+                        const isChecked = approveMarcas.includes(m.name);
+                        return (
+                          <label
+                            key={m.id}
+                            className={`flex items-center gap-2 p-1.5 cursor-pointer border transition-colors ${isChecked ? 'bg-[#FFFFFF] border-[#00BFFF]' : 'bg-[#FFFFFF]/60 border-[#E6E6E6] hover:border-[#C0C0C0]'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleApproveMarca(m.name)}
+                              className="w-3.5 h-3.5 accent-[#00BFFF]"
+                            />
+                            <span className={`text-[10px] uppercase truncate ${isChecked ? 'font-black text-[#0A1F33]' : 'text-[#3A3A3C]'}`}>
+                              {m.name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Botones de Acción */}
+                  <div className="flex gap-3 pt-2 border-t border-[#C0C0C0]">
+                    <button
+                      type="button"
+                      onClick={() => setApproveModalReq(null)}
+                      disabled={isApproving}
+                      className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5] transition-colors rounded-none"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmApprove}
+                      disabled={isApproving || !approveConcesionaria || approveMarcas.length === 0}
+                      className="flex-1 bg-[#1E8E3E] hover:bg-[#15732e] text-[#FFFFFF] text-xs font-black uppercase py-3 transition-colors disabled:opacity-50 shadow-sm rounded-none flex items-center justify-center gap-2"
+                    >
+                      {isApproving ? 'Activando usuario...' : '✓ Confirmar Aprobación y Otorgar Permisos'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL: RECHAZAR SOLICITUD B2B */}
+            {rejectModalReq && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                <div className="bg-[#FFFFFF] border-t-4 border-[#D93025] border-l border-r border-b border-[#C0C0C0] w-full max-w-md p-6 shadow-2xl flex flex-col gap-4">
+                  <div className="flex justify-between items-center border-b border-[#C0C0C0] pb-3">
+                    <h3 className="font-black text-[#0A1F33] text-sm uppercase">
+                      Rechazar Solicitud de Concesionaria
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setRejectModalReq(null)}
+                      className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold outline-none"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-[#3A3A3C] leading-relaxed">
+                    ¿Confirmás el rechazo de la solicitud de <strong>{rejectModalReq.nombre}</strong> ({rejectModalReq.concesionaria} • {rejectModalReq.email})?
+                  </p>
+
+                  <div>
+                    <label htmlFor="reject-reason" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">
+                      Motivo del rechazo (opcional, para registro):
+                    </label>
+                    <textarea
+                      id="reject-reason"
+                      rows={2}
+                      className="w-full border p-2 text-xs focus:outline-none focus:border-[#D93025] rounded-none resize-none"
+                      placeholder="Ej: Datos de contacto no verificables o no corresponden a concesionario oficial."
+                      value={rejectReason}
+                      onChange={e => setRejectReason(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-2 border-t border-[#C0C0C0]">
+                    <button
+                      type="button"
+                      onClick={() => setRejectModalReq(null)}
+                      disabled={isRejecting}
+                      className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5] transition-colors rounded-none"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmReject}
+                      disabled={isRejecting}
+                      className="flex-1 bg-[#D93025] hover:bg-[#b5281e] text-[#FFFFFF] text-xs font-bold uppercase py-3 transition-colors disabled:opacity-50 rounded-none flex items-center justify-center gap-2"
+                    >
+                      {isRejecting ? 'Rechazando...' : '✕ Confirmar Rechazo'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL: EDITAR PERMISOS DE CONCESIONARIA ACTIVA */}
+            {editUserModal && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                <div className="bg-[#FFFFFF] border-t-4 border-[#00BFFF] border-l border-r border-b border-[#C0C0C0] w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl custom-scrollbar flex flex-col gap-4">
+                  <div className="flex justify-between items-center border-b border-[#C0C0C0] pb-3">
+                    <div>
+                      <h3 className="font-black text-[#0A1F33] text-sm uppercase">
+                        Modificar Permisos de Concesionaria
+                      </h3>
+                      <p className="text-[10px] text-[#71717A] mt-0.5">
+                        Usuario: <strong className="text-[#0A1F33]">{editUserModal.email}</strong>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditUserModal(null)}
+                      className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold outline-none cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div>
+                    <label htmlFor="edit-dealership" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                      Concesionaria Asignada
+                    </label>
+                    <select
+                      id="edit-dealership"
+                      className="w-full border p-2.5 text-xs font-bold focus:outline-none focus:border-[#00BFFF] rounded-none bg-white"
+                      value={editUserModal.dealershipName}
+                      onChange={e => setEditUserModal({ ...editUserModal, dealershipName: e.target.value })}
+                    >
+                      {concesionariasList.map(c => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* HABILITACIÓN DE REPORTES B2B */}
+                  <div className="p-3 bg-[#F8F9FA] border border-[#C0C0C0] flex items-start gap-2.5">
+                    <input
+                      id="edit-user-can-reports"
+                      type="checkbox"
+                      checked={Boolean(editUserModal.canAccessReports)}
+                      onChange={e => setEditUserModal({ ...editUserModal, canAccessReports: e.target.checked })}
+                      className="w-4 h-4 mt-0.5 accent-[#00BFFF]"
+                    />
+                    <label htmlFor="edit-user-can-reports" className="cursor-pointer">
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase tracking-wider block">
+                        Acceso a Reportes y Analítica BI de Mercado
+                      </span>
+                      <span className="text-[9px] text-[#71717A] block leading-tight mt-0.5">
+                        Si está marcado, el usuario verá la pestaña de "Reportes & BI" en su portal de concesionaria.
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="border border-[#C0C0C0] p-3 bg-[#F8F9FA]">
+                    <div className="flex justify-between items-center mb-2 border-b border-[#C0C0C0]/50 pb-2">
+                      <span className="text-[10px] font-bold text-[#0A1F33] uppercase">
+                        Marcas Permitidas ({editUserModal.marcasPermitidas.length} seleccionadas)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditUserModal({ ...editUserModal, marcasPermitidas: marcasList.map(m => m.name) })}
+                          className="text-[9px] text-[#00BFFF] hover:underline uppercase font-bold"
+                        >
+                          Marcar Todas
+                        </button>
+                        <span className="text-[#C0C0C0]">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditUserModal({ ...editUserModal, marcasPermitidas: [] })}
+                          className="text-[9px] text-[#71717A] hover:underline uppercase font-bold"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                      {marcasList.map(m => {
+                        const isChecked = editUserModal.marcasPermitidas.includes(m.name);
+                        return (
+                          <label
+                            key={m.id}
+                            className={`flex items-center gap-2 p-1.5 cursor-pointer border transition-colors ${isChecked ? 'bg-[#FFFFFF] border-[#00BFFF]' : 'bg-[#FFFFFF]/60 border-[#E6E6E6] hover:border-[#C0C0C0]'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleEditUserMarca(m.name)}
+                              className="w-3.5 h-3.5 accent-[#00BFFF]"
+                            />
+                            <span className={`text-[10px] uppercase truncate ${isChecked ? 'font-black text-[#0A1F33]' : 'text-[#3A3A3C]'}`}>
+                              {m.name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-2 border-t border-[#C0C0C0]">
+                    <button
+                      type="button"
+                      onClick={() => setEditUserModal(null)}
+                      disabled={isSavingEditUser}
+                      className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5] transition-colors rounded-none cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEditUserModal}
+                      disabled={isSavingEditUser || editUserModal.marcasPermitidas.length === 0}
+                      className="flex-1 bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-[#FFFFFF] text-xs font-black uppercase py-3 transition-colors disabled:opacity-50 rounded-none cursor-pointer"
+                    >
+                      {isSavingEditUser ? 'Guardando...' : 'Guardar Cambios'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL: AÑADIR ADMINISTRADOR INTERNO */}
+            {isAddAdminModalOpen && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                <div className="bg-[#FFFFFF] border-t-4 border-[#0A1F33] border-l border-r border-b border-[#C0C0C0] w-full max-w-md p-6 shadow-2xl flex flex-col gap-4">
+                  <div className="flex justify-between items-center border-b border-[#C0C0C0] pb-3">
+                    <div>
+                      <h3 className="font-black text-[#0A1F33] text-sm uppercase">
+                        Añadir Administrador Interno
+                      </h3>
+                      <p className="text-[10px] text-[#71717A] mt-0.5">
+                        Tendrá control administrativo completo sobre la plataforma.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddAdminModalOpen(false)}
+                      className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold outline-none cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCreateAdmin} className="flex flex-col gap-4">
+                    <div>
+                      <label htmlFor="new-admin-email" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Email del Administrador
+                      </label>
+                      <input
+                        id="new-admin-email"
+                        type="email"
+                        required
+                        placeholder="socio@datacarpy.com"
+                        className="w-full border p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none"
+                        value={newAdminEmail}
+                        onChange={e => setNewAdminEmail(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="new-admin-password" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Contraseña de Acceso (generada automáticamente)
+                      </label>
+                      <input
+                        id="new-admin-password"
+                        type="text"
+                        required
+                        className="w-full border p-2.5 text-xs font-mono focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA]"
+                        value={newAdminPassword}
+                        onChange={e => setNewAdminPassword(e.target.value)}
+                      />
+                      <span className="text-[9px] text-[#71717A] mt-1 block">
+                        Copia y comparte esta contraseña con el nuevo administrador.
+                      </span>
+                    </div>
+
+                    <div className="flex gap-3 pt-2 border-t border-[#C0C0C0]">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddAdminModalOpen(false)}
+                        disabled={isCreatingAdmin}
+                        className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5] transition-colors rounded-none cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isCreatingAdmin || !newAdminEmail}
+                        className="flex-1 bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-[#FFFFFF] text-xs font-black uppercase py-3 transition-colors disabled:opacity-50 rounded-none cursor-pointer"
+                      >
+                        {isCreatingAdmin ? 'Creando...' : 'Habilitar Admin'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+            </>
           )}
 
           {/* VISTAS DASHBOARD & FINANCIERO */}
@@ -3626,6 +4860,82 @@ export default function AdminDashboardPage() {
 
           {activeTab === 'analitica' && (
             <div className="flex flex-col gap-6 pb-8">
+
+              {/* BARRA DE SUB-PESTAÑAS DE INTELIGENCIA COMERCIAL */}
+              <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-2 flex flex-wrap items-center gap-2 shadow-none shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setAnaliticaSubTab('general')}
+                  className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border ${
+                    analiticaSubTab === 'general'
+                      ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+                      : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+                  }`}
+                >
+                  📊 Visión Global &amp; Demanda
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAnaliticaSubTab('modelo_rango')}
+                  className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border flex items-center gap-1.5 ${
+                    analiticaSubTab === 'modelo_rango'
+                      ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+                      : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+                  }`}
+                >
+                  <span>📅 Conteo por Modelo en Rango de Tiempo</span>
+                  {auditModelAnalytics.selectedModel && (
+                    <span className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black px-1.5 py-0.2">
+                      {auditModelAnalytics.modelCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAnaliticaSubTab('duelos')}
+                  className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border flex items-center gap-1.5 ${
+                    analiticaSubTab === 'duelos'
+                      ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+                      : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+                  }`}
+                >
+                  <span>⚔️ Duelos Directos (Modelo vs Modelo / Marca vs Marca)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAnaliticaSubTab('recomendador')}
+                  className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border flex items-center gap-1.5 ${
+                    analiticaSubTab === 'recomendador'
+                      ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+                      : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+                  }`}
+                >
+                  <span>🎯 Recomendaciones del Recomendador</span>
+                  {recomendadorModelAnalytics.selectedModelData && (
+                    <span className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black px-1.5 py-0.2">
+                      {recomendadorModelAnalytics.selectedModelData.totalRecommended}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAnaliticaSubTab('todos')}
+                  className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ml-auto border ${
+                    analiticaSubTab === 'todos'
+                      ? 'bg-[#00BFFF] text-[#0A1F33] border-[#00BFFF]'
+                      : 'bg-[#FFFFFF] text-[#C0C0C0] border-[#C0C0C0] hover:text-[#0A1F33] hover:border-[#0A1F33]'
+                  }`}
+                >
+                  Ver Todos los Módulos
+                </button>
+              </div>
+
+              {(analiticaSubTab === 'general' || analiticaSubTab === 'todos') && (
+                <>
               {/* 1. BARRA PRINCIPAL DE FILTROS (MARCA, MODELO, RANGO DE FECHA + SEGMENTACIÓN GLOBAL) */}
               <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col gap-4 shrink-0 shadow-none">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#C0C0C0]/50 pb-2.5">
@@ -4415,6 +5725,1085 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
               </div>
+                </>
+              )}
+
+              {/* ================================================================ */}
+              {/* SECCIÓN NUEVA: CONTEO DE MODELO EN UN RANGO DE TIEMPO            */}
+              {/* ================================================================ */}
+              {(analiticaSubTab === 'modelo_rango' || analiticaSubTab === 'todos') && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-6 shadow-none">
+                  {/* Encabezado */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#C0C0C0]/50 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-2.5 h-2.5 bg-[#00BFFF] inline-block" />
+                        <h3 className="text-xs font-black uppercase tracking-widest text-[#0A1F33]">
+                          Auditoría de Demanda de Modelo por Rango de Tiempo
+                        </h3>
+                        <span className="bg-[#00BFFF]/15 text-[#0A1F33] border border-[#00BFFF] px-2 py-0.5 text-[8px] font-black uppercase">
+                          Telemetría de Comparativas
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[#3A3A3C]">
+                        Contá cuántas veces se comparó un modelo específico dentro de un rango de fechas, su cuota de mercado y contra quiénes compitió.
+                      </p>
+                    </div>
+
+                    {/* Botones de rango rápido */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider mr-1">Rango rápido:</span>
+                      <button
+                        type="button"
+                        onClick={() => { setAuditDateFrom(''); setAuditDateTo(''); }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Histórico Total
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = new Date().toISOString().split('T')[0];
+                          setAuditDateFrom(today);
+                          setAuditDateTo(today);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Hoy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() - 7);
+                          setAuditDateFrom(d.toISOString().split('T')[0]);
+                          setAuditDateTo(new Date().toISOString().split('T')[0]);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Últimos 7 días
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() - 30);
+                          setAuditDateFrom(d.toISOString().split('T')[0]);
+                          setAuditDateTo(new Date().toISOString().split('T')[0]);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Últimos 30 días
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = new Date();
+                          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                          setAuditDateFrom(firstDay);
+                          setAuditDateTo(now.toISOString().split('T')[0]);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Este Mes
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Barra de Filtros: Selector de Modelo y Fechas */}
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    <div className="md:col-span-6">
+                      <label htmlFor="auditModelSelect" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Seleccionar Modelo a Auditar <span className="text-[#00BFFF]">*</span>
+                      </label>
+                      <select
+                        id="auditModelSelect"
+                        className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                        value={auditModelId}
+                        onChange={e => setAuditModelId(e.target.value)}
+                      >
+                        <option value="">-- Elegir un modelo del catálogo ({modelosList.length} disponibles) --</option>
+                        {[...modelosList]
+                          .sort((a, b) => {
+                            const bA = marcasList.find(b => b.id === a.brandId)?.name || '';
+                            const bB = marcasList.find(b => b.id === b.brandId)?.name || '';
+                            const fullA = `${bA} ${a.name}`;
+                            const fullB = `${bB} ${b.name}`;
+                            return fullA.localeCompare(fullB);
+                          })
+                          .map(m => {
+                            const bName = marcasList.find(b => b.id === m.brandId)?.name || '';
+                            return (
+                              <option key={m.id} value={m.id}>
+                                {bName} {m.name} ({m.tipo_carroceria || 'SUV'})
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label htmlFor="auditDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Fecha Desde
+                      </label>
+                      <input
+                        id="auditDateFrom"
+                        type="date"
+                        className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                        value={auditDateFrom}
+                        onChange={e => setAuditDateFrom(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label htmlFor="auditDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Fecha Hasta
+                      </label>
+                      <input
+                        id="auditDateTo"
+                        type="date"
+                        className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                        value={auditDateTo}
+                        onChange={e => setAuditDateTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Resultados */}
+                  {auditModelAnalytics.selectedModel ? (
+                    <div className="flex flex-col gap-6">
+                      {/* Métricas Principales */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* KPI 1: Total veces comparado */}
+                        <div className="bg-[#F8F9FA] border-2 border-[#00BFFF] p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1">
+                              Total Veces Comparado en el Rango
+                            </span>
+                            <span className="font-black text-4xl text-[#0A1F33] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {auditModelAnalytics.modelCount}
+                            </span>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 flex justify-between items-center text-[9px]">
+                            <span className="text-[#3A3A3C] uppercase font-bold">Muestra total del período:</span>
+                            <span className="font-mono font-bold text-[#0A1F33]">{auditModelAnalytics.totalCompsInDateRange} comp.</span>
+                          </div>
+                        </div>
+
+                        {/* KPI 2: Cuota de Presencia en Comparativas */}
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">
+                              Cuota de Pantalla (Presencia)
+                            </span>
+                            <span className="font-black text-4xl text-[#00BFFF] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {auditModelAnalytics.marketSharePct}%
+                            </span>
+                          </div>
+                          <span className="text-[8px] text-[#3A3A3C] uppercase font-semibold mt-3 pt-2 border-t border-[#C0C0C0]/50 block">
+                            Participó en {auditModelAnalytics.modelCount} de las {auditModelAnalytics.totalCompsInDateRange} comparativas
+                          </span>
+                        </div>
+
+                        {/* KPI 3: Slot 1 (1ra Opción de Referencia) */}
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#1E8E3E] uppercase tracking-wider block mb-1">
+                              Elegido en 1er Lugar (Slot #1)
+                            </span>
+                            <span className="font-black text-4xl text-[#1E8E3E] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {auditModelAnalytics.slot1Count}
+                            </span>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 text-[9px] text-[#3A3A3C] font-semibold">
+                            Tasa de 1ra elección: <strong className="text-[#1E8E3E]">{auditModelAnalytics.slot1Pct}%</strong>
+                          </div>
+                        </div>
+
+                        {/* KPI 4: Slot 2 o 3 (Retador) */}
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#3A3A3C] uppercase tracking-wider block mb-1">
+                              Elegido como Retador (Slot 2/3)
+                            </span>
+                            <span className="font-black text-4xl text-[#3A3A3C] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {auditModelAnalytics.challengerCount}
+                            </span>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 text-[9px] text-[#3A3A3C] font-semibold">
+                            Veces que el usuario lo contrastó contra otro modelo base
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Desglose: Top Rivales y Tabla de Comparaciones Recientes */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Top Rivales directos */}
+                        <div className="lg:col-span-5 bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2 mb-3">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                                🏆 Top Rivales Directos de {auditModelAnalytics.selectedModel.name}
+                              </span>
+                              <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Duelos</span>
+                            </div>
+                            <div className="flex flex-col gap-2.5">
+                              {auditModelAnalytics.topRivals.length === 0 ? (
+                                <p className="text-[10px] text-[#C0C0C0] p-4 text-center uppercase">Sin rivales en el período seleccionado.</p>
+                              ) : (
+                                auditModelAnalytics.topRivals.map((r, idx) => (
+                                  <div key={r.fullName}>
+                                    <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                      <span className="flex items-center gap-1.5 truncate">
+                                        <span className="text-[8px] bg-[#0A1F33] text-white px-1 font-mono">#{idx + 1}</span>
+                                        <span className="truncate">{r.fullName}</span>
+                                      </span>
+                                      <span className="font-mono text-[11px] text-[#00BFFF] shrink-0 font-bold ml-2">
+                                        {r.count}x ({r.pct}%)
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-[#E0E0E0] h-1.5 rounded-none overflow-hidden">
+                                      <div
+                                        className="h-full bg-[#00BFFF] transition-all duration-500"
+                                        style={{ width: `${r.pct}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-[8px] text-[#C0C0C0] uppercase mt-4 block">
+                            Modelos con mayor frecuencia de cruce frente a {auditModelAnalytics.selectedModel.name}
+                          </span>
+                        </div>
+
+                        {/* Comparativas en el rango */}
+                        <div className="lg:col-span-7 bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col">
+                          <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2 mb-3">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                              Historial de Comparativas Registradas en el Rango
+                            </span>
+                            <span className="text-[9px] font-bold text-[#00BFFF] uppercase">
+                              Mostrando {auditModelAnalytics.recentComparisons.length} de {auditModelAnalytics.modelCount}
+                            </span>
+                          </div>
+
+                          <div className="overflow-x-auto custom-scrollbar flex-grow max-h-[340px]">
+                            <table className="w-full text-left text-[10px] border-collapse">
+                              <thead className="bg-[#F8F9FA] sticky top-0 border-b border-[#C0C0C0]/50 text-[8px] font-bold uppercase text-[#3A3A3C]">
+                                <tr>
+                                  <th className="p-2">Fecha</th>
+                                  <th className="p-2">Enfrentamiento Completo</th>
+                                  <th className="p-2 text-center">Posición</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {auditModelAnalytics.recentComparisons.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={3} className="p-6 text-center text-[#C0C0C0] uppercase font-bold">
+                                      No se registraron comparativas para este modelo en el rango de fechas seleccionado.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  auditModelAnalytics.recentComparisons.map((c, i) => {
+                                    const isSlot1 = (c.vehicles[0]?.modelId === auditModelAnalytics.selectedModel?.id) ||
+                                      (c.vehicles[0]?.modelName?.toUpperCase() === auditModelAnalytics.selectedModel?.name?.toUpperCase());
+                                    return (
+                                      <tr key={i} className="border-b border-[#F1F5F9] hover:bg-[#F8F9FA]">
+                                        <td className="p-2 font-mono text-[#3A3A3C] whitespace-nowrap">{c.date}</td>
+                                        <td className="p-2 font-bold text-[#0A1F33]">{c.combo}</td>
+                                        <td className="p-2 text-center whitespace-nowrap">
+                                          {isSlot1 ? (
+                                            <span className="bg-[#E6F4EA] text-[#1E8E3E] font-black text-[8px] px-1.5 py-0.5 border border-[#1E8E3E]/30 uppercase">
+                                              1ra Opción (Slot 1)
+                                            </span>
+                                          ) : (
+                                            <span className="bg-[#F5F5F5] text-[#3A3A3C] font-bold text-[8px] px-1.5 py-0.5 border border-[#C0C0C0] uppercase">
+                                              Retador
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#F8F9FA] border border-dashed border-[#C0C0C0] p-10 text-center">
+                      <p className="text-sm font-bold text-[#0A1F33] uppercase tracking-wider mb-2">
+                        Seleccioná un modelo en el desplegable superior para iniciar la auditoría
+                      </p>
+                      <p className="text-[11px] text-[#3A3A3C] max-w-md mx-auto">
+                        Podrás ver al instante la cantidad exacta de veces que los usuarios lo compararon, su cuota de consideración y los rivales más frecuentes.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================================================================ */}
+              {/* SECCIÓN NUEVA: DUELOS DIRECTOS (MODELO VS MODELO / MARCA VS MARCA)*/}
+              {/* ================================================================ */}
+              {(analiticaSubTab === 'duelos' || analiticaSubTab === 'todos') && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-6 shadow-none">
+                  {/* Encabezado y Conmutador de Modo */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#C0C0C0]/50 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-2.5 h-2.5 bg-[#00BFFF] inline-block" />
+                        <h3 className="text-xs font-black uppercase tracking-widest text-[#0A1F33]">
+                          Enfrentamientos Directos (Head-to-Head)
+                        </h3>
+                        <span className="bg-[#0A1F33] text-[#00BFFF] px-2 py-0.5 text-[8px] font-black uppercase">
+                          Duelos 1 vs 1
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[#3A3A3C]">
+                        Contá cuántas veces se comparó exactamente un Modelo A contra un Modelo B, o una Marca A contra una Marca B.
+                      </p>
+                    </div>
+
+                    {/* Conmutador de modo */}
+                    <div className="flex border border-[#C0C0C0] p-0.5 bg-[#F8F9FA]">
+                      <button
+                        type="button"
+                        onClick={() => setDuelMode('modelos')}
+                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+                          duelMode === 'modelos' ? 'bg-[#0A1F33] text-white' : 'text-[#3A3A3C] hover:text-[#0A1F33]'
+                        }`}
+                      >
+                        🚗 Modelo vs Modelo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDuelMode('marcas')}
+                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+                          duelMode === 'marcas' ? 'bg-[#0A1F33] text-white' : 'text-[#3A3A3C] hover:text-[#0A1F33]'
+                        }`}
+                      >
+                        🏢 Marca vs Marca
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* FORMULARIO DE DUELO: MODELO VS MODELO */}
+                  {duelMode === 'modelos' && (
+                    <div className="flex flex-col gap-6">
+                      <div className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-4 flex flex-col gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                          {/* Marca A & Modelo A */}
+                          <div className="md:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <label htmlFor="duelBrandFilterA" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                                Marca A
+                              </label>
+                              <select
+                                id="duelBrandFilterA"
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-semibold rounded-none"
+                                value={duelBrandFilterA}
+                                onChange={e => {
+                                  const nB = e.target.value;
+                                  setDuelBrandFilterA(nB);
+                                  if (nB && duelModelA) {
+                                    const curr = modelosList.find(m => m.id === duelModelA);
+                                    if (curr && curr.brandId !== nB) setDuelModelA('');
+                                  }
+                                }}
+                              >
+                                <option value="">-- Todas ({marcasList.length}) --</option>
+                                {[...marcasList]
+                                  .sort((a, b) => a.name.localeCompare(b.name))
+                                  .map(b => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                  ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="duelModelA" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                                Modelo A <span className="text-[#00BFFF]">*</span>
+                              </label>
+                              <select
+                                id="duelModelA"
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                                value={duelModelA}
+                                onChange={e => {
+                                  const mId = e.target.value;
+                                  setDuelModelA(mId);
+                                  if (mId && !duelBrandFilterA) {
+                                    const mObj = modelosList.find(m => m.id === mId);
+                                    if (mObj) setDuelBrandFilterA(mObj.brandId);
+                                  }
+                                }}
+                              >
+                                <option value="">-- Elegir Modelo A --</option>
+                                {[...modelosList]
+                                  .filter(m => !duelBrandFilterA || m.brandId === duelBrandFilterA)
+                                  .sort((a, b) => {
+                                    const bA = marcasList.find(b => b.id === a.brandId)?.name || '';
+                                    const bB = marcasList.find(b => b.id === b.brandId)?.name || '';
+                                    return `${bA} ${a.name}`.localeCompare(`${bB} ${b.name}`);
+                                  })
+                                  .map(m => {
+                                    const bName = marcasList.find(b => b.id === m.brandId)?.name || '';
+                                    return <option key={m.id} value={m.id}>{bName} {m.name}</option>;
+                                  })}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Botón invertir */}
+                          <div className="md:col-span-2 flex justify-center pb-1">
+                            <button
+                              type="button"
+                              title="Intercambiar Modelos y Marcas"
+                              onClick={() => {
+                                const tempModel = duelModelA;
+                                setDuelModelA(duelModelB);
+                                setDuelModelB(tempModel);
+                                const tempBrand = duelBrandFilterA;
+                                setDuelBrandFilterA(duelBrandFilterB);
+                                setDuelBrandFilterB(tempBrand);
+                              }}
+                              className="bg-white border border-[#C0C0C0] hover:border-[#0A1F33] px-4 py-2 text-xs font-bold text-[#0A1F33] flex items-center gap-1.5 shadow-sm"
+                            >
+                              <span>⇄</span>
+                              <span className="text-[9px] uppercase tracking-wider hidden sm:inline">Invertir</span>
+                            </button>
+                          </div>
+
+                          {/* Marca B & Modelo B */}
+                          <div className="md:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <label htmlFor="duelBrandFilterB" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                                Marca B
+                              </label>
+                              <select
+                                id="duelBrandFilterB"
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-semibold rounded-none"
+                                value={duelBrandFilterB}
+                                onChange={e => {
+                                  const nB = e.target.value;
+                                  setDuelBrandFilterB(nB);
+                                  if (nB && duelModelB) {
+                                    const curr = modelosList.find(m => m.id === duelModelB);
+                                    if (curr && curr.brandId !== nB) setDuelModelB('');
+                                  }
+                                }}
+                              >
+                                <option value="">-- Todas ({marcasList.length}) --</option>
+                                {[...marcasList]
+                                  .sort((a, b) => a.name.localeCompare(b.name))
+                                  .map(b => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                  ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="duelModelB" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                                Modelo B <span className="text-[#00BFFF]">*</span>
+                              </label>
+                              <select
+                                id="duelModelB"
+                                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                                value={duelModelB}
+                                onChange={e => {
+                                  const mId = e.target.value;
+                                  setDuelModelB(mId);
+                                  if (mId && !duelBrandFilterB) {
+                                    const mObj = modelosList.find(m => m.id === mId);
+                                    if (mObj) setDuelBrandFilterB(mObj.brandId);
+                                  }
+                                }}
+                              >
+                                <option value="">-- Elegir Modelo B --</option>
+                                {[...modelosList]
+                                  .filter(m => !duelBrandFilterB || m.brandId === duelBrandFilterB)
+                                  .sort((a, b) => {
+                                    const bA = marcasList.find(b => b.id === a.brandId)?.name || '';
+                                    const bB = marcasList.find(b => b.id === b.brandId)?.name || '';
+                                    return `${bA} ${a.name}`.localeCompare(`${bB} ${b.name}`);
+                                  })
+                                  .map(m => {
+                                    const bName = marcasList.find(b => b.id === m.brandId)?.name || '';
+                                    return <option key={m.id} value={m.id}>{bName} {m.name}</option>;
+                                  })}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Rango de fechas del duelo */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#C0C0C0]/50">
+                          <div>
+                            <label htmlFor="duelDateFrom" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                              Fecha Desde (Opcional)
+                            </label>
+                            <input
+                              id="duelDateFrom"
+                              type="date"
+                              className="w-full border border-[#C0C0C0] p-1.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                              value={duelDateFrom}
+                              onChange={e => setDuelDateFrom(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="duelDateTo" className="text-[9px] font-bold text-[#0A1F33] uppercase block mb-1">
+                              Fecha Hasta (Opcional)
+                            </label>
+                            <input
+                              id="duelDateTo"
+                              type="date"
+                              className="w-full border border-[#C0C0C0] p-1.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                              value={duelDateTo}
+                              onChange={e => setDuelDateTo(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Tarjeta de Marcador Head-to-Head */}
+                      {duelAnalytics.modelAObj && duelAnalytics.modelBObj ? (
+                        <div className="bg-[#F8F9FA] border-2 border-[#0A1F33] p-6 flex flex-col gap-6">
+                          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                            {/* Modelo A */}
+                            <div className="flex-1 text-center md:text-left bg-white p-4 border border-[#C0C0C0]/60 w-full">
+                              <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-0.5">
+                                {duelAnalytics.brandAForModel?.name}
+                              </span>
+                              <h4 className="text-lg font-black text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                                {duelAnalytics.modelAObj.name}
+                              </h4>
+                              <p className="text-[10px] text-[#3A3A3C] font-semibold mt-1">
+                                Precio desde: USD {Number(duelAnalytics.modelAObj.startingPrice).toLocaleString('es-PY')}
+                              </p>
+                              <div className="mt-3 pt-2 border-t border-[#C0C0C0]/40 flex justify-between text-[9px]">
+                                <span className="text-[#3A3A3C] uppercase font-bold">Elegido 1º (Slot 1):</span>
+                                <span className="font-bold font-mono text-[#00BFFF]">{duelAnalytics.modelASlot1Count} veces</span>
+                              </div>
+                            </div>
+
+                            {/* Centro: Cantidad total de enfrentamientos */}
+                            <div className="flex flex-col items-center justify-center shrink-0 px-6 py-2">
+                              <span className="text-[10px] font-black text-[#C0C0C0] uppercase tracking-widest mb-1">
+                                Total Enfrentamientos Directos
+                              </span>
+                              <span className="font-black text-5xl text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                                {duelAnalytics.modelVsModelCount}
+                              </span>
+                              <span className="bg-[#0A1F33] text-[#00BFFF] px-3 py-1 text-[9px] font-black uppercase tracking-wider mt-2">
+                                Duelos 1 vs 1
+                              </span>
+                            </div>
+
+                            {/* Modelo B */}
+                            <div className="flex-1 text-center md:text-right bg-white p-4 border border-[#C0C0C0]/60 w-full">
+                              <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-0.5">
+                                {duelAnalytics.brandBForModel?.name}
+                              </span>
+                              <h4 className="text-lg font-black text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                                {duelAnalytics.modelBObj.name}
+                              </h4>
+                              <p className="text-[10px] text-[#3A3A3C] font-semibold mt-1">
+                                Precio desde: USD {Number(duelAnalytics.modelBObj.startingPrice).toLocaleString('es-PY')}
+                              </p>
+                              <div className="mt-3 pt-2 border-t border-[#C0C0C0]/40 flex justify-between text-[9px]">
+                                <span className="text-[#3A3A3C] uppercase font-bold">Elegido 1º (Slot 1):</span>
+                                <span className="font-bold font-mono text-[#00BFFF]">{duelAnalytics.modelBSlot1Count} veces</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* Leaderboard: Top 10 Duelos Modelo vs Modelo Más Frecuentes */}
+                      <div className="bg-white border border-[#C0C0C0] p-5">
+                        <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2.5 mb-4">
+                          <div>
+                            <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                              Ranking General de Duelos
+                            </span>
+                            <h4 className="text-xs font-black text-[#0A1F33] uppercase tracking-wider mt-1">
+                              Top 10 Enfrentamientos Modelo vs Modelo Más Frecuentes en DATACAR
+                            </h4>
+                          </div>
+                          <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">
+                            Total {duelAnalytics.totalCompsInDateRange} comparaciones analizadas
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {duelAnalytics.topModelDuels.map((duel, idx) => (
+                            <div
+                              key={duel.label}
+                              className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-3 flex justify-between items-center hover:border-[#0A1F33] transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <span className="bg-[#0A1F33] text-white font-mono font-bold text-[9px] px-2 py-0.5">
+                                  #{idx + 1}
+                                </span>
+                                <span className="text-[11px] font-bold text-[#0A1F33] uppercase truncate">
+                                  {duel.label}
+                                </span>
+                              </div>
+                              <span className="font-mono font-black text-sm text-[#00BFFF] shrink-0 bg-white border border-[#C0C0C0]/50 px-2.5 py-1">
+                                {duel.count} duelos
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FORMULARIO DE DUELO: MARCA VS MARCA */}
+                  {duelMode === 'marcas' && (
+                    <div className="flex flex-col gap-6">
+                      <div className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div className="md:col-span-4">
+                          <label htmlFor="duelBrandA" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Marca A <span className="text-[#00BFFF]">*</span>
+                          </label>
+                          <select
+                            id="duelBrandA"
+                            className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                            value={duelBrandA}
+                            onChange={e => setDuelBrandA(e.target.value)}
+                          >
+                            <option value="">-- Seleccionar Marca A --</option>
+                            {[...marcasList]
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                          </select>
+                        </div>
+
+                        {/* Botón invertir */}
+                        <div className="md:col-span-1 flex justify-center pb-1">
+                          <button
+                            type="button"
+                            title="Intercambiar Marcas"
+                            onClick={() => {
+                              const temp = duelBrandA;
+                              setDuelBrandA(duelBrandB);
+                              setDuelBrandB(temp);
+                            }}
+                            className="bg-white border border-[#C0C0C0] hover:border-[#0A1F33] p-2 text-xs font-bold text-[#0A1F33]"
+                          >
+                            ⇄
+                          </button>
+                        </div>
+
+                        <div className="md:col-span-3">
+                          <label htmlFor="duelBrandB" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Marca B <span className="text-[#00BFFF]">*</span>
+                          </label>
+                          <select
+                            id="duelBrandB"
+                            className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                            value={duelBrandB}
+                            onChange={e => setDuelBrandB(e.target.value)}
+                          >
+                            <option value="">-- Seleccionar Marca B --</option>
+                            {[...marcasList]
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label htmlFor="duelBrandDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Desde
+                          </label>
+                          <input
+                            id="duelBrandDateFrom"
+                            type="date"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                            value={duelDateFrom}
+                            onChange={e => setDuelDateFrom(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label htmlFor="duelBrandDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                            Hasta
+                          </label>
+                          <input
+                            id="duelBrandDateTo"
+                            type="date"
+                            className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                            value={duelDateTo}
+                            onChange={e => setDuelDateTo(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Tarjeta de Marcador Head-to-Head Marca vs Marca */}
+                      {duelAnalytics.brandAObj && duelAnalytics.brandBObj ? (
+                        <div className="bg-[#F8F9FA] border-2 border-[#0A1F33] p-6 flex flex-col gap-6">
+                          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                            <div className="flex-1 text-center md:text-left bg-white p-4 border border-[#C0C0C0]/60 w-full">
+                              <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-0.5">
+                                Marca A
+                              </span>
+                              <h4 className="text-xl font-black text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                                {duelAnalytics.brandAObj.name}
+                              </h4>
+                            </div>
+
+                            <div className="flex flex-col items-center justify-center shrink-0 px-6 py-2">
+                              <span className="text-[10px] font-black text-[#C0C0C0] uppercase tracking-widest mb-1">
+                                Enfrentamientos Entre Ambas Marcas
+                              </span>
+                              <span className="font-black text-5xl text-[#0A1F33] leading-none" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                                {duelAnalytics.brandVsBrandCount}
+                              </span>
+                              <span className="bg-[#0A1F33] text-[#00BFFF] px-3 py-1 text-[9px] font-black uppercase tracking-wider mt-2">
+                                Comparativas Cruzadas
+                              </span>
+                            </div>
+
+                            <div className="flex-1 text-center md:text-right bg-white p-4 border border-[#C0C0C0]/60 w-full">
+                              <span className="text-[9px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-0.5">
+                                Marca B
+                              </span>
+                              <h4 className="text-xl font-black text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                                {duelAnalytics.brandBObj.name}
+                              </h4>
+                            </div>
+                          </div>
+
+                          {/* Modelos que protagonizan los duelos entre estas 2 marcas */}
+                          {duelAnalytics.brandModelPairs.length > 0 && (
+                            <div className="bg-white p-4 border border-[#C0C0C0]/50">
+                              <span className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-2">
+                                Duelos de Modelos Más Frecuentes entre {duelAnalytics.brandAObj.name} y {duelAnalytics.brandBObj.name}:
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {duelAnalytics.brandModelPairs.map(([pair, count]) => (
+                                  <div key={pair} className="bg-[#F8F9FA] p-2 border border-[#C0C0C0]/40 flex justify-between items-center text-[10px]">
+                                    <span className="font-bold text-[#0A1F33] truncate pr-2">{pair}</span>
+                                    <span className="font-mono font-bold text-[#00BFFF] shrink-0">{count}x</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {/* Leaderboard: Top 10 Duelos Marca vs Marca Más Frecuentes */}
+                      <div className="bg-white border border-[#C0C0C0] p-5">
+                        <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2.5 mb-4">
+                          <div>
+                            <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                              Rivalidades de Marcas en Paraguay
+                            </span>
+                            <h4 className="text-xs font-black text-[#0A1F33] uppercase tracking-wider mt-1">
+                              Top 10 Rivalidades Marca vs Marca Más Frecuentes en el Comparador
+                            </h4>
+                          </div>
+                          <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">
+                            Muestra Global
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {duelAnalytics.topBrandDuels.map((duel, idx) => (
+                            <div
+                              key={duel.label}
+                              className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-3 flex justify-between items-center hover:border-[#0A1F33] transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <span className="bg-[#0A1F33] text-white font-mono font-bold text-[9px] px-2 py-0.5">
+                                  #{idx + 1}
+                                </span>
+                                <span className="text-[11px] font-bold text-[#0A1F33] uppercase truncate">
+                                  {duel.label}
+                                </span>
+                              </div>
+                              <span className="font-mono font-black text-sm text-[#00BFFF] shrink-0 bg-white border border-[#C0C0C0]/50 px-2.5 py-1">
+                                {duel.count} duelos
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================================================================ */}
+              {/* SECCIÓN NUEVA: RECOMENDADOR POR MODELO SELECCIONADO              */}
+              {/* ================================================================ */}
+              {(analiticaSubTab === 'recomendador' || analiticaSubTab === 'todos') && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-6 shadow-none">
+                  {/* Encabezado */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#C0C0C0]/50 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-2.5 h-2.5 bg-[#00BFFF] inline-block" />
+                        <h3 className="text-xs font-black uppercase tracking-widest text-[#0A1F33]">
+                          Rendimiento de Modelos en el Recomendador Inteligente
+                        </h3>
+                        <span className="bg-[#1E8E3E]/15 text-[#1E8E3E] border border-[#1E8E3E] px-2 py-0.5 text-[8px] font-black uppercase">
+                          Algoritmo Match
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[#3A3A3C]">
+                        Contá cuántas veces el algoritmo del recomendador sugirió un modelo seleccionado a los compradores y revisá el ranking global.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="bg-[#F8F9FA] border border-[#C0C0C0] text-[#0A1F33] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider">
+                        Sesiones analizadas: <strong className="text-[#00BFFF] font-black">{recomendadorModelAnalytics.totalWizardSessions}</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Barra de Filtros: Selector de Marca, Modelo y Fechas */}
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    <div className="md:col-span-3">
+                      <label htmlFor="recomBrandSelect" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        1. Filtrar por Marca
+                      </label>
+                      <select
+                        id="recomBrandSelect"
+                        className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                        value={recomBrandId}
+                        onChange={e => {
+                          const newBrandId = e.target.value;
+                          setRecomBrandId(newBrandId);
+                          if (newBrandId && recomModelId) {
+                            const currentModel = modelosList.find(m => m.id === recomModelId);
+                            if (currentModel && currentModel.brandId !== newBrandId) {
+                              setRecomModelId('');
+                            }
+                          }
+                        }}
+                      >
+                        <option value="">-- Todas las Marcas ({marcasList.length}) --</option>
+                        {[...marcasList]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label htmlFor="recomModelSelect" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        2. Seleccionar Modelo <span className="text-[#00BFFF]">*</span>
+                      </label>
+                      <select
+                        id="recomModelSelect"
+                        className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                        value={recomModelId}
+                        onChange={e => {
+                          const mId = e.target.value;
+                          setRecomModelId(mId);
+                          if (mId && !recomBrandId) {
+                            const mObj = modelosList.find(m => m.id === mId);
+                            if (mObj) setRecomBrandId(mObj.brandId);
+                          }
+                        }}
+                      >
+                        <option value="">-- Elegir un modelo --</option>
+                        {[...modelosList]
+                          .filter(m => !recomBrandId || m.brandId === recomBrandId)
+                          .sort((a, b) => {
+                            const bA = marcasList.find(b => b.id === a.brandId)?.name || '';
+                            const bB = marcasList.find(b => b.id === b.brandId)?.name || '';
+                            return `${bA} ${a.name}`.localeCompare(`${bB} ${b.name}`);
+                          })
+                          .map(m => {
+                            const bName = marcasList.find(b => b.id === m.brandId)?.name || '';
+                            return (
+                              <option key={m.id} value={m.id}>
+                                {bName} {m.name} ({m.tipo_carroceria || 'SUV'})
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label htmlFor="recomDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Desde
+                      </label>
+                      <input
+                        id="recomDateFrom"
+                        type="date"
+                        className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                        value={recomDateFrom}
+                        onChange={e => setRecomDateFrom(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label htmlFor="recomDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Hasta
+                      </label>
+                      <input
+                        id="recomDateTo"
+                        type="date"
+                        className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                        value={recomDateTo}
+                        onChange={e => setRecomDateTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Métricas del Modelo Seleccionado */}
+                  {recomendadorModelAnalytics.selectedModelData ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* KPI 1: Total veces recomendado */}
+                      <div className="bg-[#F8F9FA] border-2 border-[#1E8E3E] p-5 flex flex-col justify-between">
+                        <div>
+                          <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1">
+                            Veces Recomendado en Sesiones
+                          </span>
+                          <span className="font-black text-4xl text-[#1E8E3E] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                            {recomendadorModelAnalytics.selectedModelData.totalRecommended}
+                          </span>
+                        </div>
+                        <span className="text-[8px] text-[#1E8E3E] font-bold uppercase mt-3 pt-2 border-t border-[#C0C0C0]/50 block">
+                          ✓ Sugerido como 0km ideal para compradores
+                        </span>
+                      </div>
+
+                      {/* KPI 2: Tasa de presencia */}
+                      <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                        <div>
+                          <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">
+                            Tasa de Recomendación
+                          </span>
+                          <span className="font-black text-4xl text-[#00BFFF] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                            {recomendadorModelAnalytics.totalWizardSessions > 0
+                              ? Math.round((recomendadorModelAnalytics.selectedModelData.totalRecommended / recomendadorModelAnalytics.totalWizardSessions) * 100)
+                              : 0}%
+                          </span>
+                        </div>
+                        <span className="text-[8px] text-[#3A3A3C] font-semibold uppercase mt-3 pt-2 border-t border-[#C0C0C0]/50 block">
+                          Presente en resultados de búsqueda
+                        </span>
+                      </div>
+
+                      {/* KPI 3: Ganador #1 vs Alternativa */}
+                      <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                        <div>
+                          <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1">
+                            Recomendación #1 (Top Match)
+                          </span>
+                          <span className="font-black text-4xl text-[#0A1F33] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                            {recomendadorModelAnalytics.selectedModelData.rank1Count}
+                          </span>
+                        </div>
+                        <span className="text-[8px] text-[#00BFFF] font-bold uppercase mt-3 pt-2 border-t border-[#C0C0C0]/50 block">
+                          Alternativa destacada (#2/#3): {recomendadorModelAnalytics.selectedModelData.alternativeCount}x
+                        </span>
+                      </div>
+
+                      {/* KPI 4: Ranking en Catálogo */}
+                      <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                        <div>
+                          <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">
+                            Puesto en Ranking de Recomendación
+                          </span>
+                          <span className="font-black text-4xl text-[#0A1F33] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                            #{recomendadorModelAnalytics.selectedModelRank}
+                          </span>
+                        </div>
+                        <span className="text-[8px] text-[#3A3A3C] font-semibold uppercase mt-3 pt-2 border-t border-[#C0C0C0]/50 block">
+                          Puesto que ocupa según cantidad de veces recomendado entre los {modelosList.length} modelos del catálogo
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Tabla Leaderboard: Top 15 Modelos Más Recomendados */}
+                  <div className="bg-white border border-[#C0C0C0] p-5">
+                    <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2.5 mb-4">
+                      <div>
+                        <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                          Leaderboard Oficial del Recomendador
+                        </span>
+                        <h4 className="text-xs font-black text-[#0A1F33] uppercase tracking-wider mt-1">
+                          Top 15 Modelos Más Recomendados por DATACAR
+                        </h4>
+                      </div>
+                      <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">
+                        Ordenado por frecuencia de sugerencia
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto custom-scrollbar">
+                      <table className="w-full text-left text-[11px] border-collapse whitespace-nowrap">
+                        <thead className="bg-[#F8F9FA] sticky top-0 border-b border-[#C0C0C0]/50 text-[8px] font-bold uppercase text-[#3A3A3C]">
+                          <tr>
+                            <th className="p-3 text-center">Rank</th>
+                            <th className="p-3">Marca &amp; Modelo</th>
+                            <th className="p-3">Silueta</th>
+                            <th className="p-3 text-right">Precio Desde</th>
+                            <th className="p-3 text-center">Total Recomendado</th>
+                            <th className="p-3 text-center">Top Match #1</th>
+                            <th className="p-3 text-center">% Presencia</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recomendadorModelAnalytics.leaderboard.map((item, idx) => (
+                            <tr
+                              key={item.modelId}
+                              onClick={() => setRecomModelId(item.modelId)}
+                              className={`border-b border-[#F1F5F9] cursor-pointer hover:bg-[#F5FBFF] transition-colors ${
+                                recomModelId === item.modelId ? 'bg-[#F5FBFF] border-l-4 border-l-[#00BFFF]' : ''
+                              }`}
+                            >
+                              <td className="p-3 text-center font-mono font-black text-[#0A1F33]">
+                                <span className={`inline-block w-6 text-center py-0.5 text-[9px] font-bold ${
+                                  idx === 0 ? 'bg-[#FFD700] text-[#0A1F33]' : idx === 1 ? 'bg-[#C0C0C0] text-[#0A1F33]' : idx === 2 ? 'bg-[#CD7F32] text-white' : 'bg-[#F0F0F0] text-[#3A3A3C]'
+                                }`}>
+                                  #{idx + 1}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <span className="font-bold text-[#0A1F33] uppercase block">{item.brandName} {item.modelName}</span>
+                              </td>
+                              <td className="p-3">
+                                <span className="text-[9px] font-bold uppercase px-2 py-0.5 bg-[#F8F9FA] border border-[#C0C0C0]/50 text-[#3A3A3C]">
+                                  {item.carroceria}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono font-bold text-[#3A3A3C]">
+                                {item.startingPrice > 0 ? `USD ${item.startingPrice.toLocaleString('es-PY')}` : 'Consultar'}
+                              </td>
+                              <td className="p-3 text-center font-mono font-black text-[#1E8E3E] text-xs">
+                                {item.totalRecommended} veces
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-[#00BFFF]">
+                                {item.rank1Count}x
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className="font-mono font-bold text-[#0A1F33]">{item.pctOfSessions}%</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
