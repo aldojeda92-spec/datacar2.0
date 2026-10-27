@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
+import { buildDealershipReportHtml } from '../../../lib/dealershipReportHtml';
 
 const ALLOWED_ORIGINS = [
   'https://datacarpy.com',
@@ -474,7 +475,7 @@ export async function POST(request: Request) {
   const { type, destinatarios, data } = body || {};
 
   // Rate limit para peticiones públicas ordinarias (se exceptúa newsletter_broadcast emitido desde Admin)
-  if (type !== 'newsletter_broadcast') {
+  if (type !== 'newsletter_broadcast' && type !== 'dealership_report') {
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     if (!checkRateLimit(ip)) {
       return NextResponse.json({ error: 'Demasiadas solicitudes' }, { status: 429 });
@@ -525,6 +526,9 @@ export async function POST(request: Request) {
   } else if (type === 'recommendation_results') {
     subject = 'Tus resultados del Recomendador - DATACAR';
     html = buildRecommendationResultsHtml(data);
+  } else if (type === 'dealership_report') {
+    subject = data?.subject ? String(data.subject).trim() : `📊 Reporte Mensual DATACAR: Telemetría de ${escapeHtml(data?.dealershipName || 'tu Concesionaria')}`;
+    html = data?.customHtml || buildDealershipReportHtml(data);
   } else if (type === 'newsletter_broadcast') {
     subject = data?.subject ? String(data.subject).trim() : 'Novedades y Oportunidades 0km - DATACAR';
     html = buildNewsletterBroadcastHtml(data);

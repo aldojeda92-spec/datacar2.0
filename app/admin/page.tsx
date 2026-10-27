@@ -18,6 +18,7 @@ import { buildCheckedDealershipSet, isDatacarCheck } from '../../lib/datacarChec
 import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { useToast } from '../context/ToastContext';
 import { DEFAULT_REELS } from '../components/InstagramReelsSection';
+import DealershipReportsMailModule from './components/DealershipReportsMailModule';
 import { sendNewsletterBroadcast, sendDealershipApprovedEmail, sendDealershipRejectedEmail } from '../../lib/mailer';
 import {
   downloadCSV,
@@ -209,6 +210,7 @@ export default function AdminDashboardPage() {
   const [blogSubTab, setBlogSubTab] = useState<'posts' | 'videos'>('posts');
 
   // Estados Newsletter & Telemetría Recomendador
+  const [newsletterSubTab, setNewsletterSubTab] = useState<'b2c_newsletter' | 'b2b_concesionarias'>('b2c_newsletter');
   const [newsletterSubscribers, setNewsletterSubscribers] = useState<Array<{ id: string; email: string; origen: string; estado: string; colName: string; createdAt?: any }>>([]);
   const [wizardStatsList, setWizardStatsList] = useState<any[]>([]);
   const [broadcastForm, setBroadcastForm] = useState({
@@ -9966,7 +9968,52 @@ export default function AdminDashboardPage() {
           {/* ========================================================= */}
           {activeTab === 'newsletter' && (
             <div className="flex flex-col gap-6">
-              {(() => {
+              {/* SUBPESTAÑAS DEL MÓDULO (A) */}
+              <div className="flex border-b-2 border-[#0A1F33] bg-[#FFFFFF]">
+                <button
+                  type="button"
+                  onClick={() => setNewsletterSubTab('b2c_newsletter')}
+                  className={`px-6 py-3 text-xs font-black uppercase tracking-wider flex items-center gap-2 border-b-2 transition-colors ${
+                    newsletterSubTab === 'b2c_newsletter'
+                      ? 'border-[#00BFFF] text-[#0A1F33] bg-[#F8FAFC]'
+                      : 'border-transparent text-[#64748B] hover:text-[#0A1F33] hover:bg-[#F8FAFC]/50'
+                  }`}
+                >
+                  <span>📰</span> Difusión de Newsletter (B2C)
+                  <span className="text-[10px] bg-[#0A1F33] text-[#00BFFF] px-1.5 py-0.5 font-bold">
+                    {newsletterSubscribers.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNewsletterSubTab('b2b_concesionarias')}
+                  className={`px-6 py-3 text-xs font-black uppercase tracking-wider flex items-center gap-2 border-b-2 transition-colors ${
+                    newsletterSubTab === 'b2b_concesionarias'
+                      ? 'border-[#00BFFF] text-[#0A1F33] bg-[#F8FAFC]'
+                      : 'border-transparent text-[#64748B] hover:text-[#0A1F33] hover:bg-[#F8FAFC]/50'
+                  }`}
+                >
+                  <span>🏢</span> Reportes a Concesionarias (B2B)
+                  <span className="text-[10px] bg-[#00BFFF] text-[#0A1F33] px-1.5 py-0.5 font-bold">
+                    {concesionariasList.length}
+                  </span>
+                </button>
+              </div>
+
+              {newsletterSubTab === 'b2b_concesionarias' ? (
+                <DealershipReportsMailModule
+                  concesionariasList={concesionariasList}
+                  setConcesionariasList={setConcesionariasList}
+                  marcasList={marcasList}
+                  modelosList={modelosList}
+                  versionesList={versionesList}
+                  comparisonStatsList={comparisonStatsList}
+                  wizardStatsList={wizardStatsList}
+                  showToast={showToast}
+                />
+              ) : (
+                (() => {
                 const totalCount = newsletterSubscribers.length;
                 const activeCount = newsletterSubscribers.filter(s => s.estado !== 'Inactivo').length;
                 const inactiveCount = totalCount - activeCount;
@@ -10560,7 +10607,8 @@ export default function AdminDashboardPage() {
                     </div>
                   </>
                 );
-              })()}
+              })()
+              )}
             </div>
           )}
 

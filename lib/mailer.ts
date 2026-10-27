@@ -340,3 +340,55 @@ export const sendNewsletterBroadcast = async (params: NewsletterBroadcastParams)
   }
 };
 
+
+// ==========================================
+// 7. MAILING PARA REPORTES DE TELEMETRÍA A CONCESIONARIAS (B2B)
+// ==========================================
+export interface DealershipReportEmailParams {
+  destinatarios: string[];
+  dealershipName: string;
+  data: any;
+  customHtml?: string;
+  subject?: string;
+}
+
+export interface DealershipReportEmailResult {
+  success: boolean;
+  simulated?: boolean;
+  message?: string;
+  previewUrl?: string;
+  destinatariosCount?: number;
+  error?: string;
+}
+
+export const sendDealershipReportEmail = async (params: DealershipReportEmailParams): Promise<DealershipReportEmailResult> => {
+  try {
+    const response = await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'dealership_report',
+        destinatarios: params.destinatarios,
+        data: {
+          dealershipName: params.dealershipName,
+          subject: params.subject,
+          customHtml: params.customHtml,
+          ...params.data,
+        },
+      }),
+    });
+
+    const resJson = await response.json();
+    if (!response.ok) {
+      throw new Error(resJson.error || resJson.details || 'Fallo en el envío del reporte');
+    }
+
+    return resJson;
+  } catch (error: any) {
+    console.error("❌ Error enviando reporte a concesionaria:", error);
+    return {
+      success: false,
+      error: error.message || 'Error de conexión con el servidor de correo'
+    };
+  }
+};
