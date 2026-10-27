@@ -1,5 +1,5 @@
 // lib/dealershipReportHtml.ts
-// Generador del template HTML para los reportes mensuales de mercado automotriz a concesionarias oficiales
+// Generador de plantillas Minimalistas (HTML y Texto Plano) para reportes mensuales a concesionarias oficiales
 
 export interface DealershipReportBrandStat {
   name: string;
@@ -45,6 +45,8 @@ export interface DealershipReportHtmlData {
   contactUrl?: string;
 }
 
+const WA_CONTACT_NUMBER = '595991244469';
+
 function escapeHtml(val: unknown): string {
   const ESCAPE_MAP: Record<string, string> = {
     '&': '&amp;',
@@ -56,290 +58,358 @@ function escapeHtml(val: unknown): string {
   return String(val ?? '').replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
 }
 
+/**
+ * Plantilla HTML Minimalista y Ejecutiva
+ * Diseñada para máxima legibilidad, estética sobria y alta entregabilidad en servidores corporativos.
+ */
 export function buildDealershipReportHtml(d: DealershipReportHtmlData): string {
   const dealership = escapeHtml(d.dealershipName || 'Concesionaria Oficial');
-  const period = escapeHtml(d.periodLabel || 'Últimos 30 días');
+  const period = escapeHtml(d.periodLabel || 'últimos 30 días');
   const dateRange = escapeHtml(d.dateRangeText || 'Últimos 30 días');
   const portalUrl = d.portalUrl || 'https://datacarpy.com/concesionarias';
-  const comparadorUrl = d.comparadorUrl || 'https://datacarpy.com/comparador';
-  const recomendadorUrl = d.recomendadorUrl || 'https://datacarpy.com/recomendador';
-  const contactUrl = d.contactUrl || 'https://wa.me/595981000000?text=' + encodeURIComponent(`Hola DATACAR, me comunico desde ${d.dealershipName} sobre el reporte de telemetría.`);
 
-  // Tendencia de comparaciones
+  // WhatsApp oficial 595991244469
+  const waComparadorUrl = `https://wa.me/${WA_CONTACT_NUMBER}?text=` + encodeURIComponent(`Hola DATACAR, me comunico desde ${d.dealershipName}. Quiero destacar nuestras marcas en el comparador oficial.`);
+  const waRecomendadorUrl = `https://wa.me/${WA_CONTACT_NUMBER}?text=` + encodeURIComponent(`Hola DATACAR, me comunico desde ${d.dealershipName}. Quiero optimizar nuestra presencia en el recomendador inteligente.`);
+
+  // Tendencia de comparaciones (limpia, sin bloques pesados)
   const compSign = d.comparisonChangePct > 0 ? '+' : '';
   const compPctText = `${compSign}${d.comparisonChangePct}%`;
-  let compTrendBadge = '';
+  let compTrendText = '';
   if (d.comparisonTrend === 'up') {
-    compTrendBadge = `<span style="background-color: #DCFCE7; color: #166534; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 4px; display: inline-block;">▲ Ha aumentado ${escapeHtml(compPctText)} comparado con el período anterior</span>`;
+    compTrendText = `<span style="color: #166534; font-weight: 700;">↑ Ha aumentado ${escapeHtml(compPctText)} comparado con el período anterior</span>`;
   } else if (d.comparisonTrend === 'down') {
-    compTrendBadge = `<span style="background-color: #FEE2E2; color: #991B1B; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 4px; display: inline-block;">▼ Ha disminuido ${escapeHtml(compPctText)} contra el período anterior</span>`;
+    compTrendText = `<span style="color: #991B1B; font-weight: 700;">↓ Ha disminuido ${escapeHtml(compPctText)} contra el período anterior</span>`;
   } else {
-    compTrendBadge = `<span style="background-color: #F1F5F9; color: #475569; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 4px; display: inline-block;">▬ Se mantuvo igual contra el período anterior</span>`;
+    compTrendText = `<span style="color: #52525B; font-weight: 700;">— Se mantuvo igual contra el período anterior</span>`;
   }
 
   // Tendencia de recomendaciones
   const recSign = d.recommendationChangePct > 0 ? '+' : '';
   const recPctText = `${recSign}${d.recommendationChangePct}%`;
-  let recTrendBadge = '';
+  let recTrendText = '';
   if (d.recommendationTrend === 'up') {
-    recTrendBadge = `<span style="background-color: #DCFCE7; color: #166534; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 4px; display: inline-block;">▲ Ha aumentado ${escapeHtml(recPctText)} contra el período anterior</span>`;
+    recTrendText = `<span style="color: #166534; font-weight: 700;">↑ Ha aumentado ${escapeHtml(recPctText)} contra el período anterior</span>`;
   } else if (d.recommendationTrend === 'down') {
-    recTrendBadge = `<span style="background-color: #FEE2E2; color: #991B1B; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 4px; display: inline-block;">▼ Ha disminuido ${escapeHtml(recPctText)} contra el período anterior</span>`;
+    recTrendText = `<span style="color: #991B1B; font-weight: 700;">↓ Ha disminuido ${escapeHtml(recPctText)} contra el período anterior</span>`;
   } else {
-    recTrendBadge = `<span style="background-color: #F1F5F9; color: #475569; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 4px; display: inline-block;">▬ Se mantuvo igual contra el período anterior</span>`;
+    recTrendText = `<span style="color: #52525B; font-weight: 700;">— Se mantuvo igual contra el período anterior</span>`;
   }
 
-  // Filas de Top 3 Marcas
-  const marcasHtml = (d.topMarcas && d.topMarcas.length > 0)
-    ? d.topMarcas.slice(0, 3).map((m, idx) => {
-        const barWidth = Math.min(100, Math.max(10, m.sharePct || Math.round((m.count / Math.max(d.totalComparisons, 1)) * 100)));
-        return `
-          <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; width: 35px; text-align: center;">
-              <span style="background-color: #0A1F33; color: #00BFFF; font-weight: 900; font-size: 11px; width: 22px; height: 22px; line-height: 22px; display: inline-block; border-radius: 3px;">#${idx + 1}</span>
-            </td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0;">
-              <div style="font-weight: 800; font-size: 13px; color: #0A1F33; text-transform: uppercase;">${escapeHtml(m.name)}</div>
-              <div style="background-color: #F1F5F9; border-radius: 4px; height: 6px; width: 100%; margin-top: 5px; overflow: hidden;">
-                <div style="background-color: #00BFFF; height: 6px; width: ${barWidth}%;"></div>
-              </div>
-            </td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; width: 100px;">
-              <span style="font-weight: 900; font-size: 13px; color: #0A1F33;">${m.count}</span>
-              <span style="font-size: 10px; color: #64748B; display: block;">duelos (${m.sharePct}%)</span>
-            </td>
-          </tr>
-        `;
-      }).join('')
-    : `<tr><td colspan="3" style="padding: 16px; text-align: center; color: #94A3B8; font-size: 12px;">Sin registros de marcas en este período.</td></tr>`;
+  // Filas minimalistas de Top 3 Marcas
+  const marcasRows = (d.topMarcas && d.topMarcas.length > 0)
+    ? d.topMarcas.slice(0, 3).map((m, idx) => `
+        <tr>
+          <td style="padding: 10px 0; border-bottom: 1px solid #F1F5F9; color: #71717A; font-size: 13px; font-weight: 700; width: 28px;">0${idx + 1}</td>
+          <td style="padding: 10px 0; border-bottom: 1px solid #F1F5F9; color: #0A1F33; font-size: 13px; font-weight: 700; text-transform: uppercase;">${escapeHtml(m.name)}</td>
+          <td style="padding: 10px 0; border-bottom: 1px solid #F1F5F9; text-align: right; color: #0A1F33; font-size: 13px; font-weight: 800;">
+            ${m.count} <span style="font-size: 11px; font-weight: 500; color: #71717A;">comparaciones (${m.sharePct}%)</span>
+          </td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="3" style="padding: 12px 0; color: #A1A1AA; font-size: 12px;">Sin registros en este período.</td></tr>`;
 
-  // Filas de Top 3 Modelos
-  const modelosHtml = (d.topModelos && d.topModelos.length > 0)
-    ? d.topModelos.slice(0, 3).map((mod, idx) => {
-        return `
-          <tr>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; width: 35px; text-align: center;">
-              <span style="background-color: #F1F5F9; color: #0A1F33; font-weight: 900; font-size: 11px; width: 22px; height: 22px; line-height: 22px; display: inline-block; border-radius: 3px; border: 1px solid #CBD5E1;">#${idx + 1}</span>
-            </td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0;">
-              <div style="font-weight: 800; font-size: 13px; color: #0A1F33; text-transform: uppercase;">${escapeHtml(mod.name)}</div>
-              ${mod.brandName ? `<span style="font-size: 10px; color: #0080B0; font-weight: 700; text-transform: uppercase;">${escapeHtml(mod.brandName)}</span>` : ''}
-            </td>
-            <td style="padding: 10px 12px; border-bottom: 1px solid #E2E8F0; text-align: right; width: 100px;">
-              <span style="font-weight: 900; font-size: 13px; color: #0A1F33;">${mod.count}</span>
-              <span style="font-size: 10px; color: #64748B; display: block;">comparaciones</span>
-            </td>
-          </tr>
-        `;
-      }).join('')
-    : `<tr><td colspan="3" style="padding: 16px; text-align: center; color: #94A3B8; font-size: 12px;">Sin registros de modelos en este período.</td></tr>`;
+  // Filas minimalistas de Top 3 Modelos
+  const modelosRows = (d.topModelos && d.topModelos.length > 0)
+    ? d.topModelos.slice(0, 3).map((mod, idx) => `
+        <tr>
+          <td style="padding: 10px 0; border-bottom: 1px solid #F1F5F9; color: #71717A; font-size: 13px; font-weight: 700; width: 28px;">0${idx + 1}</td>
+          <td style="padding: 10px 0; border-bottom: 1px solid #F1F5F9; color: #0A1F33; font-size: 13px; font-weight: 700; text-transform: uppercase;">
+            ${escapeHtml(mod.name)}
+            ${mod.brandName ? `<span style="font-size: 10px; color: #71717A; font-weight: 600; margin-left: 6px;">(${escapeHtml(mod.brandName)})</span>` : ''}
+          </td>
+          <td style="padding: 10px 0; border-bottom: 1px solid #F1F5F9; text-align: right; color: #0A1F33; font-size: 13px; font-weight: 800;">
+            ${mod.count} <span style="font-size: 11px; font-weight: 500; color: #71717A;">veces</span>
+          </td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="3" style="padding: 12px 0; color: #A1A1AA; font-size: 12px;">Sin registros en este período.</td></tr>`;
 
-  // Marcas gestionadas list
-  const marcasListText = (d.marcas && d.marcas.length > 0)
-    ? d.marcas.join(' • ')
-    : 'Portafolio Oficial';
+  const marcasListText = (d.marcas && d.marcas.length > 0) ? d.marcas.join(' · ') : 'Portafolio Oficial';
 
   return `
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reporte de Comparativas - ${dealership}</title>
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Reporte de Mercado - ${dealership}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #F4F6F9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1E293B;">
-  <div style="background-color: #F4F6F9; padding: 24px 12px;">
-    
-    <!-- CONTENEDOR PRINCIPAL TIPO TARJETA -->
-    <div style="max-width: 640px; margin: 0 auto; background-color: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden;">
+<body style="margin: 0; padding: 0; background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181B; -webkit-font-smoothing: antialiased; line-height: 1.5;">
 
-      <!-- CABECERA PRINCIPAL DATACAR -->
-      <div style="background-color: #0A1F33; padding: 32px 28px; text-align: center; border-bottom: 4px solid #00BFFF;">
-        <div style="font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 30px; font-weight: 900; letter-spacing: 2px; color: #FFFFFF; margin: 0; line-height: 1;">
-          DATA<span style="color: #00BFFF; font-weight: 300;">CAR</span>
-        </div>
-        <div style="font-size: 10px; font-weight: 800; letter-spacing: 2.5px; color: #00BFFF; text-transform: uppercase; margin-top: 8px;">
-          PLATAFORMA DE INTELIGENCIA AUTOMOTRIZ 0KM
-        </div>
-        <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.15);">
-          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #94A3B8; font-weight: 700;">
-            REPORTE EXCLUSIVO DE TELEMETRÍA PARA
-          </div>
-          <div style="font-size: 20px; font-weight: 900; color: #FFFFFF; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px;">
-            ${dealership}
-          </div>
-          <div style="font-size: 11px; color: #38BDF8; font-weight: 600; margin-top: 4px;">
-            Marcas: ${escapeHtml(marcasListText)}
-          </div>
-        </div>
-      </div>
-
-      <!-- BANNER D.1: TÍTULO DEL PERÍODO -->
-      <div style="background-color: #F8FAFC; padding: 18px 28px; border-bottom: 1px solid #E2E8F0; text-align: center;">
-        <span style="background-color: #0A1F33; color: #FFFFFF; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 10px; border-radius: 3px; display: inline-block;">
-          D.1 • RESUMEN DE ACTIVIDAD
-        </span>
-        <h1 style="font-size: 17px; font-weight: 900; color: #0A1F33; margin: 10px 0 4px 0; text-transform: uppercase; line-height: 1.3;">
-          Comparación de las marcas de ${dealership} de los ${period}
-        </h1>
-        <div style="font-size: 11px; color: #64748B; font-weight: 600;">
-          Rango evaluado: ${dateRange}
-        </div>
-      </div>
-
-      <!-- CUERPO PRINCIPAL -->
-      <div style="padding: 28px 24px;">
-
-        <!-- TARJETA D.2 & D.4: ANALÍTICA ICONOGRÁFICA DE COMPARACIONES -->
-        <div style="background-color: #FFFFFF; border: 2px solid #00BFFF; border-radius: 8px; padding: 22px; margin-bottom: 24px;">
-          <div style="font-size: 11px; font-weight: 800; color: #0080B0; text-transform: uppercase; letter-spacing: 1.5px;">
-            ⚡ TELEMETRÍA DEL COMPARADOR OFICIAL
-          </div>
-          <div style="margin-top: 8px; font-size: 22px; font-weight: 900; color: #0A1F33; line-height: 1.2;">
-            Tus marcas se han comparado <span style="color: #0080B0;">${d.totalComparisons}</span> veces
-          </div>
-          <div style="margin-top: 10px;">
-            ${compTrendBadge}
-          </div>
-          <div style="font-size: 12px; color: #475569; margin-top: 10px; line-height: 1.5;">
-            En los últimos 30 días, compradores automotrices de Paraguay han confrontado activamente tus modelos 0km en el comparador de DATACAR. (Período anterior: <strong>${d.prevComparisons} comparativas</strong>).
-          </div>
-
-          <!-- CTAs DE DESCUBRIMIENTO D.4 -->
-          <div style="margin-top: 18px; padding-top: 16px; border-top: 1px dashed #CBD5E1; display: flex; flex-wrap: wrap; gap: 8px;">
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 4px; width: 50%;">
-                  <a href="${portalUrl}" style="background-color: #0A1F33; color: #FFFFFF; padding: 10px 14px; text-decoration: none; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; display: block; text-align: center; border-radius: 4px;">
-                    🎯 Conocé contra qué marcas te comparan →
-                  </a>
-                </td>
-                <td style="padding: 4px; width: 50%;">
-                  <a href="${portalUrl}" style="background-color: #0A1F33; color: #FFFFFF; padding: 10px 14px; text-decoration: none; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; display: block; text-align: center; border-radius: 4px;">
-                    🚘 Conocé contra qué modelos te comparan →
-                  </a>
-                </td>
-              </tr>
-              <tr>
-                <td colspan="2" style="padding: 4px; padding-top: 8px;">
-                  <a href="${contactUrl}" style="background-color: #1E8E3E; color: #FFFFFF; padding: 11px 18px; text-decoration: none; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; display: block; text-align: center; border-radius: 4px;">
-                    ⭐ Quiero destacar en el comparador (Sello DATACAR CHECK) →
-                  </a>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- EXPLICACIÓN D.4: ¿QUÉ ES EL COMPARADOR? (i) -->
-          <div style="background-color: #F8FAFC; border-left: 3px solid #00BFFF; padding: 12px 14px; margin-top: 16px; border-radius: 0 4px 4px 0;">
-            <div style="font-size: 11px; font-weight: 800; color: #0A1F33; text-transform: uppercase; margin-bottom: 4px;">
-              ℹ️ ¿Qué es el Comparador DATACAR?
-            </div>
-            <div style="font-size: 11px; color: #475569; line-height: 1.5;">
-              Es la herramienta insignia de DATACAR donde los potenciales compradores confrontan simultáneamente especificaciones técnicas, motorización, seguridad ADAS, confort y precios oficiales de hasta 3 vehículos 0km del mercado paraguayo para definir su decisión de compra.
-            </div>
-          </div>
-        </div>
-
-        <!-- TOP 3 MARCAS & TOP 3 MODELOS (D.2) -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #FAFAFA;">
+    <tr>
+      <td align="center" style="padding: 32px 16px;">
+        
+        <!-- CONTENEDOR PRINCIPAL MINIMALISTA -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background-color: #FFFFFF; border: 1px solid #E4E4E7; text-align: left;">
+          
+          <!-- CABECERA SOBRIA -->
           <tr>
-            <!-- COLUMNA TOP MARCAS -->
-            <td style="width: 50%; vertical-align: top; padding-right: 8px;">
-              <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 6px; overflow: hidden;">
-                <div style="background-color: #0A1F33; color: #FFFFFF; padding: 10px 14px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
-                  🏆 Top 3 Marcas Comparadas
-                </div>
-                <table style="width: 100%; border-collapse: collapse;">
-                  ${marcasHtml}
-                </table>
-              </div>
-            </td>
+            <td style="padding: 36px 36px 24px 36px; border-bottom: 1px solid #F4F4F5;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 20px; font-weight: 900; letter-spacing: 2px; color: #0A1F33; font-family: 'Montserrat', Arial, sans-serif;">
+                      DATA<span style="font-weight: 300; color: #00BFFF;">CAR</span>
+                    </div>
+                    <div style="font-size: 9px; font-weight: 700; color: #71717A; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px;">
+                      Plataforma de Inteligencia Automotriz 0KM
+                    </div>
+                  </td>
+                  <td align="right" style="vertical-align: top;">
+                    <span style="font-size: 10px; font-weight: 700; color: #71717A; text-transform: uppercase; letter-spacing: 1px; background-color: #F4F4F5; padding: 4px 10px;">
+                      Reporte Oficial B2B
+                    </span>
+                  </td>
+                </tr>
+              </table>
 
-            <!-- COLUMNA TOP MODELOS -->
-            <td style="width: 50%; vertical-align: top; padding-left: 8px;">
-              <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 6px; overflow: hidden;">
-                <div style="background-color: #0A1F33; color: #FFFFFF; padding: 10px 14px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
-                  🚗 Top 3 Modelos Más Buscados
+              <!-- SECCIÓN D.1: TÍTULO Y CONCESIONARIA -->
+              <div style="margin-top: 28px;">
+                <div style="font-size: 11px; font-weight: 700; color: #0080B0; text-transform: uppercase; letter-spacing: 1px;">
+                  ${dealership} · <span style="color: #71717A;">${escapeHtml(marcasListText)}</span>
                 </div>
-                <table style="width: 100%; border-collapse: collapse;">
-                  ${modelosHtml}
-                </table>
+                <h1 style="font-size: 19px; font-weight: 800; color: #0A1F33; margin: 6px 0 4px 0; line-height: 1.35;">
+                  Comparación de las marcas de ${dealership} de los ${period}
+                </h1>
+                <div style="font-size: 12px; color: #71717A;">
+                  Período evaluado: ${dateRange}
+                </div>
               </div>
             </td>
           </tr>
+
+          <!-- CUERPO PRINCIPAL -->
+          <tr>
+            <td style="padding: 32px 36px;">
+
+              <!-- SECCIÓN D.2 & D.4: COMPARADOR TELEMETRÍA -->
+              <div style="margin-bottom: 32px;">
+                <div style="font-size: 11px; font-weight: 800; color: #71717A; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;">
+                  Telemetría del Comparador
+                </div>
+                
+                <div style="font-size: 26px; font-weight: 900; color: #0A1F33; line-height: 1.2;">
+                  Tus marcas se han comparado ${d.totalComparisons} veces
+                </div>
+                
+                <div style="font-size: 12px; margin-top: 6px;">
+                  ${compTrendText} <span style="color: #71717A;">(período anterior: ${d.prevComparisons})</span>
+                </div>
+
+                <!-- CTAs D.4 de análisis directo -->
+                <div style="margin-top: 16px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                    <tr>
+                      <td style="padding: 4px 0;">
+                        <a href="${portalUrl}" style="color: #0A1F33; text-decoration: none; font-size: 12px; font-weight: 700; display: inline-block;">
+                          → Conocé contra qué marcas te comparan
+                        </a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 4px 0;">
+                        <a href="${portalUrl}" style="color: #0A1F33; text-decoration: none; font-size: 12px; font-weight: 700; display: inline-block;">
+                          → Conocé contra qué modelos te comparan
+                        </a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 10px 0 0 0;">
+                        <a href="${waComparadorUrl}" style="display: inline-block; background-color: #0A1F33; color: #FFFFFF; text-decoration: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 18px; border-radius: 2px;">
+                          Quiero destacar en el comparador
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+
+                <!-- NOTA INFORMATIVA D.4 (i) -->
+                <div style="margin-top: 16px; padding: 12px 16px; background-color: #F8FAFC; border-left: 2px solid #0A1F33; font-size: 11px; color: #52525B; line-height: 1.55;">
+                  <strong>(i) ¿Qué es el Comparador DATACAR?</strong><br>
+                  Es la herramienta oficial donde compradores automotrices de Paraguay confrontan simultáneamente especificaciones técnicas, motorización, seguridad ADAS, confort y precios de hasta 3 vehículos 0km antes de su decisión de compra.
+                </div>
+              </div>
+
+              <!-- SECCIÓN D.2: TABLAS TOP 3 MARCAS Y MODELOS -->
+              <div style="margin-bottom: 32px; padding-top: 24px; border-top: 1px solid #F4F4F5;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="vertical-align: top; width: 48%; padding-right: 12px;">
+                      <div style="font-size: 11px; font-weight: 800; color: #0A1F33; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">
+                        Top 3 Marcas Comparadas
+                      </div>
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        ${marcasRows}
+                      </table>
+                    </td>
+                    <td style="vertical-align: top; width: 48%; padding-left: 12px;">
+                      <div style="font-size: 11px; font-weight: 800; color: #0A1F33; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">
+                        Top 3 Modelos
+                      </div>
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        ${modelosRows}
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- SECCIÓN D.5: TELEMETRÍA DEL RECOMENDADOR -->
+              <div style="margin-bottom: 32px; padding-top: 24px; border-top: 1px solid #F4F4F5;">
+                <div style="font-size: 11px; font-weight: 800; color: #71717A; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;">
+                  Telemetría del Recomendador
+                </div>
+                
+                <div style="font-size: 22px; font-weight: 900; color: #0A1F33; line-height: 1.25;">
+                  ${dealership} ha aparecido ${d.totalRecommendations} veces en el recomendador
+                </div>
+
+                <div style="font-size: 12px; margin-top: 6px;">
+                  ${recTrendText} <span style="color: #71717A;">(período anterior: ${d.prevRecommendations})</span>
+                </div>
+
+                <!-- CTA D.5 -->
+                <div style="margin-top: 16px;">
+                  <a href="${waRecomendadorUrl}" style="display: inline-block; background-color: #0A1F33; color: #FFFFFF; text-decoration: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 18px; border-radius: 2px;">
+                    Quiero aparecer más veces en el recomendador
+                  </a>
+                </div>
+
+                <!-- NOTA INFORMATIVA D.5 (i) -->
+                <div style="margin-top: 16px; padding: 12px 16px; background-color: #F8FAFC; border-left: 2px solid #0A1F33; font-size: 11px; color: #52525B; line-height: 1.55;">
+                  <strong>(i) ¿Qué es el Recomendador DATACAR?</strong><br>
+                  Es el asistente interactivo inteligente que procesa las necesidades de compradores reales (presupuesto, uso, equipamiento buscado) y sugiere los modelos 0km exactos del mercado paraguayo que resuelven su perfil.
+                </div>
+              </div>
+
+              <!-- SECCIÓN D.3: CTA INFORME COMPLETO -->
+              <div style="margin-top: 28px; padding: 28px; background-color: #F8FAFC; border: 1px solid #E4E4E7; text-align: center;">
+                <div style="font-size: 15px; font-weight: 800; color: #0A1F33; margin-bottom: 6px;">
+                  ¿Querés ver el informe completo?
+                </div>
+                <div style="font-size: 12px; color: #52525B; margin-bottom: 18px; max-width: 440px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                  Accedé a la telemetría detallada de duelos directos por modelo, marcas rivales y preferencias de equipamiento en nuestro portal oficial de concesionarias.
+                </div>
+                <div>
+                  <a href="${portalUrl}" style="display: inline-block; background-color: #00BFFF; color: #0A1F33; text-decoration: none; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; padding: 12px 24px; border-radius: 2px;">
+                    Ver Informe Completo en datacarpy.com/concesionarias
+                  </a>
+                </div>
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- PIE DE PÁGINA SOBRIO Y PROFESIONAL -->
+          <tr>
+            <td style="padding: 24px 36px; border-top: 1px solid #F4F4F5; font-size: 11px; color: #71717A; line-height: 1.6; text-align: center;">
+              <div style="font-weight: 700; color: #0A1F33;">
+                DATACAR Paraguay · Inteligencia Automotriz
+              </div>
+              <div style="margin-top: 4px;">
+                Este informe mensual es generado a partir de la interacción real de usuarios en <a href="https://datacarpy.com" style="color: #0A1F33; text-decoration: underline;">datacarpy.com</a>.
+              </div>
+              <div style="margin-top: 10px; font-size: 10px; color: #A1A1AA;">
+                Asistencia directa por WhatsApp: +595 991 244469 · Asunción, Paraguay
+              </div>
+            </td>
+          </tr>
+
         </table>
 
-        <!-- TARJETA D.5: TELEMETRÍA DEL RECOMENDADOR INTELIGENTE -->
-        <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 22px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-          <div style="font-size: 11px; font-weight: 800; color: #7C3AED; text-transform: uppercase; letter-spacing: 1.5px;">
-            🤖 TELEMETRÍA DEL RECOMENDADOR DE VEHÍCULOS
-          </div>
-          <div style="margin-top: 8px; font-size: 20px; font-weight: 900; color: #0A1F33; line-height: 1.2;">
-            ${dealership} ha aparecido <span style="color: #7C3AED;">${d.totalRecommendations}</span> veces en el recomendador
-          </div>
-          <div style="margin-top: 10px;">
-            ${recTrendBadge}
-          </div>
-          <div style="font-size: 12px; color: #475569; margin-top: 10px; line-height: 1.5;">
-            Los usuarios han completado el cuestionario guiado de necesidades y tu catálogo fue sugerido como solución óptima de compra. (Período anterior: <strong>${d.prevRecommendations} sugerencias</strong>).
-          </div>
+      </td>
+    </tr>
+  </table>
 
-          <!-- CTA D.5 -->
-          <div style="margin-top: 16px;">
-            <a href="${contactUrl}" style="background-color: #7C3AED; color: #FFFFFF; padding: 12px 20px; text-decoration: none; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; display: inline-block; text-align: center; border-radius: 4px;">
-              🚀 Quiero aparecer más veces en el recomendador →
-            </a>
-          </div>
-
-          <!-- EXPLICACIÓN D.5: ¿QUÉ ES EL RECOMENDADOR? (i) -->
-          <div style="background-color: #FAF5FF; border-left: 3px solid #7C3AED; padding: 12px 14px; margin-top: 16px; border-radius: 0 4px 4px 0;">
-            <div style="font-size: 11px; font-weight: 800; color: #5B21B6; text-transform: uppercase; margin-bottom: 4px;">
-              ℹ️ ¿Qué es el Recomendador DATACAR?
-            </div>
-            <div style="font-size: 11px; color: #475569; line-height: 1.5;">
-              Es el asistente inteligente de compra de DATACAR. A través de un cuestionario dinámico, los usuarios indican su presupuesto, tamaño de familia, tipo de terreno, preferencia de combustible y equipamiento deseado. El recomendador procesa el inventario nacional y sugiere las versiones exactas que mejor calzan con su perfil.
-            </div>
-          </div>
-        </div>
-
-        <!-- SECCIÓN D.3: CTA INFORME COMPLETO -->
-        <div style="background: linear-gradient(135deg, #0A1F33 0%, #102A43 100%); border-radius: 8px; padding: 28px 24px; text-align: center; color: #FFFFFF; margin-bottom: 24px;">
-          <div style="font-size: 11px; font-weight: 800; color: #00BFFF; text-transform: uppercase; letter-spacing: 2px;">
-            ANÁLISIS DE BUSINESS INTELLIGENCE
-          </div>
-          <h2 style="font-size: 20px; font-weight: 900; margin: 10px 0 6px 0; text-transform: uppercase; color: #FFFFFF;">
-            ¿Querés ver el informe completo y detallado?
-          </h2>
-          <p style="font-size: 12px; color: #CBD5E1; margin: 0 auto 20px auto; max-width: 480px; line-height: 1.5;">
-            Accedé al panel interactivo de concesionarias para visualizar análisis de rivales directos, cuota de consideración por slot, preferencias de compradores (ADAS, confort, motor) y segmentación por carrocería.
-          </p>
-          <div>
-            <a href="${portalUrl}" style="background-color: #00BFFF; color: #0A1F33; padding: 14px 28px; text-decoration: none; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; display: inline-block; border-radius: 4px; box-shadow: 0 4px 10px rgba(0, 191, 255, 0.3);">
-              Ver Informe Completo en datacarpy.com/concesionarias →
-            </a>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- FOOTER INSTITUCIONAL -->
-      <div style="background-color: #F8FAFC; padding: 24px; border-top: 1px solid #E2E8F0; text-align: center; font-size: 11px; color: #64748B; line-height: 1.6;">
-        <div style="font-weight: 800; color: #0A1F33; text-transform: uppercase; margin-bottom: 4px;">
-          DATACAR PARAGUAY • Inteligencia Automotriz
-        </div>
-        <div>
-          Este informe mensual automatizado se genera a partir de la actividad real de usuarios en <a href="https://datacarpy.com" style="color: #0080B0; text-decoration: underline; font-weight: 700;">datacarpy.com</a>.
-        </div>
-        <div style="margin-top: 10px; font-size: 10px; color: #94A3B8;">
-          © ${new Date().getFullYear()} DATACAR. Todos los derechos reservados. Si tenés dudas sobre este reporte o deseás optimizar la presencia de tu marca, respondé este correo o comunicate con tu asesor comercial.
-        </div>
-      </div>
-
-    </div>
-
-  </div>
 </body>
 </html>
   `.trim();
+}
+
+/**
+ * Generador de Texto Plano (Multipart Alternative)
+ * Imprescindible para que servidores de correo corporativos (Exchange, Microsoft 365, etc.)
+ * no clasifiquen el correo como spam o correo no deseado.
+ */
+export function buildDealershipReportPlainText(d: DealershipReportHtmlData): string {
+  const dealership = d.dealershipName || 'Concesionaria Oficial';
+  const period = d.periodLabel || 'últimos 30 días';
+  const dateRange = d.dateRangeText || 'Últimos 30 días';
+  const marcasListText = (d.marcas && d.marcas.length > 0) ? d.marcas.join(', ') : 'Portafolio Oficial';
+
+  const compSign = d.comparisonChangePct > 0 ? '+' : '';
+  const compTrendText = d.comparisonTrend === 'up'
+    ? `Ha aumentado +${d.comparisonChangePct}% comparado con el período anterior`
+    : d.comparisonTrend === 'down'
+      ? `Ha disminuido ${d.comparisonChangePct}% contra el período anterior`
+      : `Se mantuvo igual contra el período anterior`;
+
+  const recTrendText = d.recommendationTrend === 'up'
+    ? `Ha aumentado +${d.recommendationChangePct}% contra el período anterior`
+    : d.recommendationTrend === 'down'
+      ? `Ha disminuido ${d.recommendationChangePct}% contra el período anterior`
+      : `Se mantuvo igual contra el período anterior`;
+
+  const topMarcasText = (d.topMarcas && d.topMarcas.length > 0)
+    ? d.topMarcas.slice(0, 3).map((m, idx) => `  ${idx + 1}. ${m.name}: ${m.count} comparaciones (${m.sharePct}%)`).join('\n')
+    : '  Sin registros en este período.';
+
+  const topModelosText = (d.topModelos && d.topModelos.length > 0)
+    ? d.topModelos.slice(0, 3).map((m, idx) => `  ${idx + 1}. ${m.name}${m.brandName ? ` (${m.brandName})` : ''}: ${m.count} veces`).join('\n')
+    : '  Sin registros en este período.';
+
+  return `
+DATACAR PARAGUAY - REPORTE MENSUAL DE INTELIGENCIA AUTOMOTRIZ 0KM
+================================================================
+
+Exclusivo para: ${dealership}
+Marcas: ${marcasListText}
+Período evaluado: ${period} (${dateRange})
+
+----------------------------------------------------------------
+1. COMPARADOR DATACAR (ÚLTIMOS 30 DÍAS)
+----------------------------------------------------------------
+Tus marcas se han comparado ${d.totalComparisons} veces.
+Tendencia: ${compTrendText} (Período anterior: ${d.prevComparisons} comparaciones).
+
+Top 3 Marcas Comparadas:
+${topMarcasText}
+
+Top 3 Modelos Más Buscados:
+${topModelosText}
+
+¿Qué es el Comparador DATACAR?
+Es la herramienta donde los usuarios confrontan simultáneamente especificaciones técnicas, motorización, seguridad ADAS y precios de hasta 3 vehículos 0km antes de decidir su compra.
+
+- Conocé contra qué marcas y modelos te comparan: https://datacarpy.com/concesionarias
+- Quiero destacar en el comparador (WhatsApp): https://wa.me/${WA_CONTACT_NUMBER}
+
+----------------------------------------------------------------
+2. RECOMENDADOR INTELIGENTE
+----------------------------------------------------------------
+${dealership} ha aparecido ${d.totalRecommendations} veces en el recomendador.
+Tendencia: ${recTrendText} (Período anterior: ${d.prevRecommendations} sugerencias).
+
+¿Qué es el Recomendador DATACAR?
+Es el asistente interactivo de compra que procesa el presupuesto y equipamiento buscado por compradores reales y sugiere modelos 0km oficiales ideales.
+
+- Quiero aparecer más veces en el recomendador (WhatsApp): https://wa.me/${WA_CONTACT_NUMBER}
+
+----------------------------------------------------------------
+3. INFORME COMPLETO Y DETALLADO
+----------------------------------------------------------------
+¿Querés ver el informe completo?
+Accedé a telemetría detallada de consideración, duelos directos y demanda en:
+https://datacarpy.com/concesionarias
+
+--
+DATACAR Paraguay - Inteligencia Automotriz
+Contacto WhatsApp oficial: +595 991 244469
+Web: https://datacarpy.com
+`.trim();
 }

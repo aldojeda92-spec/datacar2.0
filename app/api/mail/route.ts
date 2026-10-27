@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
-import { buildDealershipReportHtml } from '../../../lib/dealershipReportHtml';
+import { buildDealershipReportHtml, buildDealershipReportPlainText } from '../../../lib/dealershipReportHtml';
 
 const ALLOWED_ORIGINS = [
   'https://datacarpy.com',
@@ -500,6 +500,7 @@ export async function POST(request: Request) {
 
   let subject: string;
   let html: string;
+  let text: string | undefined;
   if (type === 'lead_notification') {
     subject = data?.tradeInData
       ? `🔄 LEAD PARTE DE PAGO: Quiere entregar ${escapeHtml(data.tradeInData.vehiculoEntregar)} (${escapeHtml(data.tradeInData.anio)}) por ${escapeHtml(data.tradeInData.vehiculoInteres0km)}`
@@ -527,8 +528,11 @@ export async function POST(request: Request) {
     subject = 'Tus resultados del Recomendador - DATACAR';
     html = buildRecommendationResultsHtml(data);
   } else if (type === 'dealership_report') {
-    subject = data?.subject ? String(data.subject).trim() : `📊 Reporte Mensual DATACAR: Telemetría de ${escapeHtml(data?.dealershipName || 'tu Concesionaria')}`;
+    // Asunto sobrio y limpio de emojis para superar filtros corporativos
+    const rawSubject = data?.subject ? String(data.subject) : `DATACAR: Reporte Mensual de Mercado - ${data?.dealershipName || 'Concesionaria'} (Ultimos 30 dias)`;
+    subject = rawSubject.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}📊🚀⭐🔥🚨🚘]/gu, '').trim();
     html = data?.customHtml || buildDealershipReportHtml(data);
+    text = buildDealershipReportPlainText(data);
   } else if (type === 'newsletter_broadcast') {
     subject = data?.subject ? String(data.subject).trim() : 'Novedades y Oportunidades 0km - DATACAR';
     html = buildNewsletterBroadcastHtml(data);

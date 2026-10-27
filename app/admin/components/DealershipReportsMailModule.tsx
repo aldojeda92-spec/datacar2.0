@@ -126,7 +126,7 @@ export default function DealershipReportsMailModule({
     setSendingDealerId(dealer.dealershipId);
     try {
       const html = buildDealershipReportHtml(dealer.reportHtmlData);
-      const subject = `📊 DATACAR Reporte Mensual (Últimos 30 días): Telemetría y Comparativas de ${dealer.dealershipName}`;
+      const subject = `DATACAR: Reporte Mensual de Mercado - ${dealer.dealershipName} (Últimos 30 días)`;
 
       const res = await sendDealershipReportEmail({
         dealershipName: dealer.dealershipName,
@@ -183,7 +183,7 @@ export default function DealershipReportsMailModule({
     setIsSendingTest(true);
     try {
       const html = buildDealershipReportHtml(dealer.reportHtmlData);
-      const subject = `[PRUEBA] 📊 Reporte DATACAR: Telemetría de ${dealer.dealershipName}`;
+      const subject = `[PRUEBA] DATACAR: Reporte Mensual de Mercado - ${dealer.dealershipName}`;
 
       const res = await sendDealershipReportEmail({
         dealershipName: dealer.dealershipName,
