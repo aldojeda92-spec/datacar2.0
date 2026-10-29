@@ -21,6 +21,9 @@ const COMBUSTIBLE_CANONICAL: Record<string, string> = {
   'FLEXFUEL': 'FLEX',
   'FLEX FUEL': 'FLEX',
   'NAFTA/ETANOL': 'FLEX',
+  'TOTAL FLEX': 'FLEX',
+  'TOTALFLEX': 'FLEX',
+  'FLEX-FUEL': 'FLEX',
   // Electrificados
   'EV': 'EV',
   'ELÉCTRICO': 'EV',

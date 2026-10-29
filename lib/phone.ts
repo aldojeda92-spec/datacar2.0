@@ -1,32 +1,55 @@
 // lib/phone.ts
-// Normaliza celulares paraguayos antes de validar. El regex estricto `^09\d{8}$`
-// del LeadModal rechazaba números perfectamente válidos escritos con espacios,
-// guiones o prefijo internacional ("0981 234 567", "+595 981 234567",
-// "595981234567") — fricción pura en el formulario de lead.
+// Reglas estrictas de validación de telefonía móvil para Paraguay (prefijo visual +595):
+// 1. Debe tener exactamente 9 dígitos.
+// 2. Debe empezar con '9' y continuar con 6, 7, 8 o 9 (operadoras: 096x, 097x, 098x, 099x).
 
-const PY_MOBILE = /^09\d{8}$/;
+export const PY_PHONE_REGEX = /^9[6-9]\d{7}$/;
 
 export interface NormalizedPhone {
-  /** Formato canónico 09XXXXXXXX si se pudo interpretar; si no, los dígitos crudos. */
+  /** Formato de 9 dígitos para inputs y visualización (ej: 981234567) */
   value: string;
+  /** Formato canónico paraguayo con 0 inicial (ej: 0981234567) para almacenar en base de datos */
+  canonical: string;
   valid: boolean;
+  error?: string;
+}
+
+/**
+ * Sanitiza la entrada en tiempo real:
+ * - Filtra caracteres no numéricos.
+ * - Si pegan con prefijo '595', lo remueve.
+ * - Si pegan con el '0' inicial (ej: 0981...), lo remueve para adaptarse al prefijo visual +595.
+ * - Limita estrictamente a 9 dígitos máximos.
+ */
+export function sanitizePhonePY(raw: string): string {
+  if (!raw) return '';
+  let digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('595')) digits = digits.slice(3);
+  if (digits.startsWith('09')) digits = digits.slice(1);
+  return digits.slice(0, 9);
+}
+
+/**
+ * Valida que el número de 9 dígitos cumpla exactamente:
+ * - Largo: 9 dígitos exactos (ni más ni menos).
+ * - Prefijo: empieza con 9 y segundo dígito es 6, 7, 8 o 9.
+ * Si es inválido, arroja el mensaje exacto solicitado: "Tenés que cargar un número telefónico válido".
+ */
+export function validatePhonePY(raw: string): NormalizedPhone {
+  const digits = sanitizePhonePY(raw);
+  const INVALID_MSG = 'Tenés que cargar un número telefónico válido';
+
+  if (!digits || digits.length !== 9 || !/^9[6-9]/.test(digits) || !PY_PHONE_REGEX.test(digits)) {
+    return { value: digits, canonical: '0' + digits, valid: false, error: INVALID_MSG };
+  }
+
+  return { value: digits, canonical: '0' + digits, valid: true };
 }
 
 export function normalizePhonePY(raw: string): NormalizedPhone {
-  if (!raw) return { value: '', valid: false };
-
-  // Solo dígitos (descarta +, espacios, guiones, paréntesis).
-  let digits = raw.replace(/\D/g, '');
-
-  // Prefijo internacional Paraguay: 595 981 234567 -> 0981234567
-  if (digits.startsWith('595')) digits = '0' + digits.slice(3);
-
-  // Sin el 0 inicial: 981234567 -> 0981234567
-  if (digits.length === 9 && digits.startsWith('9')) digits = '0' + digits;
-
-  return { value: digits, valid: PY_MOBILE.test(digits) };
+  return validatePhonePY(raw);
 }
 
 export function isValidPhonePY(raw: string): boolean {
-  return normalizePhonePY(raw).valid;
+  return validatePhonePY(raw).valid;
 }

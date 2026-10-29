@@ -75,7 +75,10 @@ async function getCachedCollection(name: string, ttlMs: number = CACHE_TTL_MS): 
 
 export const getCachedBrands = () => getCachedCollection('brands');
 export const getCachedModels = () => getCachedCollection('models');
-export const getCachedVersions = () => getCachedCollection('versions');
+export const getCachedVersions = async () => {
+  const versions = await getCachedCollection('versions');
+  return versions.filter(v => v.activo !== false);
+};
 export const getCachedCampaigns = () => getCachedCollection('campaigns', CAMPAIGNS_TTL_MS);
 export const getCachedConcesionarias = () => getCachedCollection('concesionarias');
 

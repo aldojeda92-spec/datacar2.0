@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 // ==========================================
@@ -11,6 +11,9 @@ export interface LeadNotificationParams {
   vehicleOfInterest: string;
   origen: string;
   concesionariaDestino: string;
+  brandOfInterest?: string;
+  marca?: string;
+  brandId?: string;
   wizardAnswers?: Record<string, any>;
   tradeInData?: {
     vehiculoEntregar: string;
@@ -43,17 +46,94 @@ export const sendLeadNotificationEmail = async (params: LeadNotificationParams) 
 
     let nombreConcesionariaOficial = 'Central DATACAR';
 
-    if (params.concesionariaDestino && !params.concesionariaDestino.toLowerCase().includes('designar')) {
-      const q = query(collection(db, 'concesionarias'), where('name', '==', params.concesionariaDestino.toUpperCase()));
-      const snap = await getDocs(q);
+    // Si es un lead de perfilado inicial, NO se asigna marca ni concesionaria (va únicamente a auditoría DATACAR)
+    const isProfilingLead = (params.vehicleOfInterest || '').toLowerCase().includes('perfilado') ||
+                            (params.origen || '').toLowerCase().includes('perfilado');
 
-      if (!snap.empty) {
-        const concesionariaData = snap.docs[0].data();
-        nombreConcesionariaOficial = concesionariaData.name;
-        if (concesionariaData.email_gerencia) {
-          destinatarios.push(concesionariaData.email_gerencia.trim());
+    // 1. Determinar la marca objetivo del lead (solo si no es perfilado inicial)
+    let targetBrandName = '';
+    let targetBrandId = '';
+
+    if (!isProfilingLead) {
+      targetBrandName = (params.brandOfInterest || params.marca || '').trim();
+      targetBrandId = (params.brandId || '').trim();
+
+      if (!targetBrandName && params.vehicleOfInterest) {
+        const firstWord = params.vehicleOfInterest.trim().split(' ')[0];
+        if (firstWord && !['perfilado', 'recomendados:', 'recomendado', 'a'].includes(firstWord.toLowerCase())) {
+          targetBrandName = firstWord;
         }
       }
+    }
+
+    // 2. Buscar correos de la MARCA en Firestore (soporta hasta 2 correos por marca)
+    let foundBrandEmails = false;
+    if (targetBrandName || targetBrandId) {
+      let brandDocData: any = null;
+
+      if (targetBrandId) {
+        try {
+          const bSnap = await getDoc(doc(db, 'brands', targetBrandId));
+          if (bSnap.exists()) brandDocData = bSnap.data();
+        } catch {}
+      }
+
+      if (!brandDocData && targetBrandName) {
+        try {
+          const slugId = targetBrandName.toLowerCase().replace(/\s+/g, '-');
+          const bSnapSlug = await getDoc(doc(db, 'brands', slugId));
+          if (bSnapSlug.exists()) {
+            brandDocData = bSnapSlug.data();
+          } else {
+            const qBrand = query(collection(db, 'brands'), where('name', '==', targetBrandName.toUpperCase()));
+            const qSnap = await getDocs(qBrand);
+            if (!qSnap.empty) {
+              brandDocData = qSnap.docs[0].data();
+            }
+          }
+        } catch {}
+      }
+
+      if (brandDocData) {
+        nombreConcesionariaOficial = `Marca: ${brandDocData.name || targetBrandName.toUpperCase()}`;
+
+        // Correo #1 de gerencia de la marca
+        if (brandDocData.email_gerencia && typeof brandDocData.email_gerencia === 'string') {
+          const e1 = brandDocData.email_gerencia.trim();
+          if (e1 && !destinatarios.map((d: string) => d.toLowerCase()).includes(e1.toLowerCase())) {
+            destinatarios.push(e1);
+            foundBrandEmails = true;
+          }
+        }
+
+        // Correo #2 de gerencia de la marca
+        if (brandDocData.email_gerencia_2 && typeof brandDocData.email_gerencia_2 === 'string') {
+          const e2 = brandDocData.email_gerencia_2.trim();
+          if (e2 && !destinatarios.map((d: string) => d.toLowerCase()).includes(e2.toLowerCase())) {
+            destinatarios.push(e2);
+            foundBrandEmails = true;
+          }
+        }
+      }
+    }
+
+    // 3. Fallback: si no es perfilado y la marca aún no tiene correos asignados, verificar concesionaria
+    if (!isProfilingLead && !foundBrandEmails && params.concesionariaDestino && !params.concesionariaDestino.toLowerCase().includes('designar') && !params.concesionariaDestino.toLowerCase().includes('central datacar')) {
+      try {
+        const q = query(collection(db, 'concesionarias'), where('name', '==', params.concesionariaDestino.toUpperCase()));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const concesionariaData = snap.docs[0].data();
+          nombreConcesionariaOficial = concesionariaData.name;
+          if (concesionariaData.email_gerencia) {
+            const cEmail = concesionariaData.email_gerencia.trim();
+            if (cEmail && !destinatarios.map((d: string) => d.toLowerCase()).includes(cEmail.toLowerCase())) {
+              destinatarios.push(cEmail);
+            }
+          }
+        }
+      } catch {}
     }
 
     // El lead puede no haber dejado celular (ahora es opcional). Solo armamos el

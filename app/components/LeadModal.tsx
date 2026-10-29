@@ -6,7 +6,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 // CORRECCIÓN BUGS DE RUTA: Subimos dos niveles (../../) para encontrar lib/firebase y lib/mailer
 import { db } from '../../lib/firebase';
 import { sendLeadNotificationEmail } from '../../lib/mailer';
-import { normalizePhonePY } from '../../lib/phone';
+import { normalizePhonePY, sanitizePhonePY, validatePhonePY } from '../../lib/phone';
 import { track } from '../../lib/analytics';
 import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 import { formatLeadVehicleTitle } from '../../lib/vehicleTitle';
@@ -75,7 +75,10 @@ export default function LeadModal({
     if (formData.nombre.trim().length < 2) errors.nombre = 'Ingresá tu nombre.';
 
     if (TELEFONO_OBLIGATORIO || formData.telefono.trim()) {
-      if (!phone.valid) errors.telefono = 'Celular inválido. Debe ser un número paraguayo, ej: 0981 234 567.';
+      const pVal = validatePhonePY(formData.telefono);
+      if (!pVal.valid) {
+        errors.telefono = pVal.error || 'Tenés que cargar un número telefónico válido';
+      }
     }
     if (email && !emailRegex.test(email)) {
       errors.email = 'Revisá el formato del correo.';
@@ -129,6 +132,8 @@ export default function LeadModal({
           leadPhone: telefonoFinal,
           leadEmail: formData.email.trim(),
           vehicleOfInterest: fullVehicleDisplay,
+          brandOfInterest: marcaVehiculo,
+          marca: marcaVehiculo,
           origen: origenLead,
           concesionariaDestino: cleanConcesionaria || 'Central DATACAR',
         });
@@ -159,15 +164,17 @@ export default function LeadModal({
   };
 
   const inputBase =
-    'w-full border bg-[#F8F9FA] p-3.5 text-xs focus:outline-none transition-all rounded-xl disabled:opacity-50';
+    'w-full border bg-[#F8FAFC] p-3.5 text-xs focus:outline-none transition-all rounded-2xl disabled:opacity-50 font-medium focus:bg-white focus:ring-4 focus:ring-[#00BFFF]/10 focus:border-[#00BFFF]';
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       overlayClassName="fixed inset-0 bg-[#0A1F33]/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md"
-      panelClassName="bg-[#FFFFFF] w-full max-w-md p-8 border-t-4 border-[#00BFFF] relative shadow-2xl rounded-2xl overflow-hidden"
+      panelClassName="bg-[#FFFFFF] w-full max-w-md p-8 sm:p-9 border border-[#0A1F33]/10 relative shadow-2xl rounded-3xl overflow-hidden"
     >
+      {/* BOTÓN CERRAR CONTEMPORÁNEO */}
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0A1F33] via-[#00BFFF] to-[#0A1F33]" />
       {/* BOTÓN CERRAR CONTEMPORÁNEO */}
       <button
         onClick={onClose}
@@ -235,23 +242,31 @@ export default function LeadModal({
               <label htmlFor={telefonoId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">
                 Celular (WhatsApp) {TELEFONO_OBLIGATORIO ? <span className="text-[#D93025]">*</span> : <span className="text-[#C0C0C0] font-normal">(o dejá tu correo)</span>}
               </label>
-              <input
-                id={telefonoId}
-                type="tel"
-                inputMode="tel"
-                required={TELEFONO_OBLIGATORIO}
-                disabled={status === 'loading'}
-                aria-invalid={!!fieldErrors.telefono}
-                aria-describedby={fieldErrors.telefono ? telefonoErrId : undefined}
-                className={`${inputBase} ${fieldErrors.telefono ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
-                placeholder="Ej: 0981 234 567"
-                value={formData.telefono}
-                onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'telefono' })}
-                onChange={(e) => {
-                  setFormData({ ...formData, telefono: e.target.value });
-                  if (fieldErrors.telefono) setFieldErrors({ ...fieldErrors, telefono: undefined });
-                }}
-              />
+              <div className="flex rounded-2xl overflow-hidden border border-[#E2E8F0] bg-[#F8FAFC] focus-within:bg-white focus-within:border-[#00BFFF] focus-within:ring-4 focus-within:ring-[#00BFFF]/10 transition-all">
+                <div className="bg-[#EDF2F7] border-r border-[#E2E8F0] px-3.5 py-3.5 flex items-center gap-1.5 text-xs font-bold text-[#0A1F33] select-none shrink-0">
+                  <span className="text-sm">🇵🇾</span>
+                  <span>+595</span>
+                </div>
+                <input
+                  id={telefonoId}
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={9}
+                  required={TELEFONO_OBLIGATORIO}
+                  disabled={status === 'loading'}
+                  aria-invalid={!!fieldErrors.telefono}
+                  aria-describedby={fieldErrors.telefono ? telefonoErrId : undefined}
+                  className="w-full p-3.5 text-xs text-[#0A1F33] focus:outline-none bg-transparent font-medium"
+                  placeholder="981 234 567"
+                  value={formData.telefono}
+                  onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'telefono' })}
+                  onChange={(e) => {
+                    const cleaned = sanitizePhonePY(e.target.value);
+                    setFormData({ ...formData, telefono: cleaned });
+                    if (fieldErrors.telefono) setFieldErrors({ ...fieldErrors, telefono: undefined });
+                  }}
+                />
+              </div>
               {fieldErrors.telefono && (
                 <p id={telefonoErrId} className="text-[10px] text-[#D93025] font-bold mt-1">{fieldErrors.telefono}</p>
               )}
@@ -290,7 +305,7 @@ export default function LeadModal({
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="w-full bg-[#0A1F33] hover:bg-[#00BFFF] hover:text-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 mt-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-transparent rounded-xl shadow-md"
+              className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 mt-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl shadow-md hover:shadow-lg cursor-pointer flex items-center justify-center gap-2"
             >
               {status === 'loading' ? 'Procesando...' : formatHablarCon(cleanConcesionaria)}
             </button>

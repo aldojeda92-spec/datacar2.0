@@ -324,10 +324,10 @@ export default function AdminDashboardPage() {
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
 
   // Formularios ABM
-  const [marcaForm, setMarcaForm] = useState({ id: '', name: '', origen_marca: '', logoUrl: '' });
+  const [marcaForm, setMarcaForm] = useState({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '' });
   const [modeloForm, setModeloForm] = useState({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', subsegmento: '', origen: '', startingPrice: '', imgUrl: '', isPopular: false });
   const [versionForm, setVersionForm] = useState({ 
-    id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '',
+    id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', activo: true,
     motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '', 
     airbags: '', tamanho_pantalla: '', conectividad: '', camaras: '', garantia: '', adas: '', asiento_cuero: '', techo_panoramico: '',
     alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '',
@@ -339,6 +339,7 @@ export default function AdminDashboardPage() {
   const [abmVerFilterMarca, setAbmVerFilterMarca] = useState('Todas');
   const [abmVerFilterModelo, setAbmVerFilterModelo] = useState('Todos');
   const [abmVerFilterDealer, setAbmVerFilterDealer] = useState('Todas');
+  const [abmVerFilterStatus, setAbmVerFilterStatus] = useState<'Todas' | 'Activas' | 'Inactivas'>('Todas');
   const [abmModelFilterMarca, setAbmModelFilterMarca] = useState('Todas');
   const [abmModelFilterCarroceria, setAbmModelFilterCarroceria] = useState('Todas');
   const [abmMarcaFilterOrigen, setAbmMarcaFilterOrigen] = useState('Todos');
@@ -2264,10 +2265,10 @@ export default function AdminDashboardPage() {
     e.preventDefault(); if (!marcaForm.name) return; setLoading(true);
     try {
       const id = marcaForm.id || generarSlug(marcaForm.name);
-      await setDoc(doc(db, 'brands', id), { name: marcaForm.name.toUpperCase(), origen_marca: marcaForm.origen_marca, logoUrl: marcaForm.logoUrl, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'brands', id), { name: marcaForm.name.toUpperCase(), origen_marca: marcaForm.origen_marca, logoUrl: marcaForm.logoUrl, prioridad_recomendador: Number(marcaForm.prioridad_recomendador) || 0, email_gerencia: (marcaForm.email_gerencia || '').trim(), email_gerencia_2: (marcaForm.email_gerencia_2 || '').trim(), updatedAt: serverTimestamp() }, { merge: true });
       invalidateCatalogCache('brands');
       setFeedback({ type: 'success', message: 'Identidad de Marca guardada correctamente.' });
-      setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '' });
+      setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '' });
       setAbmModalType(null);
       fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
@@ -2291,7 +2292,7 @@ export default function AdminDashboardPage() {
     try {
       const id = versionForm.id || `${versionForm.modelId}_${generarSlug(versionForm.name)}`;
       await setDoc(doc(db, 'versions', id), {
-        modelId: versionForm.modelId, name: versionForm.name, concesionaria: versionForm.concesionaria, promocion: versionForm.promocion, url_auto: versionForm.url_auto, price: Number(versionForm.price) || 0,
+        modelId: versionForm.modelId, name: versionForm.name, concesionaria: versionForm.concesionaria, promocion: versionForm.promocion, url_auto: versionForm.url_auto, price: Number(versionForm.price) || 0, activo: versionForm.activo !== false,
         specs: { motor: versionForm.motor, transmision: versionForm.transmision, combustible: versionForm.combustible, traccion: versionForm.traccion, plazas: Number(versionForm.plazas) || 0, airbags: Number(versionForm.airbags) || 0, tamanho_pantalla: Number(versionForm.tamanho_pantalla) || 0, conectividad: versionForm.conectividad, camaras: versionForm.camaras, garantia: versionForm.garantia, alimentacion: versionForm.alimentacion, autonomi_electrica: versionForm.autonomi_electrica },
         chasis: { medida_neumatico: versionForm.medida_neumatico, tipo_llanta: versionForm.tipo_llanta, detalle_suspension: versionForm.detalle_suspension, detalles_freno: versionForm.detalles_freno },
         dimensiones: { largo: Number(versionForm.largo) || 0, ancho: Number(versionForm.ancho) || 0, alto: Number(versionForm.alto) || 0, despeje_suelo: Number(versionForm.despeje_suelo) || 0, baulera_litros: Number(versionForm.baulera_litros) || 0 },
@@ -2301,7 +2302,7 @@ export default function AdminDashboardPage() {
       
       invalidateCatalogCache('versions');
       setFeedback({ type: 'success', message: 'Versión técnica guardada de forma integral.' });
-      setVersionForm({ id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '', airbags: '', tamanho_pantalla: '', conectividad: '', camaras: '', garantia: '', adas: '', asiento_cuero: '', techo_panoramico: '', alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '', confort_conveniencia: '', seguridad_standard: '' });
+      setVersionForm({ id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', activo: true, motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '', airbags: '', tamanho_pantalla: '', conectividad: '', camaras: '', garantia: '', adas: '', asiento_cuero: '', techo_panoramico: '', alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '', confort_conveniencia: '', seguridad_standard: '' });
       setAbmModalType(null);
       fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
@@ -2331,9 +2332,33 @@ export default function AdminDashboardPage() {
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
   };
 
+  const handleToggleVersionActive = async (version: any) => {
+    const nextStatus = version.activo === false;
+    try {
+      await updateDoc(doc(db, 'versions', version.id), {
+        activo: nextStatus,
+        updatedAt: serverTimestamp()
+      });
+      invalidateCatalogCache('versions');
+      setVersionesList(prev => prev.map(v => v.id === version.id ? { ...v, activo: nextStatus, updatedAt: new Date() } : v));
+      showToast(`Versión "${version.name}" ${nextStatus ? 'activada' : 'desactivada'} exitosamente.`);
+    } catch (err: any) {
+      console.error('Error al cambiar estado de versión:', err);
+      showToast('Error al actualizar el estado de la versión.');
+    }
+  };
+
   // Triggers de Edición (Abren Modal)
   const triggerEditMarca = (m: any) => { 
-    setMarcaForm({ id: m.id, name: m.name || '', origen_marca: m.origen_marca || '', logoUrl: m.logoUrl || '' }); 
+    setMarcaForm({ 
+      id: m.id, 
+      name: m.name || '', 
+      origen_marca: m.origen_marca || '', 
+      logoUrl: m.logoUrl || '', 
+      prioridad_recomendador: m.prioridad_recomendador ?? 0,
+      email_gerencia: m.email_gerencia || '',
+      email_gerencia_2: m.email_gerencia_2 || ''
+    }); 
     setAbmModalType('marcas'); 
   };
   const triggerEditModelo = (m: any) => { 
@@ -2342,7 +2367,7 @@ export default function AdminDashboardPage() {
   };
   const triggerEditVersion = (v: any) => { 
     setVersionForm({ 
-      id: v.id, modelId: v.modelId || '', name: v.name || '', price: v.price?.toString() || '', concesionaria: v.concesionaria || '', promocion: v.promocion || '', url_auto: v.url_auto || '',
+      id: v.id, modelId: v.modelId || '', name: v.name || '', price: v.price?.toString() || '', concesionaria: v.concesionaria || '', promocion: v.promocion || '', url_auto: v.url_auto || '', activo: v.activo !== false,
       motor: v.specs?.motor || '', transmision: v.specs?.transmision || '', combustible: v.specs?.combustible || '', traccion: v.specs?.traccion || '', plazas: v.specs?.plazas?.toString() || '', airbags: v.specs?.airbags?.toString() || '', tamanho_pantalla: v.specs?.tamanho_pantalla?.toString() || '', conectividad: v.specs?.conectividad || '', camaras: v.specs?.camaras || '', garantia: v.specs?.garantia || '', 
       alimentacion: v.specs?.alimentacion || '', autonomi_electrica: v.specs?.autonomi_electrica || '',
       largo: v.dimensiones?.largo?.toString() || '', ancho: v.dimensiones?.ancho?.toString() || '', alto: v.dimensiones?.alto?.toString() || '', despeje_suelo: v.dimensiones?.despeje_suelo?.toString() || '', baulera_litros: v.dimensiones?.baulera_litros?.toString() || '', 
@@ -2366,7 +2391,7 @@ export default function AdminDashboardPage() {
 
   // Triggers de Alta Nueva (Abren Modal Vacío)
   const openNewMarcaModal = () => {
-    setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '' });
+    setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '' });
     setAbmModalType('marcas');
   };
   const openNewModeloModal = () => {
@@ -2375,7 +2400,7 @@ export default function AdminDashboardPage() {
   };
   const openNewVersionModal = () => {
     setVersionForm({
-      id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '',
+      id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', activo: true,
       motor: '', transmision: '', combustible: '', traccion: '', largo: '', ancho: '', alto: '', despeje_suelo: '', baulera_litros: '', plazas: '5',
       airbags: '6', tamanho_pantalla: '10', conectividad: 'Apple CarPlay / Android Auto', camaras: 'Reversa', garantia: '5 años', adas: '', asiento_cuero: '', techo_panoramico: '',
       alimentacion: '', autonomi_electrica: '', medida_neumatico: '', tipo_llanta: '', detalle_suspension: '', detalles_freno: '',
@@ -2469,11 +2494,17 @@ export default function AdminDashboardPage() {
       } else if (type === 'marca') {
         if (field === 'name') updatePayload.name = value.toUpperCase();
         else if (field === 'origen_marca') updatePayload.origen_marca = value;
+        else if (field === 'email_gerencia') updatePayload.email_gerencia = value.toLowerCase().trim();
+        else if (field === 'email_gerencia_2') updatePayload.email_gerencia_2 = value.toLowerCase().trim();
+        else if (field === 'prioridad_recomendador') updatePayload.prioridad_recomendador = Number(value) || 0;
         await updateDoc(doc(db, 'brands', id), updatePayload);
         setMarcasList(prev => prev.map(b => {
           if (b.id !== id) return b;
           if (field === 'name') return { ...b, name: value.toUpperCase(), updatedAt: now };
           if (field === 'origen_marca') return { ...b, origen_marca: value, updatedAt: now };
+          if (field === 'email_gerencia') return { ...b, email_gerencia: value.toLowerCase().trim(), updatedAt: now };
+          if (field === 'email_gerencia_2') return { ...b, email_gerencia_2: value.toLowerCase().trim(), updatedAt: now };
+          if (field === 'prioridad_recomendador') return { ...b, prioridad_recomendador: Number(value) || 0, updatedAt: now };
           return b;
         }));
         invalidateCatalogCache('brands');
@@ -3821,6 +3852,8 @@ export default function AdminDashboardPage() {
       if (abmVerFilterMarca !== 'Todas' && modelObj?.brandId !== abmVerFilterMarca) return false;
       if (abmVerFilterModelo !== 'Todos' && v.modelId !== abmVerFilterModelo) return false;
       if (abmVerFilterDealer !== 'Todas' && (v.concesionaria || '').trim().toUpperCase() !== abmVerFilterDealer.toUpperCase()) return false;
+      if (abmVerFilterStatus === 'Activas' && v.activo === false) return false;
+      if (abmVerFilterStatus === 'Inactivas' && v.activo !== false) return false;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const brandObj = modelObj ? marcasList.find(b => b.id === modelObj.brandId) : null;
@@ -3833,7 +3866,7 @@ export default function AdminDashboardPage() {
       }
       return true;
     });
-  }, [versionesList, modelosList, marcasList, abmVerFilterMarca, abmVerFilterModelo, abmVerFilterDealer, searchTerm]);
+  }, [versionesList, modelosList, marcasList, abmVerFilterMarca, abmVerFilterModelo, abmVerFilterDealer, abmVerFilterStatus, searchTerm]);
 
   const filteredConcesionarias = useMemo(() => {
     return concesionariasList.filter(c => {
@@ -6884,6 +6917,20 @@ export default function AdminDashboardPage() {
                         </select>
                       </div>
 
+                      {/* Filtro Estado */}
+                      <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#C0C0C0] px-2 py-1">
+                        <span className="text-[9px] font-bold text-[#C0C0C0] uppercase">Estado:</span>
+                        <select 
+                          className="text-[10px] font-bold uppercase tracking-widest focus:outline-none bg-transparent cursor-pointer"
+                          value={abmVerFilterStatus} 
+                          onChange={e => setAbmVerFilterStatus(e.target.value as any)}
+                        >
+                          <option value="Todas">Todas</option>
+                          <option value="Activas">Solo Activas</option>
+                          <option value="Inactivas">Solo Inactivas</option>
+                        </select>
+                      </div>
+
                       {/* Buscador */}
                       <input 
                         type="text" 
@@ -6909,6 +6956,7 @@ export default function AdminDashboardPage() {
                         <tr className="text-[9px] font-black text-[#0A1F33] uppercase tracking-widest">
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Marca / Modelo</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Versión ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center">Estado</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Precio USD ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Promoción ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Concesionaria ✏️</th>
@@ -6927,9 +6975,10 @@ export default function AdminDashboardPage() {
                           const brandName = brandObj?.name || 'N/A';
                           const modelName = modObj?.name || 'N/A';
                           const hasCheck = isDatacarCheck(v.concesionaria, checkedDealershipSet);
+                          const isActivo = v.activo !== false;
 
                           return (
-                            <tr key={v.id} className="border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group">
+                            <tr key={v.id} className={`border-b border-[#C0C0C0]/50 hover:bg-[#F5FBFF] transition-colors group ${!isActivo ? 'bg-[#F9FAFB]/70 opacity-75' : ''}`}>
                               <td className="p-3.5 font-bold uppercase border-r border-[#C0C0C0]/50 bg-[#F8F9FA]/40">
                                 <span className="bg-[#0A1F33] text-[#FFFFFF] text-[9px] px-2 py-0.5 font-black uppercase tracking-wider block w-fit mb-1">{brandName}</span>
                                 <span className="text-[#0A1F33] text-[11px] font-black">{modelName}</span>
@@ -6949,6 +6998,18 @@ export default function AdminDashboardPage() {
                                     <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'name', value: v.name || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar nombre">✏️</button>
                                   </div>
                                 )}
+                              </td>
+
+                              {/* Estado (Activo / Inactivo) */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[9px] font-black uppercase rounded-full ${
+                                  isActivo 
+                                    ? 'bg-[#E6F4EA] text-[#1E8E3E] border border-[#1E8E3E]/30' 
+                                    : 'bg-[#F1F3F5] text-[#71717A] border border-[#71717A]/30'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${isActivo ? 'bg-[#1E8E3E]' : 'bg-[#71717A]'}`}></span>
+                                  {isActivo ? 'Activa' : 'Inactiva'}
+                                </span>
                               </td>
 
                               {/* Precio inline */}
@@ -7047,12 +7108,23 @@ export default function AdminDashboardPage() {
 
                               {/* Acciones (H) */}
                               <td className="p-3.5 text-right bg-[#F8F9FA]/40 sticky right-0">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button onClick={() => triggerEditVersion(v)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Editar todas las matrices">
-                                    Ficha Completa ✏️
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button 
+                                    onClick={() => handleToggleVersionActive(v)} 
+                                    className={`border text-[9px] font-bold uppercase px-2.5 py-1 transition-all rounded shadow-xs flex items-center gap-1 cursor-pointer ${
+                                      isActivo 
+                                        ? 'border-[#71717A] text-[#71717A] hover:bg-[#71717A] hover:text-[#FFFFFF]' 
+                                        : 'border-[#1E8E3E] text-[#1E8E3E] bg-[#E6F4EA]/60 hover:bg-[#1E8E3E] hover:text-[#FFFFFF]'
+                                    }`}
+                                    title={isActivo ? 'Desactivar versión (ocultar de recomendador y catálogo)' : 'Activar versión en catálogo'}
+                                  >
+                                    {isActivo ? '⏸ Desactivar' : '▶ Activar'}
                                   </button>
-                                  <button onClick={() => handleDelete('versions', v.id)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors" title="Borrar registro completo">
-                                    🗑️ Borrar
+                                  <button onClick={() => triggerEditVersion(v)} className="border border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors rounded shadow-xs" title="Editar todas las matrices">
+                                    Ficha ✏️
+                                  </button>
+                                  <button onClick={() => handleDelete('versions', v.id)} className="border border-[#D93025] text-[#D93025] hover:bg-[#D93025] hover:text-[#FFFFFF] text-[9px] font-bold uppercase px-2.5 py-1 transition-colors rounded shadow-xs" title="Borrar registro completo">
+                                    🗑️
                                   </button>
                                 </div>
                               </td>
@@ -7316,14 +7388,16 @@ export default function AdminDashboardPage() {
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Logotipo</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Nombre Marca ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Origen de la Marca ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Emails Gerencia (Leads) ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center">Modelos en Catálogo</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center" title="Prioridad para desempates en el recomendador (mayor valor gana en empate)">Prioridad Rec. ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación (J)</th>
                           <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
                         </tr>
                       </thead>
                       <tbody className="text-[11px] text-[#3A3A3C]">
                         {filteredMarcas.length === 0 ? (
-                          <tr><td colSpan={6} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron marcas.</td></tr>
+                          <tr><td colSpan={8} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron marcas.</td></tr>
                         ) : filteredMarcas.map(m => {
                           const modelsCount = modelosList.filter(mod => mod.brandId === m.id).length;
 
@@ -7369,9 +7443,62 @@ export default function AdminDashboardPage() {
                                 )}
                               </td>
 
+                              {/* Emails Gerencia inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 min-w-[240px]">
+                                <div className="flex flex-col gap-1.5">
+                                  {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'email_gerencia' ? (
+                                    <div className="flex items-center gap-1">
+                                      <input type="email" className="border border-[#00BFFF] p-1 text-[11px] bg-white w-44 focus:outline-none font-mono" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} placeholder="gerencia@marca.com" autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                      <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                      <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <span className="text-[11px] truncate text-[#0A1F33] font-medium" title={m.email_gerencia || 'Sin email 1'}>
+                                        {m.email_gerencia ? <span><span className="font-bold text-[#00BFFF]">#1:</span> {m.email_gerencia}</span> : <span className="text-[#A0A0A0] italic">Sin email #1</span>}
+                                      </span>
+                                      <button onClick={() => setAdminInlineEdit({ type: 'marca', id: m.id, field: 'email_gerencia', value: m.email_gerencia || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px] shrink-0" title="Editar Email #1">✏️</button>
+                                    </div>
+                                  )}
+
+                                  {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'email_gerencia_2' ? (
+                                    <div className="flex items-center gap-1">
+                                      <input type="email" className="border border-[#00BFFF] p-1 text-[11px] bg-white w-44 focus:outline-none font-mono" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} placeholder="copia@marca.com" autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                      <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                      <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <span className="text-[10px] truncate text-[#555555]" title={m.email_gerencia_2 || 'Sin email 2'}>
+                                        {m.email_gerencia_2 ? <span><span className="font-bold text-[#707070]">#2:</span> {m.email_gerencia_2}</span> : <span className="text-[#C0C0C0] italic">Sin email #2</span>}
+                                      </span>
+                                      <button onClick={() => setAdminInlineEdit({ type: 'marca', id: m.id, field: 'email_gerencia_2', value: m.email_gerencia_2 || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px] shrink-0" title="Editar Email #2">✏️</button>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
                               {/* Q Modelos */}
                               <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
                                 <span className="bg-[#F8F9FA] border border-[#C0C0C0] text-[#0A1F33] text-[10px] font-black px-2.5 py-0.5">{modelsCount} modelos</span>
+                              </td>
+
+                              {/* Prioridad Recomendador inline */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
+                                {adminInlineEdit?.id === m.id && adminInlineEdit?.field === 'prioridad_recomendador' ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <input type="number" min="0" max="999" className="border border-[#00BFFF] p-1 text-xs bg-white w-20 text-center focus:outline-none font-bold" value={adminInlineEdit.value} onChange={e => setAdminInlineEdit({ ...adminInlineEdit, value: e.target.value })} autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdminInlineSave(); if (e.key === 'Escape') setAdminInlineEdit(null); }} />
+                                    <button onClick={handleAdminInlineSave} className="bg-[#1E8E3E] text-white px-2 py-1 text-[10px] font-bold">✓</button>
+                                    <button onClick={() => setAdminInlineEdit(null)} className="bg-[#D93025] text-white px-2 py-1 text-[10px] font-bold">✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${Number(m.prioridad_recomendador) > 0 ? 'bg-[#00BFFF]/15 text-[#00BFFF]' : 'text-[#3A3A3C]'}`}>
+                                      {m.prioridad_recomendador ?? 0}
+                                    </span>
+                                    <button onClick={() => setAdminInlineEdit({ type: 'marca', id: m.id, field: 'prioridad_recomendador', value: (m.prioridad_recomendador ?? 0).toString() })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar prioridad">✏️</button>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Última Modificación (J) */}
@@ -7599,6 +7726,23 @@ export default function AdminDashboardPage() {
                 <form onSubmit={handleSaveMarca} className="flex flex-col gap-4">
                   <div><label htmlFor="marcaForm-name" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Nombre Marca</label><input id="marcaForm-name" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] uppercase font-bold" value={marcaForm.name} onChange={e => setMarcaForm({...marcaForm, name: e.target.value})} required /></div>
                   <div><label htmlFor="marcaForm-origen" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Origen de la Marca</label><input id="marcaForm-origen" type="text" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33]" value={marcaForm.origen_marca} onChange={e => setMarcaForm({...marcaForm, origen_marca: e.target.value})} placeholder="Ej: Alemania, Japón, China..." /></div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-[#F8F9FA] p-3 border border-[#C0C0C0]/50">
+                    <div>
+                      <label htmlFor="marcaForm-email-1" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Email Gerencia #1 (Recepción Leads)</label>
+                      <input id="marcaForm-email-1" type="email" className="w-full border p-2.5 text-xs bg-white focus:outline-none focus:border-[#0A1F33] font-mono" value={marcaForm.email_gerencia} onChange={e => setMarcaForm({...marcaForm, email_gerencia: e.target.value})} placeholder="gerencia@marca.com.py" />
+                      <p className="text-[9px] text-[#707070] mt-1">Recibe todos los leads de esta marca.</p>
+                    </div>
+                    <div>
+                      <label htmlFor="marcaForm-email-2" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Email Gerencia #2 (Copia)</label>
+                      <input id="marcaForm-email-2" type="email" className="w-full border p-2.5 text-xs bg-white focus:outline-none focus:border-[#0A1F33] font-mono" value={marcaForm.email_gerencia_2} onChange={e => setMarcaForm({...marcaForm, email_gerencia_2: e.target.value})} placeholder="ventas@marca.com.py" />
+                      <p className="text-[9px] text-[#707070] mt-1">Segundo destinatario para la marca.</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="marcaForm-prioridad" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Prioridad Recomendador (Desempate)</label>
+                    <input id="marcaForm-prioridad" type="number" min="0" max="999" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] font-bold" value={marcaForm.prioridad_recomendador} onChange={e => setMarcaForm({...marcaForm, prioridad_recomendador: Number(e.target.value) || 0})} placeholder="0 (Normal), 10 (Alta prioridad en empates)..." />
+                    <p className="text-[9px] text-[#C0C0C0] mt-1">Ante igualdad de afinidad en el recomendador, las marcas con mayor prioridad ganan el desempate.</p>
+                  </div>
                   <ImageUploadField label="Logotipo" folder="brands" value={marcaForm.logoUrl} onChange={url => setMarcaForm({...marcaForm, logoUrl: url})} accentClass="text-[#00BFFF]" />
                   <div className="flex gap-3 mt-4">
                     <button type="button" onClick={() => setAbmModalType(null)} className="flex-1 border border-[#0A1F33] text-[#0A1F33] text-xs font-bold uppercase py-3 hover:bg-[#F5F5F5]">Cancelar</button>
@@ -7682,7 +7826,24 @@ export default function AdminDashboardPage() {
                       <div><label htmlFor="versionForm-promocion" className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Promoción</label><input id="versionForm-promocion" type="text" className="w-full border border-[#00BFFF]/30 p-2 text-xs focus:outline-none focus:border-[#00BFFF]" value={versionForm.promocion} onChange={e => setVersionForm({...versionForm, promocion: e.target.value})} placeholder="Ej: Bono US$ 1.500" /></div>
                       <div><label htmlFor="versionForm-concesionaria" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Concesionaria</label><input id="versionForm-concesionaria" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] uppercase" value={versionForm.concesionaria} onChange={e => setVersionForm({...versionForm, concesionaria: e.target.value})} placeholder="Ej: GARDEN" /></div>
                     </div>
-                    <div className="mt-3"><label htmlFor="versionForm-url_auto" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Oficial (Ficha Técnica)</label><input id="versionForm-url_auto" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33]" value={versionForm.url_auto} onChange={e => setVersionForm({...versionForm, url_auto: e.target.value})} placeholder="https://..." /></div>
+                    <div className="mt-3"><label htmlFor="versionForm-url_auto" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">URL Oficial (Ficha Técnica)</label><input id="versionForm-url_auto" type="text" className="w-full border p-2 text-xs focus:outline-none focus:border-[#0A1F33] rounded" value={versionForm.url_auto} onChange={e => setVersionForm({...versionForm, url_auto: e.target.value})} placeholder="https://..." /></div>
+                    <div className="mt-3 p-3 bg-white border border-[#C0C0C0] rounded flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-[#0A1F33] uppercase block">Estado en Catálogo Público</span>
+                        <span className="text-[9px] text-[#71717A]">Si está desactivada, no se mostrará en el recomendador ni en el catálogo público.</span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="w-4 h-4 text-[#00BFFF] rounded focus:ring-[#00BFFF] cursor-pointer" 
+                          checked={versionForm.activo} 
+                          onChange={e => setVersionForm({...versionForm, activo: e.target.checked})} 
+                        />
+                        <span className={`text-[10px] font-black uppercase ${versionForm.activo ? 'text-[#1E8E3E]' : 'text-[#71717A]'}`}>
+                          {versionForm.activo ? '✓ Versión Activa' : '⏸ Desactivada'}
+                        </span>
+                      </label>
+                    </div>
                   </fieldset>
 
                   {/* Bloque 2: Motor y Transmisión */}

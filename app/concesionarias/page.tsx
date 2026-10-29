@@ -18,6 +18,7 @@ import { useToast } from '../context/ToastContext';
 import { sendDealershipRequestEmail, sendReportsAccessRequestEmail } from '../../lib/mailer';
 import DealershipReportsView from './DealershipReportsView';
 import { invalidateCatalogCache } from '../../lib/catalogCache';
+import { sanitizePhonePY } from '../../lib/phone';
 import Modal from '../components/a11y/Modal';
 
 // ==========================================
@@ -990,7 +991,7 @@ export default function PortalConcesionariasPage() {
               </div>
               <div><label htmlFor="req-marcas" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Marcas que representan</label><input id="req-marcas" type="text" required placeholder="Ej: Kia, Nissan" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.marcas} onChange={e=>setReqForm({...reqForm, marcas: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label htmlFor="req-telefono" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Teléfono Directo</label><input id="req-telefono" type="tel" required className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.telefono} onChange={e=>setReqForm({...reqForm, telefono: e.target.value})} /></div>
+                <div><label htmlFor="req-telefono" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Teléfono Directo</label><input id="req-telefono" type="tel" inputMode="numeric" maxLength={9} required placeholder="981 123 456" className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded" value={reqForm.telefono} onChange={e=>setReqForm({...reqForm, telefono: sanitizePhonePY(e.target.value)})} /></div>
                 <div><label htmlFor="req-email" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Email Corporativo</label><input id="req-email" type="email" required className="w-full border border-[#C0C0C0] p-3 text-xs focus:outline-none focus:border-[#00BFFF] bg-[#FFFFFF] rounded-none" value={reqForm.email} onChange={e=>setReqForm({...reqForm, email: e.target.value})} /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">

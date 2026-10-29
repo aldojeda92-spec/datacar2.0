@@ -9,6 +9,7 @@ import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/c
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { resolveModelDealership, sanitizeDealershipName } from '../../lib/dealerships';
 import { sendLeadNotificationEmail } from '../../lib/mailer';
+import { sanitizePhonePY, validatePhonePY } from '../../lib/phone';
 import Navbar, { NavItem } from '../components/Navbar';
 
 const NAV_ITEMS: NavItem[] = [
@@ -374,11 +375,11 @@ export default function EntregarUsadoPage() {
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = e.target.value.replace(/\D/g, '');
-    if (cleaned.length <= 10) setTelefono(cleaned);
+    const cleaned = sanitizePhonePY(e.target.value);
+    setTelefono(cleaned);
   };
 
-  const isPhoneValid = /^09\d{8}$/.test(telefono);
+  const isPhoneValid = validatePhonePY(telefono).valid;
 
   const handleSubmitLead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -387,7 +388,7 @@ export default function EntregarUsadoPage() {
       return;
     }
     if (!isPhoneValid) {
-      setErrorMsg('Ingresá un número de celular paraguayo válido de 10 dígitos (Ej: 0981123456).');
+      setErrorMsg('Tenés que cargar un número telefónico válido');
       return;
     }
 
@@ -446,6 +447,9 @@ export default function EntregarUsadoPage() {
         leadPhone: telefono.trim(),
         leadEmail: email.trim() ? email.trim().toLowerCase() : undefined,
         vehicleOfInterest: vehiculoInteresStr,
+        brandOfInterest: selectedModel0km?.brandName || '',
+        marca: selectedModel0km?.brandName || '',
+        brandId: selectedModel0km?.brandId || '',
         origen: 'Entrega de Usado (Parte de Pago)',
         concesionariaDestino: cleanDestino,
         tradeInData: {
@@ -1259,14 +1263,22 @@ export default function EntregarUsadoPage() {
                       <label className="text-[10px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1.5">
                         Teléfono / WhatsApp (Paraguay) *
                       </label>
-                      <input
-                        type="tel"
-                        required
-                        placeholder="Ej: 0981123456"
-                        value={telefono}
-                        onChange={handlePhoneChange}
-                        className="w-full bg-[#F8F9FA] border-2 border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF] rounded-xl px-4 py-3.5 text-sm font-bold text-[#0A1F33] focus:outline-none"
-                      />
+                      <div className="flex rounded-xl overflow-hidden border-2 border-[#0A1F33]/15 bg-[#F8F9FA] focus-within:bg-[#FFFFFF] focus-within:border-[#00BFFF] transition-all">
+                        <div className="bg-[#EDF2F7] border-r border-[#0A1F33]/15 px-3.5 py-3.5 flex items-center gap-1.5 text-xs font-bold text-[#0A1F33] select-none shrink-0">
+                          <span className="text-sm">🇵🇾</span>
+                          <span>+595</span>
+                        </div>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={9}
+                          required
+                          placeholder="981 123 456"
+                          value={telefono}
+                          onChange={handlePhoneChange}
+                          className="w-full px-4 py-3.5 text-sm font-bold text-[#0A1F33] focus:outline-none bg-transparent"
+                        />
+                      </div>
                     </div>
                   </div>
 
