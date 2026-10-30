@@ -18,15 +18,26 @@ export interface NormalizedPhone {
  * Sanitiza la entrada en tiempo real:
  * - Filtra caracteres no numéricos.
  * - Si pegan con prefijo '595', lo remueve.
- * - Si pegan con el '0' inicial (ej: 0981...), lo remueve para adaptarse al prefijo visual +595.
- * - Limita estrictamente a 9 dígitos máximos.
+ * - Si empiezan escribiendo con '0' (ej: 0981...), remueve el 0 inicial inmediatamente
+ *   para que nunca se trunque el último dígito al llegar a 9 caracteres.
+ * - Limita estrictamente a 9 dígitos máximos (ej: 981234567).
  */
 export function sanitizePhonePY(raw: string): string {
   if (!raw) return '';
   let digits = raw.replace(/\D/g, '');
   if (digits.startsWith('595')) digits = digits.slice(3);
-  if (digits.startsWith('09')) digits = digits.slice(1);
+  while (digits.startsWith('0')) digits = digits.slice(1);
   return digits.slice(0, 9);
+}
+
+/**
+ * Formatea visualmente los dígitos para fácil lectura en el input (ej: 981 234 567)
+ */
+export function formatPhonePYDisplay(raw: string): string {
+  const d = sanitizePhonePY(raw);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)} ${d.slice(3)}`;
+  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)}`;
 }
 
 /**

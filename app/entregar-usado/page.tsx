@@ -9,7 +9,7 @@ import { getCachedBrands, getCachedModels, getCachedVersions } from '../../lib/c
 import { isOptimizableImageSrc, isValidImageSrc } from '../../lib/imageSrc';
 import { resolveModelDealership, sanitizeDealershipName } from '../../lib/dealerships';
 import { sendLeadNotificationEmail } from '../../lib/mailer';
-import { sanitizePhonePY, validatePhonePY } from '../../lib/phone';
+import { sanitizePhonePY, validatePhonePY, formatPhonePYDisplay } from '../../lib/phone';
 import Navbar, { NavItem } from '../components/Navbar';
 
 const NAV_ITEMS: NavItem[] = [
@@ -1271,10 +1271,11 @@ export default function EntregarUsadoPage() {
                         <input
                           type="tel"
                           inputMode="numeric"
-                          maxLength={9}
+                          autoComplete="tel-national"
+                          maxLength={14}
                           required
-                          placeholder="981 123 456"
-                          value={telefono}
+                          placeholder="0981 123 456"
+                          value={formatPhonePYDisplay(telefono)}
                           onChange={handlePhoneChange}
                           className="w-full px-4 py-3.5 text-sm font-bold text-[#0A1F33] focus:outline-none bg-transparent"
                         />

@@ -21,7 +21,7 @@ import { useToast } from '../context/ToastContext';
 import { useLead } from '../context/LeadContext';
 import { track } from '../../lib/analytics';
 import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
-import { sanitizePhonePY, validatePhonePY } from '../../lib/phone';
+import { sanitizePhonePY, validatePhonePY, formatPhonePYDisplay } from '../../lib/phone';
 
 // ==========================================
 // UTILIDADES Y DICCIONARIOS B2B
@@ -177,6 +177,7 @@ export default function RecomendadorPage() {
 
 
   const [leadForm, setLeadForm] = useState({ nombre: '', telefono: '', email: '' });
+  const [useEmailInWizard, setUseEmailInWizard] = useState<boolean>(false);
   const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
   const [contactRequested, setContactRequested] = useState<boolean>(false);
   const [contactedDealer, setContactedDealer] = useState<string>('');
@@ -591,10 +592,12 @@ export default function RecomendadorPage() {
   // 3. LÓGICA DE NAVEGACIÓN Y RESPUESTAS
   // ==========================================
   const handleAnswerClick = (questionId: string, value: string, isMultiple: boolean) => {
+    const isLastWizardStep = step === WIZARD_STEPS.length;
+    const targetNextStep = isLastWizardStep ? WIZARD_STEPS.length + 2 : step + 1;
     if (!isMultiple) {
       setAnswers(prev => ({ ...prev, [questionId]: value }));
       // UX Tweak: Retraso para que el usuario perciba que se guardó el click
-      setTimeout(() => setStep(step + 1), 300);
+      setTimeout(() => setStep(targetNextStep), 250);
     } else {
       setAnswers(prev => {
         const currentAnswers = prev[questionId] || [];
@@ -614,7 +617,8 @@ export default function RecomendadorPage() {
   const advanceMultiple = (questionId: string) => {
     const current = answers[questionId];
     if (!current || current.length === 0) setAnswers(prev => ({ ...prev, [questionId]: ['any'] }));
-    setStep(step + 1);
+    const isLastWizardStep = step === WIZARD_STEPS.length;
+    setStep(isLastWizardStep ? WIZARD_STEPS.length + 2 : step + 1);
   };
 
   // ==========================================
@@ -1690,6 +1694,14 @@ export default function RecomendadorPage() {
     return finalMatches;
   };
 
+  // Pre-calcular los matches apenas el usuario llega al paso de desbloqueo para poder mostrarle el Teaser visual real
+  useEffect(() => {
+    if (step === WIZARD_STEPS.length + 2 && rawModels.length > 0) {
+      runAlgorithm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, rawModels.length]);
+
   // ==========================================
   // 5. LEAD CAPTURE (EL GATILLO B2B)
   // ==========================================
@@ -1698,36 +1710,47 @@ export default function RecomendadorPage() {
     track('lead_submit_attempt', { origen: 'Recomendador Interactivo', requestOfficialContact });
     setFeedback({ type: '', message: '' });
     
-    const phoneValidation = validatePhonePY(leadForm.telefono);
-    if (!phoneValidation.valid) {
-      track('lead_submit_error', { origen: 'Recomendador Interactivo', motivo: 'telefono_invalido' });
-      setFeedback({ 
-        type: 'error', 
-        message: phoneValidation.error || 'Tenés que cargar un número telefónico válido' 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailIngresado = leadForm.email.trim();
+    let cleanPhone = 'No proporcionado';
+
+    if (leadForm.nombre.trim().length < 2) {
+      track('lead_submit_error', { origen: 'Recomendador Interactivo', motivo: 'nombre_vacio' });
+      setFeedback({
+        type: 'error',
+        message: 'Por favor ingresá tu nombre para personalizar tus resultados.'
       });
       return;
     }
-    const cleanPhone = phoneValidation.canonical;
 
-    // Validación exitosa: Iniciar inmediatamente el efecto Labor Illusion y procesar en segundo plano
+    if (!useEmailInWizard) {
+      const phoneValidation = validatePhonePY(leadForm.telefono);
+      if (!phoneValidation.valid) {
+        track('lead_submit_error', { origen: 'Recomendador Interactivo', motivo: 'telefono_invalido' });
+        setFeedback({ 
+          type: 'error', 
+          message: 'Ingresá tu celular (ej: 0981 123 456) para desbloquear tus 3 autos.' 
+        });
+        return;
+      }
+      cleanPhone = phoneValidation.canonical;
+    } else {
+      if (!emailIngresado || !emailRegex.test(emailIngresado)) {
+        track('lead_submit_error', { origen: 'Recomendador Interactivo', motivo: 'email_invalido' });
+        setFeedback({ type: 'error', message: 'Ingresá un correo electrónico válido para desbloquear tus 3 autos.' });
+        return;
+      }
+    }
+
+    // Validación exitosa: Calculamos y revelamos sin demoras innecesarias
     setIsSubmittingLead(true);
     setIsAnalyzingMarket(true);
     const animStartTime = Date.now();
 
-    // Nombre y email son opcionales (menos fricción para ver resultados). El email
-    // solo se valida si el usuario decidió cargarlo -- sirve para enviarle el PDF.
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const emailIngresado = leadForm.email.trim();
-    if (emailIngresado && !emailRegex.test(emailIngresado)) {
-      track('lead_submit_error', { origen: 'Recomendador Interactivo', motivo: 'email_invalido' });
-      setFeedback({ type: 'error', message: 'El correo no parece válido. Podés dejarlo vacío si preferís.' });
-      setIsSubmittingLead(false); return;
-    }
-
-    const nombreLead = leadForm.nombre.trim() || 'Sin nombre (Recomendador)';
+    const nombreLead = leadForm.nombre.trim() || 'Usuario Recomendador';
 
     try {
-      const finalTop3 = runAlgorithm();
+      const finalTop3 = topMatches.length >= 3 ? topMatches : runAlgorithm();
       const topWinner = finalTop3[0];
       const winnerDealerRaw = topWinner ? sanitizeDealershipName(topWinner.concesionaria) : '';
       const dealerDestino = requestOfficialContact && winnerDealerRaw ? winnerDealerRaw : 'A designar (Central DATACAR)';
@@ -1797,10 +1820,10 @@ export default function RecomendadorPage() {
 
       track('lead_submit_success', { origen: 'Recomendador Interactivo', canal: 'wizard', contacto: false });
 
-      // Disparo de correo B2B inicial: Perfilado con las 3 opciones recomendadas, sin asignación de marca/modelo (va a Central DATACAR / Aldo)
-      await sendLeadNotificationEmail({
+      // Disparo de correo B2B inicial en segundo plano (sin bloquear la transición del usuario)
+      sendLeadNotificationEmail({
         leadName: nombreLead,
-        leadPhone: leadForm.telefono,
+        leadPhone: cleanPhone,
         leadEmail: emailIngresado || 'No proporcionado',
         vehicleOfInterest: 'Perfilado por el recomendador interactivo',
         origen: 'Recomendador Interactivo',
@@ -1813,22 +1836,22 @@ export default function RecomendadorPage() {
           matchPercentage: m.matchPercentage,
           badge: m.badge,
         })),
-      });
+      }).catch(err => console.warn('Error correo B2B:', err));
 
       if (emailIngresado) {
-        await sendRecommendationResultsEmail(emailIngresado, finalTop3.map(m => ({
+        sendRecommendationResultsEmail(emailIngresado, finalTop3.map(m => ({
           brandName: m.brandName, modelName: m.modelName, startingPrice: m.startingPrice,
           matchPercentage: m.matchPercentage, badge: m.badge, brandId: m.brandId, modelId: m.id
-        })));
+        }))).catch(err => console.warn('Error correo resultados:', err));
       }
-      // Garantizar un tiempo mínimo visual de 1.8s para el Labor Illusion
+      // Transición ágil (0.7s) y salto directo a la Comparativa Completa de los 3 modelos (sin obligar 3 pantallas intermedias)
       const elapsed = Date.now() - animStartTime;
-      const remainingTime = Math.max(0, 1800 - elapsed);
+      const remainingTime = Math.max(0, 700 - elapsed);
       if (remainingTime > 0) {
         await new Promise(res => setTimeout(res, remainingTime));
       }
       setIsAnalyzingMarket(false);
-      setStep(WIZARD_STEPS.length + 3); // Salta a Resultados
+      setStep(WIZARD_STEPS.length + 6); // Salta directo a la Comparativa General de las 3 opciones
     } catch (error) {
       console.error('Error guardando el lead del recomendador:', error);
       setIsAnalyzingMarket(false);
@@ -1851,12 +1874,13 @@ export default function RecomendadorPage() {
     const dealerNorm = dealerName ? dealerName.toUpperCase().trim() : 'A DESIGNAR';
     const vehiculoName = `${targetModel.brandName} ${targetModel.modelName}`;
 
-    // 1. Transición instantánea (0ms): marcamos el auto como pedido y avanzamos inmediatamente
+    // 1. Transición instantánea (0ms): marcamos el auto como pedido y mostramos notificación inmediata
     setContactRequested(true);
     setContactedDealer(dealerName);
     setContactedVehicle(vehiculoName);
     setContactedModelIds(prev => Array.from(new Set([...prev, targetModel.id])));
     setPendingCardConfirm(null);
+    showToast(`¡Listo! Solicitamos tu Test Drive del ${vehiculoName} a ${dealerName || 'la concesionaria oficial'}.`);
 
     if (nextStep !== undefined) {
       setStep(nextStep);
@@ -1866,8 +1890,8 @@ export default function RecomendadorPage() {
     try {
       await addDoc(collection(db, 'leads'), {
         nombre: leadForm.nombre.trim() || 'Interesado Recomendador',
-        email: leadForm.email.trim(),
-        telefono: leadForm.telefono.trim(),
+        email: leadForm.email.trim() || 'No proporcionado',
+        telefono: leadForm.telefono.trim() ? `0${leadForm.telefono.trim()}` : 'No proporcionado',
         tipo_gestion: 'Test Drive Oficial',
         origen: 'Recomendador - Solicitud de Test Drive',
         concesionaria_destino: dealerName || 'A designar (Central DATACAR)',
@@ -1889,8 +1913,8 @@ export default function RecomendadorPage() {
       });
 
       sendLeadNotificationEmail({
-        leadName: leadForm.nombre.trim() || 'Sin nombre (Recomendador)',
-        leadPhone: leadForm.telefono,
+        leadName: leadForm.nombre.trim() || 'Usuario Recomendador',
+        leadPhone: leadForm.telefono.trim() ? `0${leadForm.telefono.trim()}` : 'No proporcionado',
         leadEmail: leadForm.email.trim() || 'No proporcionado',
         vehicleOfInterest: `${vehiculoName} (Solicitud de Test Drive)`,
         brandOfInterest: targetModel.brandName,
@@ -1913,8 +1937,9 @@ export default function RecomendadorPage() {
   };
 
   const handleCardDealerClick = (model: ScoredModel) => {
-    if (createdLeadId) {
-      setPendingCardConfirm(model);
+    // Si ya ingresó su teléfono o correo en el paso de desbloqueo, disparamos directo en 1 clic sin volver a preguntar
+    if (createdLeadId || leadForm.telefono.trim() || leadForm.email.trim()) {
+      handleAuthorizeDealerContact(model);
     } else {
       openLeadModal({
         vehiculoInteres: `${model.brandName} ${model.modelName}`,
@@ -2094,7 +2119,7 @@ export default function RecomendadorPage() {
                   >
                     Continuar →
                   </button>
-                  <button onClick={() => { setAnswers(prev => ({...prev, [WIZARD_STEPS[step-1].id]: ['any']})); setStep(step+1); }} className="block mx-auto mt-4 text-[10px] text-[#C0C0C0] hover:text-[#0A1F33] font-bold uppercase tracking-widest underline">
+                  <button onClick={() => { setAnswers(prev => ({...prev, [WIZARD_STEPS[step-1].id]: ['any']})); setStep(step === WIZARD_STEPS.length ? WIZARD_STEPS.length + 2 : step + 1); }} className="block mx-auto mt-4 text-[10px] text-[#C0C0C0] hover:text-[#0A1F33] font-bold uppercase tracking-widest underline">
                     Saltar pregunta
                   </button>
                 </div>
@@ -2234,107 +2259,162 @@ export default function RecomendadorPage() {
       )}
 
       {/* ==========================================
-          PASO 11: REVELACIÓN INTELIGENTE (FORMULARIO CLEAN / MINIMALISTA)
+          PASO 11: FORMULARIO SIMPLE COMO ÚLTIMO PASO DEL WIZARD
           ========================================== */}
       {!isAnalyzingMarket && step === WIZARD_STEPS.length + 2 && (
-        <section className="flex-grow flex flex-col items-center justify-center p-4 py-16">
-          <div className="max-w-md w-full bg-[#FFFFFF] border border-[#0A1F33]/10 p-8 md:p-10 rounded-3xl shadow-xl">
-            <div className="flex items-center justify-between mb-8">
-              <button 
-                onClick={() => setStep(WIZARD_STEPS.length + 1)} 
-                className="flex items-center gap-1.5 text-[11px] font-bold text-[#71717A] hover:text-[#0A1F33] transition-colors uppercase tracking-wider"
+        <section className="flex-grow flex flex-col">
+          {/* Misma Barra de Progreso del Wizard */}
+          <div className="w-full bg-[#FFFFFF]/95 backdrop-blur-md py-6 px-4 md:px-8 border-b border-[#0A1F33]/10 flex flex-col items-center shadow-xs">
+            <div className="max-w-3xl w-full flex justify-between items-center mb-2.5">
+              <button
+                onClick={() => setStep(WIZARD_STEPS.length)}
+                className="flex items-center gap-1.5 text-[10px] font-bold text-[#3A3A3C] hover:text-[#0A1F33] uppercase tracking-widest border-none outline-none transition-colors px-2 py-1 rounded-lg hover:bg-[#F8F9FA] cursor-pointer"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
-                Volver
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg> Volver
               </button>
-              <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest bg-[#00BFFF]/10 px-3 py-1 rounded-full">
-                DATACAR ENGINE
+              <span className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">Último paso</span>
+              <span className="text-[10px] font-bold text-[#1E8E3E] uppercase tracking-widest bg-[#E6F4EA] px-2.5 py-0.5 rounded-full border border-[#1E8E3E]/25">
+                ✓ Listo
               </span>
             </div>
-
-            <div className="text-center mb-8">
-              <h2 className="font-black text-2xl md:text-3xl text-[#0A1F33] uppercase leading-tight mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-                Tu recomendación <br/><span className="text-[#00BFFF]">está lista</span>
-              </h2>
-              <p className="text-xs text-[#71717A] font-medium leading-relaxed max-w-xs mx-auto">
-                Ingresá tu número para acceder a tus 3 modelos compatibles y recibir tu informe de mercado.
-              </p>
+            <div className="max-w-3xl w-full h-2.5 bg-[#F0F4F8] rounded-full overflow-hidden">
+              <div className="h-full bg-[#00BFFF] transition-all duration-300 rounded-full" style={{ width: '100%' }}></div>
             </div>
+          </div>
 
-            <form onSubmit={(e) => submitLeadAndShowResults(e, false)} className="flex flex-col gap-4">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[#0A1F33] block mb-1.5">
-                  Número de Celular <span className="text-[#00BFFF]">*</span>
-                </label>
-                <div className="flex rounded-2xl overflow-hidden border border-[#E2E8F0] bg-[#F8FAFC] focus-within:bg-white focus-within:border-[#00BFFF] focus-within:ring-4 focus-within:ring-[#00BFFF]/10 transition-all">
-                  <div className="bg-[#EDF2F7] border-r border-[#E2E8F0] px-3.5 py-3.5 flex items-center gap-1.5 text-xs font-bold text-[#0A1F33] select-none shrink-0">
-                    <span className="text-sm">🇵🇾</span>
-                    <span>+595</span>
-                  </div>
-                  <input 
-                    type="tel" 
-                    inputMode="numeric"
-                    maxLength={9}
-                    aria-label="Celular" 
-                    placeholder="981 234 567" 
-                    className="w-full p-3.5 text-xs text-[#0A1F33] focus:outline-none bg-transparent font-medium" 
-                    required 
-                    value={leadForm.telefono} 
-                    onChange={e => {
-                      const val = sanitizePhonePY(e.target.value);
-                      setLeadForm({...leadForm, telefono: val});
-                    }} 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[#71717A] block mb-1.5">
-                  Nombre (Opcional)
-                </label>
-                <input 
-                  type="text" 
-                  aria-label="Nombre" 
-                  placeholder="Tu nombre o alias" 
-                  className="w-full border border-[#E2E8F0] p-3.5 text-xs text-[#0A1F33] focus:outline-none focus:bg-white focus:border-[#00BFFF] focus:ring-4 focus:ring-[#00BFFF]/10 bg-[#F8FAFC] rounded-2xl transition-all" 
-                  value={leadForm.nombre} 
-                  onChange={e=>setLeadForm({...leadForm, nombre: e.target.value})} 
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[#71717A] block mb-1.5">
-                  Email (Opcional)
-                </label>
-                <input 
-                  type="email" 
-                  aria-label="Correo electrónico" 
-                  placeholder="Para enviarte copia del informe" 
-                  className="w-full border border-[#E2E8F0] p-3.5 text-xs text-[#0A1F33] focus:outline-none focus:bg-white focus:border-[#00BFFF] focus:ring-4 focus:ring-[#00BFFF]/10 bg-[#F8FAFC] rounded-2xl transition-all" 
-                  value={leadForm.email} 
-                  onChange={e=>setLeadForm({...leadForm, email: e.target.value})} 
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={isSubmittingLead} 
-                className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-all duration-200 mt-2 disabled:opacity-50 flex items-center justify-center gap-2 rounded-2xl shadow-md hover:shadow-xl hover:-translate-y-0.5 cursor-pointer group"
-              >
-                <span>{isSubmittingLead ? 'Analizando catálogo...' : 'Ver mis sugerencias →'}</span>
-                <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-              </button>
-
-              <p className="text-[10px] text-center text-[#9CA3AF] tracking-wider mt-2 flex items-center justify-center gap-1.5">
-                <span>🔒</span> Datos 100% protegidos. Sin spam.
-              </p>
-              
-              {feedback.message && (
-                <p className={`text-[10px] text-center font-bold uppercase tracking-widest mt-2 ${feedback.type==='error'?'text-[#D93025]':'text-[#00BFFF]'}`}>
-                  {feedback.message}
+          {/* Cuerpo estilo pregunta final del Wizard */}
+          <div className="flex-grow flex flex-col items-center justify-start pt-8 sm:pt-12 p-4">
+            <div className="max-w-3xl w-full">
+              <div className="mb-6 sm:mb-8 text-center">
+                <h2 className="font-black text-2xl sm:text-4xl text-[#0A1F33] mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  Desbloqueá tus <span className="text-[#00BFFF]">3 autos ideales</span>
+                </h2>
+                <p className="text-xs sm:text-sm text-[#71717A] font-medium">
+                  Completá tus datos para ver tu recomendación personalizada.
                 </p>
-              )}
-            </form>
+              </div>
+
+              <div className="w-full bg-[#FFFFFF] border border-[#0A1F33]/12 p-5 sm:p-8 rounded-2xl shadow-sm">
+                <form onSubmit={(e) => submitLeadAndShowResults(e, false)} className="flex flex-col gap-3" noValidate>
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    
+                    {/* CAMPO 1: NOMBRE (4 COLUMNAS) */}
+                    <div className="md:col-span-4">
+                      <label htmlFor="wizard-name-input" className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33] block mb-1">
+                        Tu Nombre *
+                      </label>
+                      <input
+                        id="wizard-name-input"
+                        type="text"
+                        autoComplete="name"
+                        required
+                        placeholder="Ej: Juan Pérez"
+                        value={leadForm.nombre}
+                        onChange={e => {
+                          setLeadForm({ ...leadForm, nombre: e.target.value });
+                          if (feedback.message) setFeedback({ type: '', message: '' });
+                        }}
+                        className="w-full border-2 border-[#0A1F33]/15 px-3.5 py-3 text-sm text-[#0A1F33] font-bold focus:outline-none focus:bg-white focus:border-[#00BFFF] bg-[#F8FAFC] rounded-xl transition-all placeholder:font-normal placeholder:text-[#9CA3AF]"
+                      />
+                    </div>
+
+                    {/* CAMPO 2: WHATSAPP O CORREO (5 COLUMNAS) */}
+                    <div className="md:col-span-5">
+                      {!useEmailInWizard ? (
+                        <>
+                          <div className="flex items-center justify-between mb-1">
+                            <label htmlFor="wizard-phone-input" className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                              Tu WhatsApp *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => { setUseEmailInWizard(true); setFeedback({ type: '', message: '' }); }}
+                              className="text-[9.5px] font-bold text-[#71717A] hover:text-[#00BFFF] underline cursor-pointer"
+                            >
+                              Usar correo
+                            </button>
+                          </div>
+                          <div className="flex rounded-xl overflow-hidden border-2 border-[#0A1F33]/15 bg-[#F8FAFC] focus-within:bg-white focus-within:border-[#00BFFF] transition-all">
+                            <div className="bg-[#EDF2F7] border-r border-[#E2E8F0] px-3 py-3 flex items-center gap-1 text-xs font-bold text-[#0A1F33] select-none shrink-0">
+                              <span>🇵🇾</span>
+                              <span>+595</span>
+                            </div>
+                            <input 
+                              id="wizard-phone-input"
+                              type="tel" 
+                              inputMode="numeric"
+                              autoComplete="tel-national"
+                              maxLength={14}
+                              aria-label="Celular" 
+                              placeholder="0981 234 567" 
+                              className="w-full px-3.5 py-3 text-sm text-[#0A1F33] focus:outline-none bg-transparent font-black tracking-wide placeholder:font-normal placeholder:text-[#9CA3AF]" 
+                              required 
+                              value={formatPhonePYDisplay(leadForm.telefono)} 
+                              onChange={e => {
+                                const val = sanitizePhonePY(e.target.value);
+                                setLeadForm({...leadForm, telefono: val});
+                                if (feedback.message) setFeedback({ type: '', message: '' });
+                              }} 
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between mb-1">
+                            <label htmlFor="wizard-email-input" className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                              Tu Correo *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => { setUseEmailInWizard(false); setFeedback({ type: '', message: '' }); }}
+                              className="text-[9.5px] font-bold text-[#00BFFF] hover:text-[#0A1F33] underline cursor-pointer"
+                            >
+                              Usar WhatsApp
+                            </button>
+                          </div>
+                          <input 
+                            id="wizard-email-input"
+                            type="email" 
+                            autoComplete="email"
+                            aria-label="Correo electrónico" 
+                            placeholder="tu@correo.com" 
+                            className="w-full border-2 border-[#0A1F33]/15 px-3.5 py-3 text-sm text-[#0A1F33] font-bold focus:outline-none focus:bg-white focus:border-[#00BFFF] bg-[#F8FAFC] rounded-xl transition-all" 
+                            required
+                            value={leadForm.email} 
+                            onChange={e => {
+                              setLeadForm({...leadForm, email: e.target.value});
+                              if (feedback.message) setFeedback({ type: '', message: '' });
+                            }} 
+                          />
+                        </>
+                      )}
+                    </div>
+
+                    {/* BOTÓN DE ACCIÓN (3 COLUMNAS) */}
+                    <div className="md:col-span-3">
+                      <button 
+                        type="submit" 
+                        disabled={isSubmittingLead} 
+                        className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-black text-xs uppercase tracking-widest py-3.5 px-5 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 rounded-xl shadow-md hover:shadow-lg cursor-pointer h-[48px]"
+                      >
+                        <span>{isSubmittingLead ? 'Abriendo...' : 'Ver mis 3 autos →'}</span>
+                      </button>
+                    </div>
+
+                  </div>
+
+                  {feedback.message && (
+                    <p className={`text-[11px] text-center font-bold bg-[#FCE8E6] border border-[#D93025]/30 py-2 px-3 rounded-xl mt-1 ${feedback.type==='error'?'text-[#D93025]':'text-[#00BFFF]'}`}>
+                      {feedback.message}
+                    </p>
+                  )}
+
+                  <p className="text-[10px] text-center md:text-left text-[#71717A] font-medium pt-1">
+                    🔒 100% gratis y sin llamadas de vendedores.
+                  </p>
+                </form>
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -2636,64 +2716,31 @@ export default function RecomendadorPage() {
           ========================================== */}
       {step === WIZARD_STEPS.length + 6 && (
         <section className="flex-grow w-full pb-20">
-          <div className="w-full bg-[#FFFFFF] border-b border-[#0A1F33]/10 py-12 px-4 text-center shadow-xs">
-            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-2">100% Sin Costo • Precios Oficiales de Concesionaria</span>
-            <h2 className="font-black text-3xl md:text-4xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-              Elegidos por <span className="text-[#00BFFF]">DATACAR</span>
-            </h2>
-            <p className="text-xs text-[#3A3A3C] font-medium max-w-lg mx-auto mt-2">
-              Comparamos fichas técnicas sin costo y te conectamos directo con el concesionario oficial de cada marca, sin recargos ni comisiones.
-            </p>
+          {/* BARRA SUPERIOR COMPACTA: VER OPCIONES SIMILARES (EN LUGAR DE ELEGIDOS POR DATACAR) */}
+          <div className="w-full bg-[#FFFFFF] border-b border-[#0A1F33]/10 py-3.5 px-4 shadow-xs">
+            <div className="max-w-[1200px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 text-center sm:text-left">
+                <span className="inline-block w-2 h-2 rounded-full bg-[#00BFFF] shrink-0 hidden sm:inline-block"></span>
+                <span className="text-xs sm:text-sm font-black text-[#0A1F33] uppercase tracking-wide" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  Tus 3 Recomendaciones Ideales
+                </span>
+                <span className="hidden md:inline-block text-[10px] font-bold text-[#71717A] uppercase tracking-widest">
+                  • Precios Oficiales
+                </span>
+              </div>
+              <Link
+                href={buildCatalogoSimilarUrl()}
+                className="inline-flex items-center justify-center gap-2 bg-[#0A1F33] hover:bg-[#00BFFF] text-[#FFFFFF] hover:text-[#0A1F33] font-bold text-[10px] uppercase tracking-widest py-2 px-4 rounded-xl transition-all duration-200 shadow-xs group shrink-0"
+              >
+                <span>Ver opciones similares en el catálogo</span>
+                <svg className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </Link>
+            </div>
           </div>
 
-          <div className="max-w-[1200px] mx-auto px-4 lg:px-8 mt-12">
-
-            {/* ESTADO 1: CONTACTO OFICIAL CONFIRMADO */}
-            {contactRequested && topMatches[0] && (
-              <div className="mb-10 bg-[#E6F4EA] border border-[#1E8E3E]/40 p-6 md:p-8 rounded-2xl shadow-sm text-center">
-                <span className="text-2xl block mb-2">🎉</span>
-                <h3 className="text-base md:text-lg font-black text-[#1E8E3E] uppercase tracking-wide" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-                  Solicitud de contacto oficial enviada
-                </h3>
-                <p className="text-xs text-[#1E8E3E]/90 mt-2 max-w-xl mx-auto leading-relaxed">
-                  Ya solicitamos que un asesor oficial de <strong>{contactedDealer || sanitizeDealershipName(topMatches[0].concesionaria) || 'la concesionaria'}</strong> se comunique contigo al <strong>{leadForm.telefono}</strong> con cotización directa y promociones para el <strong>{contactedVehicle || `${topMatches[0].brandName} ${topMatches[0].modelName}`}</strong>.
-                </p>
-              </div>
-            )}
-
-            {/* ESTADO 2: CTA CONTUNDENTE SI NO SOLICITÓ CONTACTO AÚN */}
-            {!contactRequested && !dismissedContactBanner && topMatches[0] && (
-              <div className="mb-10 bg-gradient-to-r from-[#0A1F33] via-[#0D2B45] to-[#0A1F33] text-white p-6 md:p-8 rounded-2xl shadow-xl border border-[#00BFFF]/30 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex-1 text-center md:text-left">
-                  <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">
-                    ¿Te interesa tu opción más recomendada?
-                  </span>
-                  <h3 className="font-black text-xl md:text-2xl uppercase leading-tight" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-                    Quiero que {sanitizeDealershipName(topMatches[0].concesionaria) ? `la concesionaria oficial (${sanitizeDealershipName(topMatches[0].concesionaria)})` : 'la concesionaria oficial'} me contacte
-                  </h3>
-                  <p className="text-xs text-white/80 mt-2 max-w-xl leading-relaxed">
-                    Te conectamos directo con el concesionario oficial de tu <strong>{topMatches[0].brandName} {topMatches[0].modelName}</strong> para negociar precio y entrega a tu número <strong>{leadForm.telefono}</strong>. Sin costo y sin intermediarios.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 shrink-0 w-full md:w-auto">
-                  <button
-                    type="button"
-                    disabled={isUpdatingContact}
-                    onClick={() => handleAuthorizeDealerContact(topMatches[0])}
-                    className="bg-[#00BFFF] hover:bg-white hover:text-[#0A1F33] text-white font-bold text-xs uppercase tracking-widest px-6 py-4 rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    {isUpdatingContact ? 'Enviando...' : 'Quiero que me contacten'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDismissedContactBanner(true)}
-                    className="bg-white/10 hover:bg-white/20 text-white/80 hover:text-white font-semibold text-xs uppercase tracking-widest px-5 py-4 rounded-xl transition-all duration-200 cursor-pointer"
-                  >
-                    No, mejor en otro momento
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="max-w-[1200px] mx-auto px-4 lg:px-8 mt-6 sm:mt-8">
 
             {/* TU OPCIÓN DE REFERENCIA (si eligió un modelo para comparar) */}
             {referenceMatch && (
@@ -2729,9 +2776,12 @@ export default function RecomendadorPage() {
                       <div className="flex flex-col gap-2">
                         <button
                           onClick={() => handleCardDealerClick(referenceMatch)}
-                          className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-xl shadow-sm"
+                          disabled={isUpdatingContact}
+                          className={`w-full ${contactedModelIds.includes(referenceMatch.id) ? 'bg-[#1E8E3E] hover:bg-[#156E2E]' : 'bg-[#00BFFF] hover:bg-[#0A1F33]'} text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-xl shadow-sm cursor-pointer disabled:opacity-60`}
                         >
-                          {formatHablarCon(referenceMatch.concesionaria)}
+                          {contactedModelIds.includes(referenceMatch.id)
+                            ? '✓ Test Drive Solicitado'
+                            : formatHablarCon(referenceMatch.concesionaria)}
                         </button>
                         <Link href={`/catalogo/${referenceMatch.brandId}/${referenceMatch.id}`} className="w-full text-center block bg-[#FFFFFF] border border-[#0A1F33]/20 text-[#0A1F33] hover:bg-[#F5F5F5] font-bold text-[9px] uppercase tracking-widest py-2.5 transition-colors rounded-xl">
                           Ver Detalles Técnicos
@@ -2757,25 +2807,27 @@ export default function RecomendadorPage() {
 
             {/* ALERTA DE FLEXIBILIZACIÓN INTELIGENTE / CONTINGENCIA */}
             {relaxationInfo ? (
-              <div className="bg-[#F5FBFF] border border-[#00BFFF]/40 p-5 mb-8 flex gap-4 items-start shadow-sm rounded-2xl">
-                <div className="w-7 h-7 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-full shrink-0 text-xs">ℹ️</div>
+              <div className="bg-[#F5FBFF] border border-[#00BFFF]/40 p-4 mb-6 flex gap-3 items-start shadow-xs rounded-2xl">
+                <div className="w-6 h-6 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-full shrink-0 text-xs">ℹ️</div>
                 <div>
-                  <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">Búsqueda Optimizada con Flexibilidad Inteligente</p>
+                  <p className="text-[10.5px] font-bold text-[#0A1F33] uppercase tracking-widest mb-0.5">Búsqueda Optimizada con Flexibilidad Inteligente</p>
                   <p className="text-xs text-[#3A3A3C]">{relaxationInfo.message}</p>
                 </div>
               </div>
             ) : (topMatches.length > 0 && topMatches[0].matchPercentage < 80 ? (
-              <div className="bg-[#F5FBFF] border border-[#00BFFF]/40 p-6 mb-8 flex gap-4 items-start shadow-sm rounded-2xl">
-                <div className="w-7 h-7 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-full shrink-0">!</div>
+              <div className="bg-[#F5FBFF] border border-[#00BFFF]/40 p-4 mb-6 flex gap-3 items-start shadow-xs rounded-2xl">
+                <div className="w-6 h-6 bg-[#00BFFF] text-[#FFFFFF] flex items-center justify-center font-black rounded-full shrink-0">!</div>
                 <div>
-                  <p className="text-[11px] font-bold text-[#0A1F33] uppercase tracking-widest mb-1">Ampliamos la búsqueda para mostrarte opciones</p>
+                  <p className="text-[10.5px] font-bold text-[#0A1F33] uppercase tracking-widest mb-0.5">Ampliamos la búsqueda para mostrarte opciones</p>
                   <p className="text-xs text-[#3A3A3C]">No encontramos vehículos que cumplan exactamente con el 100% de tus combinaciones excluyentes. Te mostramos las mejores alternativas viables en el país.</p>
                 </div>
               </div>
             ) : null)}
 
-            {/* MATCHES PRINCIPALES CON BADGES B2B (3 orgánicos o 4 con patrocinado) */}
-            <div className={`grid grid-cols-1 ${topMatches.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-6 mb-12`}>
+            {/* ==========================================
+                1. LAS OPCIONES (MATCHES PRINCIPALES)
+                ========================================== */}
+            <div className={`grid grid-cols-1 ${topMatches.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-6 mb-10`}>
               {topMatches.map((model) => {
                 const isSponsored = model.badge?.includes('Patrocinada');
                 return (
@@ -2859,7 +2911,8 @@ export default function RecomendadorPage() {
                       <div className="flex flex-col gap-2">
                         <button
                           onClick={() => handleCardDealerClick(model)}
-                          className={`w-full ${contactedModelIds.includes(model.id) ? 'bg-[#1E8E3E] hover:bg-[#156E2E]' : 'bg-[#00BFFF] hover:bg-[#0A1F33]'} text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-xl shadow-sm`}
+                          disabled={isUpdatingContact}
+                          className={`w-full ${contactedModelIds.includes(model.id) ? 'bg-[#1E8E3E] hover:bg-[#156E2E]' : 'bg-[#00BFFF] hover:bg-[#0A1F33]'} text-[#FFFFFF] font-bold text-[10px] uppercase tracking-widest py-3 transition-colors flex justify-center items-center gap-1 rounded-xl shadow-sm cursor-pointer disabled:opacity-60`}
                         >
                           {contactedModelIds.includes(model.id) 
                             ? '✓ Test Drive Solicitado' 
@@ -2889,32 +2942,92 @@ export default function RecomendadorPage() {
             })}
             </div>
 
-            {/* CTA PARA EXPLORAR MÁS OPCIONES SIMILARES EN CATÁLOGO */}
-            <div className="bg-gradient-to-r from-[#0A1F33] via-[#0D2840] to-[#0A1F33] border border-[#00BFFF]/30 rounded-3xl p-6 sm:p-8 text-center text-white mb-12 shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mt-8 -mr-8 w-36 h-36 bg-[#00BFFF]/10 rounded-full blur-2xl pointer-events-none"></div>
-              <div className="relative z-10 max-w-2xl mx-auto flex flex-col items-center">
-                <span className="text-[10px] font-black text-[#00BFFF] uppercase tracking-widest bg-[#00BFFF]/15 px-3.5 py-1 rounded-full mb-3 border border-[#00BFFF]/30">
-                  Catálogo Oficial DATACAR
-                </span>
-                <h3 className="font-black text-xl sm:text-2xl uppercase mb-2" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
-                  ¿Querés ver más opciones similares?
+            {/* ==========================================
+                2. BANNER "QUIERO QUE LA CONCESIONARIA SE COMUNIQUE"
+                ========================================== */}
+            {contactRequested && topMatches[0] ? (
+              <div className="mb-10 bg-[#E6F4EA] border border-[#1E8E3E]/40 p-5 md:p-6 rounded-2xl shadow-sm text-center">
+                <span className="text-xl block mb-1">🎉</span>
+                <h3 className="text-sm md:text-base font-black text-[#1E8E3E] uppercase tracking-wide" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                  Solicitud de Test Drive / Contacto Oficial enviada
                 </h3>
-                <p className="text-xs sm:text-sm text-[#C0C0C0] font-medium leading-relaxed mb-6">
-                  Seguí explorando en nuestro catálogo con tus filtros ya aplicados por silueta y rango de precios.
+                <p className="text-xs text-[#1E8E3E]/90 mt-1.5 max-w-xl mx-auto leading-relaxed">
+                  Ya solicitamos que un asesor oficial de <strong>{contactedDealer || sanitizeDealershipName(topMatches[0].concesionaria) || 'la concesionaria'}</strong> se comunique con vos {leadForm.telefono ? <>al <strong>0{leadForm.telefono}</strong></> : <>a <strong>{leadForm.email}</strong></>} para el <strong>{contactedVehicle || `${topMatches[0].brandName} ${topMatches[0].modelName}`}</strong>.
                 </p>
-                <Link
-                  href={buildCatalogoSimilarUrl()}
-                  className="inline-flex items-center justify-center gap-2 bg-[#00BFFF] hover:bg-[#FFFFFF] text-[#0A1F33] font-bold text-xs uppercase tracking-widest py-4 px-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-0.5 group"
-                >
-                  <span>Clic acá para ver opciones similares a estas recomendaciones</span>
-                  <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </Link>
               </div>
-            </div>
+            ) : (!dismissedContactBanner && topMatches[0] && (
+              <div className="mb-10 bg-gradient-to-r from-[#0A1F33] via-[#0D2B45] to-[#0A1F33] text-white p-6 md:p-8 rounded-2xl shadow-xl border border-[#00BFFF]/30 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex-1 text-center md:text-left">
+                  <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">
+                    ¿Te interesa tu opción #1 más recomendada?
+                  </span>
+                  <h3 className="font-black text-xl md:text-2xl uppercase leading-tight" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                    Quiero que {sanitizeDealershipName(topMatches[0].concesionaria) ? `la concesionaria oficial (${sanitizeDealershipName(topMatches[0].concesionaria)})` : 'la concesionaria oficial'} se comunique
+                  </h3>
+                  <p className="text-xs text-white/80 mt-2 max-w-xl leading-relaxed">
+                    Te conectamos con 1 clic con el concesionario oficial de tu <strong>{topMatches[0].brandName} {topMatches[0].modelName}</strong> para coordinar Test Drive o cotización directa {leadForm.telefono ? <>a tu número <strong>0{leadForm.telefono}</strong></> : <>a tu correo <strong>{leadForm.email}</strong></>}. Sin costo y sin intermediarios.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 shrink-0 w-full md:w-auto">
+                  <button
+                    type="button"
+                    disabled={isUpdatingContact}
+                    onClick={() => handleAuthorizeDealerContact(topMatches[0])}
+                    className="bg-[#00BFFF] hover:bg-white hover:text-[#0A1F33] text-white font-bold text-xs uppercase tracking-widest px-6 py-4 rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isUpdatingContact ? 'Enviando...' : 'Quiero que me contacten'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDismissedContactBanner(true)}
+                    className="bg-white/10 hover:bg-white/20 text-white/80 hover:text-white font-semibold text-xs uppercase tracking-widest px-5 py-4 rounded-xl transition-all duration-200 cursor-pointer"
+                  >
+                    No, en otro momento
+                  </button>
+                </div>
+              </div>
+            ))}
 
-            {/* ESPACIO #4: BANNER RECOMENDADOR (1200x400 de anunciante o pauta automática DATACAR) */}
+            {/* ==========================================
+                3. OTRAS OPCIONES VIABLES (RUNNER-UPS)
+                ========================================== */}
+            {otherMatches.length > 0 && (
+              <div className="mb-10">
+                <h3 className="font-bold text-[#3A3A3C] text-sm uppercase tracking-widest mb-6 border-b border-[#0A1F33]/10 pb-2">Otras opciones viables</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {otherMatches.map(auto => (
+                    <div key={`other_${auto.id}`} className="bg-[#FFFFFF] border border-[#0A1F33]/10 flex flex-row hover:border-[#00BFFF] transition-all duration-200 group h-32 rounded-2xl shadow-sm hover:shadow-md overflow-hidden">
+                      <div className="relative w-1/3 h-full p-2 border-r border-[#0A1F33]/5 bg-[#F8F9FA]">
+                        {isValidImageSrc(auto.imgUrl) ? (
+                          <Image
+                            src={auto.imgUrl}
+                            alt={auto.modelName}
+                            fill
+                            sizes="(max-width: 768px) 33vw, 16vw"
+                            className="object-contain p-2 group-hover:scale-105 transition-transform"
+                            unoptimized={!isOptimizableImageSrc(auto.imgUrl)}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
+                        )}
+                      </div>
+                      <div className="w-2/3 p-4 flex flex-col justify-center">
+                         <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{auto.brandName}</p>
+                         <h4 className="font-black text-sm text-[#0A1F33] uppercase leading-tight mb-1 truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.modelName}</h4>
+                         <span className="font-black text-xs text-[#0A1F33] mt-2">Desde US$ {auto.startingPrice.toLocaleString()}</span>
+                         <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="text-[9px] font-bold text-[#00BFFF] hover:text-[#0A1F33] uppercase tracking-widest mt-1 underline transition-colors">
+                           Ver Detalles Técnicos →
+                         </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ==========================================
+                4. BANNER SERVICIO DATACAR (O PAUTA)
+                ========================================== */}
             {smartAd ? (() => {
               const targetUrl = normalizeExternalUrl(smartAd.ctaUrl || smartAd.link);
               const isClickable = targetUrl !== '#';
@@ -3003,41 +3116,6 @@ export default function RecomendadorPage() {
               </div>
             )}
 
-            {/* RUNNER-UPS (OTRAS OPCIONES - HORIZONTAL CONTEMPORÁNEO) */}
-            {otherMatches.length > 0 && (
-              <div className="mb-12">
-                <h3 className="font-bold text-[#3A3A3C] text-sm uppercase tracking-widest mb-6 border-b border-[#0A1F33]/10 pb-2">Otras opciones viables</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {otherMatches.map(auto => (
-                    <div key={`other_${auto.id}`} className="bg-[#FFFFFF] border border-[#0A1F33]/10 flex flex-row hover:border-[#00BFFF] transition-all duration-200 group h-32 rounded-2xl shadow-sm hover:shadow-md overflow-hidden">
-                      <div className="relative w-1/3 h-full p-2 border-r border-[#0A1F33]/5 bg-[#F8F9FA]">
-                        {isValidImageSrc(auto.imgUrl) ? (
-                          <Image
-                            src={auto.imgUrl}
-                            alt={auto.modelName}
-                            fill
-                            sizes="(max-width: 768px) 33vw, 16vw"
-                            className="object-contain p-2 group-hover:scale-105 transition-transform"
-                            unoptimized={!isOptimizableImageSrc(auto.imgUrl)}
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest">Sin Imagen</div>
-                        )}
-                      </div>
-                      <div className="w-2/3 p-4 flex flex-col justify-center">
-                         <p className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-widest truncate">{auto.brandName}</p>
-                         <h4 className="font-black text-sm text-[#0A1F33] uppercase leading-tight mb-1 truncate" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>{auto.modelName}</h4>
-                         <span className="font-black text-xs text-[#0A1F33] mt-2">Desde US$ {auto.startingPrice.toLocaleString()}</span>
-                         <Link href={`/catalogo/${auto.brandId}/${auto.id}`} className="text-[9px] font-bold text-[#00BFFF] hover:text-[#0A1F33] uppercase tracking-widest mt-1 underline transition-colors">
-                           Ver Detalles Técnicos →
-                         </Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="text-center mt-12 border-t border-[#0A1F33]/10 pt-12">
               <button onClick={() => { setStep(1); setAnswers({}); setCalcVehicle(null); }} className="bg-[#FFFFFF] border border-[#0A1F33]/20 text-[#0A1F33] hover:bg-[#0A1F33] hover:text-[#FFFFFF] px-8 py-4 text-[10px] font-bold uppercase tracking-widest transition-all inline-flex items-center gap-2 rounded-xl shadow-sm hover:shadow-md">
                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Volver a empezar
@@ -3106,7 +3184,7 @@ export default function RecomendadorPage() {
               <button onClick={() => setPendingCardConfirm(null)} className="text-[#C0C0C0] hover:text-[#0A1F33] text-lg font-bold">✕</button>
             </div>
             <p className="text-xs text-[#3A3A3C] mb-4 leading-relaxed">
-              ¿Querés coordinar un <strong>Test Drive oficial</strong> para el <strong>{pendingCardConfirm.brandName} {pendingCardConfirm.modelName}</strong> con <strong>{sanitizeDealershipName(pendingCardConfirm.concesionaria) || 'la concesionaria oficial'}</strong> al teléfono <strong>{leadForm.telefono}</strong>?
+              ¿Querés coordinar un <strong>Test Drive oficial</strong> para el <strong>{pendingCardConfirm.brandName} {pendingCardConfirm.modelName}</strong> con <strong>{sanitizeDealershipName(pendingCardConfirm.concesionaria) || 'la concesionaria oficial'}</strong> {leadForm.telefono ? <>al teléfono <strong>0{leadForm.telefono}</strong></> : <>al correo <strong>{leadForm.email}</strong></>}?
             </p>
             <div className="bg-[#F8F9FA] border border-[#0A1F33]/10 p-3 rounded-xl mb-5 text-[10px] text-[#3A3A3C]">
               🔒 100% Sin Costo • Prueba de manejo y cotización oficial sin comisiones.

@@ -6,7 +6,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 // CORRECCIÓN BUGS DE RUTA: Subimos dos niveles (../../) para encontrar lib/firebase y lib/mailer
 import { db } from '../../lib/firebase';
 import { sendLeadNotificationEmail } from '../../lib/mailer';
-import { normalizePhonePY, sanitizePhonePY, validatePhonePY } from '../../lib/phone';
+import { normalizePhonePY, sanitizePhonePY, validatePhonePY, formatPhonePYDisplay } from '../../lib/phone';
 import { track } from '../../lib/analytics';
 import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 import { formatLeadVehicleTitle } from '../../lib/vehicleTitle';
@@ -22,11 +22,6 @@ interface LeadModalProps {
   concesionariaDestino: string;
 }
 
-// Negocio aceptó leads sin celular (2026): pedimos nombre + al menos un medio
-// de contacto (celular O correo). El backend (firestore.rules) ya acepta
-// `telefono: 'No proporcionado'`.
-const TELEFONO_OBLIGATORIO = false;
-
 export default function LeadModal({
   isOpen,
   onClose,
@@ -37,6 +32,7 @@ export default function LeadModal({
   concesionariaDestino,
 }: LeadModalProps) {
   const [formData, setFormData] = useState({ nombre: '', telefono: '', email: '' });
+  const [useEmailInstead, setUseEmailInstead] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [fieldErrors, setFieldErrors] = useState<{ nombre?: string; telefono?: string; email?: string }>({});
   const nombreRef = useRef<HTMLInputElement>(null);
@@ -52,7 +48,11 @@ export default function LeadModal({
 
   // Telemetría de embudo: apertura del modal (con su origen).
   useEffect(() => {
-    if (isOpen) track('lead_modal_open', { origen: origenLead, marca: marcaVehiculo });
+    if (isOpen) {
+      setUseEmailInstead(false);
+      setFieldErrors({});
+      track('lead_modal_open', { origen: origenLead, marca: marcaVehiculo });
+    }
   }, [isOpen, origenLead, marcaVehiculo]);
 
   // Autofocus en el primer campo real (el Modal a11y enfoca el botón ✕).
@@ -74,19 +74,17 @@ export default function LeadModal({
 
     if (formData.nombre.trim().length < 2) errors.nombre = 'Ingresá tu nombre.';
 
-    if (TELEFONO_OBLIGATORIO || formData.telefono.trim()) {
+    if (!useEmailInstead) {
       const pVal = validatePhonePY(formData.telefono);
       if (!pVal.valid) {
-        errors.telefono = pVal.error || 'Tenés que cargar un número telefónico válido';
+        errors.telefono = pVal.error || 'Ingresá tu número de celular (ej: 0981 123 456)';
+      }
+    } else {
+      if (!email || !emailRegex.test(email)) {
+        errors.email = 'Ingresá un correo electrónico válido.';
       }
     }
-    if (email && !emailRegex.test(email)) {
-      errors.email = 'Revisá el formato del correo.';
-    }
-    if (!TELEFONO_OBLIGATORIO && !phone.valid && !email) {
-      errors.telefono = 'Dejanos al menos un celular o un correo para contactarte.';
-    }
-    return { errors, normalizedPhone: phone.value };
+    return { errors, normalizedPhone: phone.canonical };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -102,12 +100,12 @@ export default function LeadModal({
     setFieldErrors({});
     setStatus('loading');
 
-    const telefonoFinal = normalizedPhone && normalizePhonePY(normalizedPhone).valid
+    const telefonoFinal = !useEmailInstead && normalizePhonePY(formData.telefono).valid
       ? normalizedPhone
       : 'No proporcionado';
 
     const cleanConcesionaria = sanitizeDealershipName(concesionariaDestino);
-  const fullVehicleDisplay = formatLeadVehicleTitle(marcaVehiculo, modeloVehiculo, vehiculoInteres);
+    const fullVehicleDisplay = formatLeadVehicleTitle(marcaVehiculo, modeloVehiculo, vehiculoInteres);
 
     try {
       // 1. Inyección directa a Firebase (La Bóveda)
@@ -171,7 +169,7 @@ export default function LeadModal({
       isOpen={isOpen}
       onClose={onClose}
       overlayClassName="fixed inset-0 bg-[#0A1F33]/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md"
-      panelClassName="bg-[#FFFFFF] w-full max-w-md p-8 sm:p-9 border border-[#0A1F33]/10 relative shadow-2xl rounded-3xl overflow-hidden"
+      panelClassName="bg-[#FFFFFF] w-full max-w-xl p-7 sm:p-9 border border-[#0A1F33]/10 relative shadow-2xl rounded-3xl overflow-hidden"
     >
       {/* BOTÓN CERRAR CONTEMPORÁNEO */}
       <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0A1F33] via-[#00BFFF] to-[#0A1F33]" />
@@ -199,105 +197,125 @@ export default function LeadModal({
         </div>
       ) : (
         <>
-          <div className="mb-6">
-            <span className="text-[10px] font-bold text-[#00BFFF] uppercase tracking-widest block mb-1">
-              Servicio 100% Sin Costo
-            </span>
-            <h3 className="font-black text-2xl text-[#0A1F33] uppercase leading-tight mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+          <div className="mb-5 border-b border-[#0A1F33]/10 pb-3.5">
+            <h3 className="font-black text-xl sm:text-2xl text-[#0A1F33] uppercase leading-tight mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
               {formatHablarCon(cleanConcesionaria)}
             </h3>
-            <p className="text-[10px] text-[#1E8E3E] font-bold uppercase tracking-wider mb-2">
-              Precios oficiales directos de concesionaria, sin comisiones ni recargos
-            </p>
-            <p className="text-[10px] text-[#C0C0C0] uppercase tracking-widest font-bold border-b border-[#0A1F33]/10 pb-4">
-              Vehículo: <span className="text-[#3A3A3C]">{fullVehicleDisplay}</span>
+            <p className="text-[11px] text-[#71717A] font-bold uppercase tracking-wider truncate">
+              {fullVehicleDisplay}
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4" style={{ fontFamily: 'var(--font-inter), sans-serif' }} noValidate>
-            <div>
-              <label htmlFor={nombreId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Nombre y Apellido <span className="text-[#D93025]">*</span></label>
-              <input
-                ref={nombreRef}
-                id={nombreId}
-                type="text"
-                required
-                disabled={status === 'loading'}
-                aria-invalid={!!fieldErrors.nombre}
-                className={`${inputBase} ${fieldErrors.nombre ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
-                placeholder="Ej: Juan Pérez"
-                value={formData.nombre}
-                onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'nombre' })}
-                onChange={(e) => {
-                  setFormData({ ...formData, nombre: e.target.value });
-                  if (fieldErrors.nombre) setFieldErrors({ ...fieldErrors, nombre: undefined });
-                }}
-              />
-              {fieldErrors.nombre && (
-                <p className="text-[10px] text-[#D93025] font-bold mt-1">{fieldErrors.nombre}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor={telefonoId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">
-                Celular (WhatsApp) {TELEFONO_OBLIGATORIO ? <span className="text-[#D93025]">*</span> : <span className="text-[#C0C0C0] font-normal">(o dejá tu correo)</span>}
-              </label>
-              <div className="flex rounded-2xl overflow-hidden border border-[#E2E8F0] bg-[#F8FAFC] focus-within:bg-white focus-within:border-[#00BFFF] focus-within:ring-4 focus-within:ring-[#00BFFF]/10 transition-all">
-                <div className="bg-[#EDF2F7] border-r border-[#E2E8F0] px-3.5 py-3.5 flex items-center gap-1.5 text-xs font-bold text-[#0A1F33] select-none shrink-0">
-                  <span className="text-sm">🇵🇾</span>
-                  <span>+595</span>
-                </div>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3.5" style={{ fontFamily: 'var(--font-inter), sans-serif' }} noValidate>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+              <div>
+                <label htmlFor={nombreId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">Tu Nombre <span className="text-[#D93025]">*</span></label>
                 <input
-                  id={telefonoId}
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={9}
-                  required={TELEFONO_OBLIGATORIO}
+                  ref={nombreRef}
+                  id={nombreId}
+                  type="text"
+                  autoComplete="name"
+                  required
                   disabled={status === 'loading'}
-                  aria-invalid={!!fieldErrors.telefono}
-                  aria-describedby={fieldErrors.telefono ? telefonoErrId : undefined}
-                  className="w-full p-3.5 text-xs text-[#0A1F33] focus:outline-none bg-transparent font-medium"
-                  placeholder="981 234 567"
-                  value={formData.telefono}
-                  onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'telefono' })}
+                  aria-invalid={!!fieldErrors.nombre}
+                  className={`${inputBase} ${fieldErrors.nombre ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
+                  placeholder="Ej: Juan Pérez"
+                  value={formData.nombre}
+                  onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'nombre' })}
                   onChange={(e) => {
-                    const cleaned = sanitizePhonePY(e.target.value);
-                    setFormData({ ...formData, telefono: cleaned });
-                    if (fieldErrors.telefono) setFieldErrors({ ...fieldErrors, telefono: undefined });
+                    setFormData({ ...formData, nombre: e.target.value });
+                    if (fieldErrors.nombre) setFieldErrors({ ...fieldErrors, nombre: undefined });
                   }}
                 />
+                {fieldErrors.nombre && (
+                  <p className="text-[10px] text-[#D93025] font-bold mt-1">{fieldErrors.nombre}</p>
+                )}
               </div>
-              {fieldErrors.telefono && (
-                <p id={telefonoErrId} className="text-[10px] text-[#D93025] font-bold mt-1">{fieldErrors.telefono}</p>
-              )}
-            </div>
 
-            <div>
-              <label htmlFor={emailId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest block mb-1">
-                Correo Electrónico <span className="text-[#C0C0C0] font-normal">{TELEFONO_OBLIGATORIO ? '(Opcional)' : '(o dejá tu celular)'}</span>
-              </label>
-              <input
-                id={emailId}
-                type="email"
-                disabled={status === 'loading'}
-                aria-invalid={!!fieldErrors.email}
-                aria-describedby={fieldErrors.email ? emailErrId : undefined}
-                className={`${inputBase} ${fieldErrors.email ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
-                placeholder="ejemplo@correo.com"
-                value={formData.email}
-                onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'email' })}
-                onChange={(e) => {
-                  setFormData({ ...formData, email: e.target.value });
-                  if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined });
-                }}
-              />
-              {fieldErrors.email && (
-                <p id={emailErrId} className="text-[10px] text-[#D93025] font-bold mt-1">{fieldErrors.email}</p>
+              {!useEmailInstead ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor={telefonoId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">
+                      WhatsApp <span className="text-[#D93025]">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setUseEmailInstead(true); setFieldErrors({}); }}
+                      className="text-[9.5px] font-bold text-[#00BFFF] hover:text-[#0A1F33] underline cursor-pointer"
+                    >
+                      Usar correo
+                    </button>
+                  </div>
+                  <div className={`flex rounded-2xl overflow-hidden border bg-[#F8FAFC] focus-within:bg-white focus-within:border-[#00BFFF] focus-within:ring-4 focus-within:ring-[#00BFFF]/10 transition-all ${fieldErrors.telefono ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#E2E8F0]'}`}>
+                    <div className="bg-[#EDF2F7] border-r border-[#E2E8F0] px-3 py-3.5 flex items-center gap-1 text-xs font-bold text-[#0A1F33] select-none shrink-0">
+                      <span className="text-sm">🇵🇾</span>
+                      <span>+595</span>
+                    </div>
+                    <input
+                      id={telefonoId}
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={14}
+                      required
+                      disabled={status === 'loading'}
+                      aria-invalid={!!fieldErrors.telefono}
+                      aria-describedby={fieldErrors.telefono ? telefonoErrId : undefined}
+                      className="w-full p-3.5 text-xs text-[#0A1F33] focus:outline-none bg-transparent font-bold tracking-wide"
+                      placeholder="0981 234 567"
+                      value={formatPhonePYDisplay(formData.telefono)}
+                      onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'telefono' })}
+                      onChange={(e) => {
+                        const cleaned = sanitizePhonePY(e.target.value);
+                        setFormData({ ...formData, telefono: cleaned });
+                        if (fieldErrors.telefono) setFieldErrors({ ...fieldErrors, telefono: undefined });
+                      }}
+                    />
+                  </div>
+                  {fieldErrors.telefono && (
+                    <p id={telefonoErrId} className="text-[10px] text-[#D93025] font-bold mt-1">{fieldErrors.telefono}</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor={emailId} className="text-[10px] font-bold text-[#3A3A3C] uppercase tracking-widest">
+                      Correo <span className="text-[#D93025]">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setUseEmailInstead(false); setFieldErrors({}); }}
+                      className="text-[9.5px] font-bold text-[#00BFFF] hover:text-[#0A1F33] underline cursor-pointer"
+                    >
+                      Usar WhatsApp
+                    </button>
+                  </div>
+                  <input
+                    id={emailId}
+                    type="email"
+                    autoComplete="email"
+                    required
+                    disabled={status === 'loading'}
+                    aria-invalid={!!fieldErrors.email}
+                    aria-describedby={fieldErrors.email ? emailErrId : undefined}
+                    className={`${inputBase} ${fieldErrors.email ? 'border-[#D93025] bg-[#FCE8E6]' : 'border-[#0A1F33]/15 focus:border-[#00BFFF] focus:bg-[#FFFFFF]'}`}
+                    placeholder="ejemplo@correo.com"
+                    value={formData.email}
+                    onFocus={() => track('lead_field_focus', { origen: origenLead, campo: 'email' })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, email: e.target.value });
+                      if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined });
+                    }}
+                  />
+                  {fieldErrors.email && (
+                    <p id={emailErrId} className="text-[10px] text-[#D93025] font-bold mt-1">{fieldErrors.email}</p>
+                  )}
+                </div>
               )}
             </div>
 
             {status === 'error' && (
-              <p className="text-[10px] text-[#D93025] font-bold uppercase tracking-widest bg-[#FCE8E6] p-3 text-center border border-[#D93025]/30 rounded-xl mt-2">
+              <p className="text-[10px] text-[#D93025] font-bold uppercase tracking-widest bg-[#FCE8E6] p-3 text-center border border-[#D93025]/30 rounded-xl mt-1">
                 Ocurrió un error de conexión. Intentá de nuevo.
               </p>
             )}
@@ -305,13 +323,13 @@ export default function LeadModal({
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 mt-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl shadow-md hover:shadow-lg cursor-pointer flex items-center justify-center gap-2"
+              className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 mt-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl shadow-md hover:shadow-lg cursor-pointer flex items-center justify-center gap-2"
             >
               {status === 'loading' ? 'Procesando...' : formatHablarCon(cleanConcesionaria)}
             </button>
 
-            <p className="text-[10px] text-center text-[#3A3A3C] font-medium leading-relaxed mt-1" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
-              Te contactamos por WhatsApp o correo en menos de 2 h hábiles. Sin llamados fríos, sin spam.
+            <p className="text-[10px] text-center text-[#71717A] font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+              🔒 Sin costo ni spam.
             </p>
           </form>
         </>
