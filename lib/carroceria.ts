@@ -36,7 +36,29 @@ const CARROCERIA_CANONICAL: Record<string, string> = {
   'DEPORTIVO': 'DEPORTIVO',
 };
 
-export const normalizeCarroceria = (raw: string | undefined | null): string => {
+const KNOWN_HATCHBACK_MODELS = [
+  'PICANTO',
+  'NEW PICANTO',
+  'GRAND I10',
+  'NEW GRAND I10 HATCHBACK',
+  'KWID',
+  'MOBI',
+  'CELERIO',
+  'AGYA',
+  'EV2',
+  'EV3',
+  'T03',
+  'SWIFT',
+  'ARGO',
+];
+
+export const normalizeCarroceria = (raw: string | undefined | null, modelName?: string | null): string => {
+  if (modelName) {
+    const cleanModel = modelName.trim().toUpperCase();
+    if (KNOWN_HATCHBACK_MODELS.includes(cleanModel) || cleanModel.includes('PICANTO')) {
+      return 'HATCHBACK';
+    }
+  }
   const clean = (raw || '').trim().toUpperCase();
   if (!clean) return 'VEHÍCULO';
   return CARROCERIA_CANONICAL[clean] || clean;

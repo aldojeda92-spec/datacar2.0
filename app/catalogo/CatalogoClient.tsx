@@ -370,12 +370,12 @@ function CatalogoContent() {
             brand: brandInfo.name,
             name: mData.name || '',
             versionName: baseVersion.name || '',
-            tipo_carroceria: normalizeCarroceria(mData.tipo_carroceria),
+            tipo_carroceria: normalizeCarroceria(mData.tipo_carroceria, mData.name),
             price: price,
             img: mData.imgUrl || '',
-            transmision: specs.transmision || '',
-            combustible: normalizeCombustible(specs.combustible),
-            allCombustibles: Array.from(new Set(modelVersions.map(v => normalizeCombustible(v.specs?.combustible)).filter(Boolean))),
+            transmision: specs.transmision || baseVersion.motor?.transmision || baseVersion.features?.transmision || 'Automática',
+            combustible: normalizeCombustible(specs.combustible || baseVersion.motor?.combustible || baseVersion.features?.combustible),
+            allCombustibles: Array.from(new Set(modelVersions.map(v => normalizeCombustible(v.specs?.combustible || v.motor?.combustible || v.features?.combustible)).filter(Boolean))),
             traccion: specs.traccion || '',
             plazas: specs.plazas?.toString() || '',
             origen_marca: brandInfo.origen,
@@ -520,7 +520,7 @@ function CatalogoContent() {
       
       if (activeFilters.transmisiones.length > 0) {
         const transText = (auto.transmision || '').toLowerCase();
-        const wantsAuto = activeFilters.transmisiones.some(t => t.toLowerCase() === 'automática');
+        const wantsAuto = activeFilters.transmisiones.some(t => t.toLowerCase() === 'automática' || t.toLowerCase() === 'automatica');
         const wantsMan = activeFilters.transmisiones.some(t => t.toLowerCase() === 'manual');
         let matched = false;
         if (wantsAuto && (transText.includes('auto') || transText.includes('at') || transText.includes('cvt') || transText.includes('dct') || transText.includes('dht'))) matched = true;

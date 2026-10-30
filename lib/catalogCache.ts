@@ -10,6 +10,7 @@
 
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
+import { normalizeCarroceria } from './carroceria';
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos por defecto para catálogo pesado
 const CAMPAIGNS_TTL_MS = 30 * 1000; // 30 segundos para campañas (pauta publicitaria ágil)
@@ -74,7 +75,13 @@ async function getCachedCollection(name: string, ttlMs: number = CACHE_TTL_MS): 
 }
 
 export const getCachedBrands = () => getCachedCollection('brands');
-export const getCachedModels = () => getCachedCollection('models');
+export const getCachedModels = async (): Promise<RawDoc[]> => {
+  const models = await getCachedCollection('models');
+  return models.map(m => ({
+    ...m,
+    tipo_carroceria: normalizeCarroceria(m.tipo_carroceria, m.name)
+  }));
+};
 export const getCachedVersions = async () => {
   const versions = await getCachedCollection('versions');
   return versions.filter(v => v.activo !== false);
