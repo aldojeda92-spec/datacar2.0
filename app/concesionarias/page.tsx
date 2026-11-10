@@ -17,6 +17,7 @@ import { normalizeCarroceria } from '../../lib/carroceria';
 import { useToast } from '../context/ToastContext';
 import { sendDealershipRequestEmail, sendReportsAccessRequestEmail } from '../../lib/mailer';
 import DealershipReportsView from './DealershipReportsView';
+import DealershipChatsView from './DealershipChatsView';
 import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { sanitizePhonePY } from '../../lib/phone';
 import Modal from '../components/a11y/Modal';
@@ -192,7 +193,8 @@ export default function PortalConcesionariasPage() {
   const [reqForm, setReqForm] = useState<RequestForm>({ nombre: '', cargo: '', concesionaria: '', marcas: '', telefono: '', email: '', password: '', confirmPassword: '' });
 
   // Dashboard State
-  const [activeTab, setActiveTab] = useState<'leads' | 'inventario' | 'reportes'>('leads');
+  const [activeTab, setActiveTab] = useState<'leads' | 'chats' | 'inventario' | 'reportes'>('leads');
+  const [unreadChatsCount, setUnreadChatsCount] = useState(0);
   const [invSubTab, setInvSubTab] = useState<'versiones' | 'modelos' | 'csv'>('versiones');
   
   // Datos relacionales
@@ -316,10 +318,24 @@ export default function PortalConcesionariasPage() {
       setInventario(invEnriquecido);
 
       // ==============================================
-      // RESOLUCIÓN: LEADS (filtrados server-side por concesionaria)
+      // RESOLUCIÓN: LEADS (filtrados por concesionaria O por marca cuando proviene de Chat Online Autorizado)
       // ==============================================
-      const myLeads = leadsSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
+      const [leadsByBrandSnap] = await Promise.all([
+        getDocs(query(collection(db, 'leads'), where('concesionaria_destino_norm', '==', 'CHAT_AUTORIZADO_MARCA'))).catch(() => null),
+      ]);
+
+      const combinedDocs = [
+        ...leadsSnap.docs,
+        ...(leadsByBrandSnap ? leadsByBrandSnap.docs : []),
+      ];
+      const uniqueLeadsMap = new Map<string, any>();
+      combinedDocs.forEach(d => {
+        if (!uniqueLeadsMap.has(d.id)) {
+          uniqueLeadsMap.set(d.id, { id: d.id, ...d.data() });
+        }
+      });
+
+      const myLeads = Array.from(uniqueLeadsMap.values())
         .filter((lead: any) => !lead.marca || permitidasNormalizadas.includes(String(lead.marca).toUpperCase().trim()))
         .sort((a: any, b: any) => (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0) - (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0));
 
@@ -1041,8 +1057,20 @@ export default function PortalConcesionariasPage() {
         </div>
       </header>
 
-      <div className="bg-[#FFFFFF] border-b border-[#C0C0C0] px-6 flex gap-8">
+      <div className="bg-[#FFFFFF] border-b border-[#C0C0C0] px-6 flex flex-wrap gap-8">
         <button onClick={() => setActiveTab('leads')} className={`py-4 text-xs font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'leads' ? 'border-[#00BFFF] text-[#0A1F33]' : 'border-transparent text-[#C0C0C0] hover:text-[#3A3A3C]'}`}>Recepción de Leads</button>
+        <button onClick={() => setActiveTab('chats')} className={`py-4 text-xs font-bold uppercase tracking-widest border-b-4 transition-colors flex items-center gap-2 ${activeTab === 'chats' ? 'border-[#00BFFF] text-[#0A1F33]' : 'border-transparent text-[#C0C0C0] hover:text-[#3A3A3C]'}`}>
+          <span>💬 Chats en Vivo</span>
+          {unreadChatsCount > 0 ? (
+            <span className="bg-[#1E8E3E] text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse">
+              {unreadChatsCount}
+            </span>
+          ) : (
+            <span className="bg-[#00BFFF]/15 text-[#0A1F33] text-[8.5px] font-black px-1.5 py-0.5 border border-[#00BFFF]/40">
+              ONLINE
+            </span>
+          )}
+        </button>
         <button onClick={() => setActiveTab('inventario')} className={`py-4 text-xs font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'inventario' ? 'border-[#00BFFF] text-[#0A1F33]' : 'border-transparent text-[#C0C0C0] hover:text-[#3A3A3C]'}`}>Gestión de Inventario</button>
         <button onClick={() => setActiveTab('reportes')} className={`py-4 text-xs font-bold uppercase tracking-widest border-b-4 transition-colors flex items-center gap-2 ${activeTab === 'reportes' ? 'border-[#00BFFF] text-[#0A1F33]' : 'border-transparent text-[#C0C0C0] hover:text-[#3A3A3C]'}`}>
           <span>Reportes &amp; BI de Mercado</span>
@@ -1117,6 +1145,22 @@ export default function PortalConcesionariasPage() {
               </table>
             </div>
           </div>
+        )}
+
+        {/* ======================================= */}
+        {/* VISTA: CHATS EN VIVO POR MARCA (PRIVACIDAD ANTI-SPAM) */}
+        {/* ======================================= */}
+        {activeTab === 'chats' && userData && (
+          <DealershipChatsView
+            dealershipName={userData.dealershipName}
+            marcasPermitidas={userData.marcasPermitidas}
+            marcasList={marcasList}
+            onUnreadChange={setUnreadChatsCount}
+            onGoToLeads={() => {
+              fetchDashboardData(userData);
+              setActiveTab('leads');
+            }}
+          />
         )}
 
         {/* ======================================= */}

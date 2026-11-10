@@ -5,6 +5,7 @@ import "./globals.css";
 import { LeadProvider } from "./context/LeadContext"; // Inyección del contexto global
 import { ToastProvider } from "./context/ToastContext";
 import WhatsAppButton from "./components/WhatsAppButton";
+import OnlineBrandChatWidget from "./components/OnlineBrandChatWidget";
 
 // Configuración tipográfica con fuentes variables (Montserrat e Inter)
 // Soporta todo el rango de pesos (300 a 900) con display: 'swap'
@@ -156,6 +157,7 @@ export default function RootLayout({
             {children}
           </LeadProvider>
         </ToastProvider>
+        <OnlineBrandChatWidget />
         <WhatsAppButton />
       </body>
     </html>

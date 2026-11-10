@@ -10,6 +10,7 @@ import { normalizePhonePY, sanitizePhonePY, validatePhonePY, formatPhonePYDispla
 import { track } from '../../lib/analytics';
 import { sanitizeDealershipName, formatHablarCon } from '../../lib/dealerships';
 import { formatLeadVehicleTitle } from '../../lib/vehicleTitle';
+import { isLocalhostRuntime, postLocalSandboxAction } from '../../lib/localSandbox';
 import Modal from './a11y/Modal';
 
 interface LeadModalProps {
@@ -108,8 +109,7 @@ export default function LeadModal({
     const fullVehicleDisplay = formatLeadVehicleTitle(marcaVehiculo, modeloVehiculo, vehiculoInteres);
 
     try {
-      // 1. Inyección directa a Firebase (La Bóveda)
-      await addDoc(collection(db, 'leads'), {
+      const leadPayload = {
         nombre: formData.nombre.trim(),
         telefono: telefonoFinal,
         email: formData.email.trim() || 'No proporcionado',
@@ -120,24 +120,36 @@ export default function LeadModal({
         concesionaria_destino: cleanConcesionaria || 'A designar (Central DATACAR)',
         concesionaria_destino_norm: (cleanConcesionaria || 'A DESIGNAR').toUpperCase().trim(),
         estado: 'Nuevo',
-        createdAt: serverTimestamp(),
-      });
+      };
 
-      // 2. Disparo de Mailing B2B a la Concesionaria / DATACAR (Fail-Safe)
-      try {
-        await sendLeadNotificationEmail({
-          leadName: formData.nombre.trim(),
-          leadPhone: telefonoFinal,
-          leadEmail: formData.email.trim(),
-          vehicleOfInterest: fullVehicleDisplay,
-          brandOfInterest: marcaVehiculo,
-          marca: marcaVehiculo,
-          origen: origenLead,
-          concesionariaDestino: cleanConcesionaria || 'Central DATACAR',
+      // 1. En localhost guardamos en Sandbox Local para NO contaminar Firebase datacar2.0
+      if (isLocalhostRuntime()) {
+        await postLocalSandboxAction('create_sandbox_lead', { leadData: leadPayload });
+      } else {
+        // Producción: Inyección directa a Firebase (La Bóveda)
+        await addDoc(collection(db, 'leads'), {
+          ...leadPayload,
+          createdAt: serverTimestamp(),
         });
-      } catch (mailError) {
-        // Silenciamos el error de correo hacia el cliente. El Lead YA está salvado en DB.
-        console.error('El lead se guardó, pero falló el envío del correo B2B:', mailError);
+      }
+
+      // 2. Disparo de Mailing B2B a la Concesionaria / DATACAR (Fail-Safe, solo en Producción)
+      if (!isLocalhostRuntime()) {
+        try {
+          await sendLeadNotificationEmail({
+            leadName: formData.nombre.trim(),
+            leadPhone: telefonoFinal,
+            leadEmail: formData.email.trim(),
+            vehicleOfInterest: fullVehicleDisplay,
+            brandOfInterest: marcaVehiculo,
+            marca: marcaVehiculo,
+            origen: origenLead,
+            concesionariaDestino: cleanConcesionaria || 'Central DATACAR',
+          });
+        } catch (mailError) {
+          // Silenciamos el error de correo hacia el cliente. El Lead YA está salvado en DB.
+          console.error('El lead se guardó, pero falló el envío del correo B2B:', mailError);
+        }
       }
 
       track('lead_submit_success', {

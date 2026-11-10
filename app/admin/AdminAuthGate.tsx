@@ -20,6 +20,11 @@ export default function AdminAuthGate({ children }: { children: React.ReactNode 
       }
 
       if (!user) {
+        if (typeof window !== 'undefined' && window.location.search) {
+          try {
+            sessionStorage.setItem('dc_admin_return_query', window.location.search);
+          } catch {}
+        }
         setStatus('unauthorized');
         router.push('/admin/login');
         return;

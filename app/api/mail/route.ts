@@ -451,6 +451,111 @@ function buildNewsletterBroadcastHtml(d: any): string {
   `;
 }
 
+function buildChatInitiatedDealerHtml(d: any): string {
+  const portalUrl = d?.dealerChatUrl || 'https://datacarpy.com/concesionarias';
+  return `
+    <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #F8F9FA;">
+      <div style="background-color: #0A1F33; border-bottom: 4px solid #00BFFF; padding: 24px; text-align: center;">
+        <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 900; letter-spacing: 2px; margin: 0;">
+          DATA<span style="font-weight: 300;">CAR</span>
+        </h1>
+        <p style="color: #00BFFF; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; margin-top: 8px; margin-bottom: 0;">
+          💬 NUEVO CHAT EN VIVO INICIADO
+        </p>
+      </div>
+      <div style="padding: 32px 24px; background-color: #FFFFFF;">
+        <div style="background-color: #F0F9FF; border-left: 4px solid #00BFFF; padding: 14px 16px; margin-bottom: 24px;">
+          <p style="margin: 0; font-size: 13px; color: #0A1F33; font-weight: 700;">
+            ¡Un usuario está en línea ahora mismo esperando respuesta de <strong>${escapeHtml(d?.brandName)}</strong>!
+          </p>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #3A3A3C;">
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 35%; text-transform: uppercase; color: #71717A; font-size: 11px;">Marca / Vehículo:</td>
+            <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #00BFFF; text-transform: uppercase;">${escapeHtml(d?.brandName)} • ${escapeHtml(d?.modelName || 'Consulta General')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A; font-size: 11px;">Interesado (Chat):</td>
+            <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #0A1F33;">${escapeHtml(d?.userName)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A; font-size: 11px;">Privacidad:</td>
+            <td style="padding: 12px; border-bottom: 1px solid #E6E6E6; color: #71717A; font-size: 11px;">🔒 Teléfono protegido (chat sin spam). Si el usuario desea llamada o WhatsApp, enviará el formulario de Lead.</td>
+          </tr>
+        </table>
+
+        <div style="margin-top: 20px; background-color: #F8F9FA; border: 1px solid #E6E6E6; border-radius: 8px; padding: 16px;">
+          <span style="display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #71717A; margin-bottom: 6px;">Primer mensaje del usuario:</span>
+          <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0A1F33; font-style: italic;">"${escapeHtml(d?.firstMessage)}"</p>
+        </div>
+
+        <div style="margin-top: 28px; text-align: center;">
+          <a href="${portalUrl}" style="background-color: #00BFFF; color: #FFFFFF; padding: 16px 32px; text-decoration: none; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; display: inline-block; border-radius: 6px;">
+            💬 Responder Chat en el Portal B2B
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildChatInitiatedAdminHtml(d: any): string {
+  const brandEmailsList = Array.isArray(d?.brandEmailsNotified) && d.brandEmailsNotified.length > 0
+    ? d.brandEmailsNotified.join(', ')
+    : 'Sin correo de marca configurado (solo Admin)';
+  const adminChatUrl =
+    d?.adminChatUrl ||
+    `https://datacarpy.com/admin?tab=chats_online${d?.chatId ? `&chatId=${encodeURIComponent(d.chatId)}` : ''}`;
+
+  return `
+    <div style="font-family: 'Inter', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #C0C0C0; background-color: #F8F9FA;">
+      <div style="background-color: #0A1F33; border-bottom: 4px solid #1E8E3E; padding: 24px; text-align: center;">
+        <h1 style="color: #FFFFFF; font-family: 'Montserrat', Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 900; letter-spacing: 2px; margin: 0;">
+          DATA<span style="font-weight: 300;">CAR</span>
+        </h1>
+        <p style="color: #00BFFF; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; margin-top: 8px; margin-bottom: 0;">
+          🛡️ AUDITORÍA ADMIN • NUEVO CHAT ONLINE
+        </p>
+      </div>
+      <div style="padding: 32px 24px; background-color: #FFFFFF;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #3A3A3C;">
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; width: 38%; text-transform: uppercase; color: #71717A; font-size: 11px;">Marca / Modelo:</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #00BFFF; text-transform: uppercase;">${escapeHtml(d?.brandName)} • ${escapeHtml(d?.modelName)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A; font-size: 11px;">Nombre del Usuario:</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; font-weight: 800; color: #0A1F33;">${escapeHtml(d?.userName)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A; font-size: 11px;">Celular (Solo Admin):</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; font-weight: 900; color: #1E8E3E;">${escapeHtml(d?.userPhone)} <span style="font-size: 10px; color: #71717A; font-weight: 600;">(Oculto para la concesionaria)</span></td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; font-weight: 700; text-transform: uppercase; color: #71717A; font-size: 11px;">Notificado a Marca:</td>
+            <td style="padding: 10px 12px; border-bottom: 1px solid #E6E6E6; color: #3A3A3C; font-size: 12px;">${escapeHtml(brandEmailsList)}</td>
+          </tr>
+        </table>
+
+        <div style="margin-top: 20px; background-color: #F8F9FA; border: 1px solid #E6E6E6; border-radius: 8px; padding: 16px;">
+          <span style="display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #71717A; margin-bottom: 6px;">Mensaje inicial:</span>
+          <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0A1F33;">"${escapeHtml(d?.firstMessage)}"</p>
+        </div>
+
+        <div style="margin-top: 28px; text-align: center;">
+          <a href="${escapeHtml(adminChatUrl)}" style="background-color: #0A1F33; color: #00BFFF; border: 2px solid #00BFFF; padding: 16px 28px; text-decoration: none; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; display: inline-block; border-radius: 6px;">
+            📱 Abrir este Chat en mi Celular / Admin →
+          </a>
+          <p style="margin: 10px 0 0 0; font-size: 11px; color: #71717A;">
+            Tocá el botón para abrir directamente esta conversación en el panel Admin y responder en vivo.
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export async function POST(request: Request) {
   const origin = request.headers.get('origin') || request.headers.get('referer') || '';
   const isDev = process.env.NODE_ENV !== 'production';
@@ -533,6 +638,12 @@ export async function POST(request: Request) {
     subject = rawSubject.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}📊🚀⭐🔥🚨🚘]/gu, '').trim();
     html = data?.customHtml || buildDealershipReportHtml(data);
     text = buildDealershipReportPlainText(data);
+  } else if (type === 'chat_initiated_dealer') {
+    subject = `💬 CHAT EN VIVO: ${escapeHtml(data?.userName || 'Un interesado')} quiere chatear sobre ${escapeHtml(data?.brandName || '')}`;
+    html = buildChatInitiatedDealerHtml(data);
+  } else if (type === 'chat_initiated_admin') {
+    subject = `💬 [ADMIN] Nuevo Chat Online: ${escapeHtml(data?.userName || '')} -> ${escapeHtml(data?.brandName || '')}`;
+    html = buildChatInitiatedAdminHtml(data);
   } else if (type === 'newsletter_broadcast') {
     subject = data?.subject ? String(data.subject).trim() : 'Novedades y Oportunidades 0km - DATACAR';
     html = buildNewsletterBroadcastHtml(data);

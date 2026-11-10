@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 // CORRECCIÓN DE RUTAS: 4 niveles para lib (raíz), 3 niveles para components (dentro de app)
 import { db } from '../../../../lib/firebase';
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../../lib/imageSrc';
@@ -27,6 +27,8 @@ import { sanitizeDealershipName, formatHablarCon, resolveModelDealership } from 
 import { track } from '../../../../lib/analytics';
 import DatacarCheckBadge from '../../../components/DatacarCheckBadge';
 import Navbar, { NavItem } from '../../../components/Navbar';
+import { isLocalhostRuntime, fetchLocalSandboxState } from '../../../../lib/localSandbox';
+import { isChatOnlineCurrentlyActive, ChatOnlineConfig } from '../../../../lib/chatPrivacy';
 
 const NAV_ITEMS: NavItem[] = [
   { type: 'link', label: 'Recomendador', href: '/recomendador' },
@@ -55,7 +57,7 @@ interface VersionData {
     confort_conveniencia?: string[]; seguridad_standard?: string[]; 
   };
 }
-export interface BrandData { name: string; origen_marca: string; }
+export interface BrandData { name: string; origen_marca: string; chatOnlineEnabled?: boolean; }
 
 interface ModeloDetailClientProps {
   initialModel?: ModelData | null;
@@ -101,6 +103,44 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
 
   // Estado Footer (FAQ)
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [chatOnlineEnabled, setChatOnlineEnabled] = useState<boolean>(!!initialBrand?.chatOnlineEnabled);
+  const [globalChatEnabled, setGlobalChatEnabled] = useState(true);
+
+  useEffect(() => {
+    let latestCfg: ChatOnlineConfig | null = null;
+    const unsubGlobal = onSnapshot(
+      doc(db, 'config', 'chat_online'),
+      (snap) => {
+        latestCfg = snap.exists() ? (snap.data() as ChatOnlineConfig) : null;
+        setGlobalChatEnabled(isChatOnlineCurrentlyActive(latestCfg).isActive);
+      },
+      () => {}
+    );
+    const timer = setInterval(() => {
+      setGlobalChatEnabled(isChatOnlineCurrentlyActive(latestCfg).isActive);
+    }, 30000);
+    return () => {
+      unsubGlobal();
+      clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const bId = model?.brandId || marcaSlug;
+    if (!bId) return;
+    getDoc(doc(db, 'brands', bId))
+      .then(async (snap) => {
+        let enabled = !!(snap.exists() && snap.data()?.chatOnlineEnabled);
+        if (isLocalhostRuntime()) {
+          const sb = await fetchLocalSandboxState();
+          if (sb.brandChatOverrides[bId] !== undefined) {
+            enabled = sb.brandChatOverrides[bId];
+          }
+        }
+        setChatOnlineEnabled(enabled);
+      })
+      .catch(() => {});
+  }, [model?.brandId, marcaSlug]);
 
   const { showToast } = useToast();
 
@@ -284,6 +324,30 @@ export default function ModeloDetailClient({ initialModel = null, initialBrand =
             </div>
 
             <div className="flex flex-col gap-3">
+              {globalChatEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new CustomEvent('datacar:open-chat', {
+                        detail: {
+                          brandId: model.brandId || marcaSlug,
+                          brandName: brand?.name || marcaSlug.toUpperCase(),
+                          modelName: model.name,
+                        },
+                      })
+                    );
+                  }}
+                  className="w-full bg-[#1E8E3E] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 border border-transparent rounded-none cursor-pointer"
+                >
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  <span>
+                    {chatOnlineEnabled
+                      ? `💬 Chatear Online con ${brand?.name || 'la Marca'} (Sin Spam)`
+                      : `💬 Chatear con Asesor DATACAR (${brand?.name || 'Online'})`}
+                  </span>
+                </button>
+              )}
               {/* TRIGGER MODAL GLOBAL: Envía el modelo general */}
               <button onClick={() => { setVersionToConsult(null); setLeadOrigen('ficha'); setShowConsultar(true); }} className="w-full bg-[#00BFFF] hover:bg-[#0A1F33] text-[#FFFFFF] font-bold text-xs uppercase tracking-widest py-4 transition-colors flex items-center justify-center gap-2 border border-transparent rounded-none">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg> {formatHablarCon(resolvedModelDealership)}

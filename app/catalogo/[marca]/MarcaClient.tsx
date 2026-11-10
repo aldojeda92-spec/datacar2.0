@@ -4,11 +4,13 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase'; // CORRECCIÓN CRÍTICA DE RUTA
 import { isOptimizableImageSrc, isValidImageSrc } from '../../../lib/imageSrc';
 import { normalizeCarroceria } from '../../../lib/carroceria';
 import Navbar, { NavItem } from '../../components/Navbar';
+import { isLocalhostRuntime, fetchLocalSandboxState } from '../../../lib/localSandbox';
+import { isChatOnlineCurrentlyActive, ChatOnlineConfig } from '../../../lib/chatPrivacy';
 
 const NAV_ITEMS: NavItem[] = [
   { type: 'link', label: 'Recomendador', href: '/recomendador' },
@@ -40,6 +42,43 @@ export default function MarcaClient({ marcaSlug, initialBrandName = '', initialM
   );
   const [models, setModels] = useState<ModelData[]>(initialModels ?? []);
   const [loading, setLoading] = useState(initialModels === null);
+  const [chatOnlineEnabled, setChatOnlineEnabled] = useState(false);
+  const [globalChatEnabled, setGlobalChatEnabled] = useState(true);
+
+  useEffect(() => {
+    let latestCfg: ChatOnlineConfig | null = null;
+    const unsubGlobal = onSnapshot(
+      doc(db, 'config', 'chat_online'),
+      (snap) => {
+        latestCfg = snap.exists() ? (snap.data() as ChatOnlineConfig) : null;
+        setGlobalChatEnabled(isChatOnlineCurrentlyActive(latestCfg).isActive);
+      },
+      () => {}
+    );
+    const timer = setInterval(() => {
+      setGlobalChatEnabled(isChatOnlineCurrentlyActive(latestCfg).isActive);
+    }, 30000);
+    return () => {
+      unsubGlobal();
+      clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!marcaSlug) return;
+    getDoc(doc(db, 'brands', marcaSlug))
+      .then(async (snap) => {
+        let enabled = !!(snap.exists() && snap.data()?.chatOnlineEnabled);
+        if (isLocalhostRuntime()) {
+          const sb = await fetchLocalSandboxState();
+          if (sb.brandChatOverrides[marcaSlug] !== undefined) {
+            enabled = sb.brandChatOverrides[marcaSlug];
+          }
+        }
+        setChatOnlineEnabled(enabled);
+      })
+      .catch(() => {});
+  }, [marcaSlug]);
 
   // ==========================================
   // MOTOR DE CONSULTA (FIREBASE) — solo si el servidor no entregó los modelos
@@ -116,6 +155,28 @@ export default function MarcaClient({ marcaSlug, initialBrandName = '', initialM
           </h1>
           <p className="text-xs text-[#3A3A3C] mt-2 font-medium" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
             {models.length} modelos disponibles en Paraguay.
+          {globalChatEnabled && (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('datacar:open-chat', {
+                      detail: { brandId: marcaSlug, brandName },
+                    })
+                  );
+                }}
+                className="mt-4 bg-[#1E8E3E] hover:bg-[#0A1F33] text-white font-black text-xs uppercase tracking-widest px-6 py-3.5 transition-colors inline-flex items-center gap-2 cursor-pointer"
+              >
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span>
+                  {chatOnlineEnabled
+                    ? `💬 Chatear Online con ${brandName} (Sin Spam)`
+                    : `💬 Chatear con Asesor DATACAR sobre ${brandName}`}
+                </span>
+              </button>
+            </div>
+          )}
           </p>
         </div>
       </header>

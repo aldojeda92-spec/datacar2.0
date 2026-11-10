@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc, limit, QuerySnapshot, DocumentData } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, getDoc, deleteDoc, writeBatch, serverTimestamp, query, orderBy, updateDoc, limit, onSnapshot, addDoc, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../../lib/firebase';
 import { generarSlug } from '../../lib/slug';
@@ -19,6 +19,7 @@ import { invalidateCatalogCache } from '../../lib/catalogCache';
 import { useToast } from '../context/ToastContext';
 import { DEFAULT_REELS } from '../components/InstagramReelsSection';
 import DealershipReportsMailModule from './components/DealershipReportsMailModule';
+import AdminChatsModule from './components/AdminChatsModule';
 import { sendNewsletterBroadcast, sendDealershipApprovedEmail, sendDealershipRejectedEmail } from '../../lib/mailer';
 import {
   downloadCSV,
@@ -35,6 +36,7 @@ import {
   generateWizardStatsCSV
 } from '../../lib/csvExport';
 import { formatLeadVehicleTitle } from '../../lib/vehicleTitle';
+import { isLocalhostRuntime, fetchLocalSandboxState, postLocalSandboxAction } from '../../lib/localSandbox';
 
 // ==========================================
 // UTILIDADES E INFRAESTRUCTURA
@@ -51,11 +53,92 @@ interface LeadData {
   marca?: string;
   modelo?: string;
   origen: string;
+  origenRaw?: string;
   concesionaria_destino: string;
+  concesionariaRaw?: string;
   estado: string;
   preferencias_wizard?: any;
   datos_usado?: any;
+  topMatches?: any[];
   createdAt: Date;
+}
+
+// Normalizador de Origen de Lead (agrupa orígenes duplicados y unifica Comparación, Recomendador, Chat Online, etc.)
+function normalizeLeadOrigen(raw: string | undefined | null): string {
+  const s = (raw || '').trim();
+  if (!s) return 'Desconocido';
+  const low = s.toLowerCase();
+
+  // 1. Comparación (pedido explícito: agrupar todos los orígenes de comparación)
+  if (
+    low.includes('comparad') ||
+    low.includes('comparac') ||
+    low.includes('comparativa')
+  ) {
+    return 'Comparación';
+  }
+
+  // 2. Recomendador Interactivo (agrupa variantes como Test Drive, Recomendador Inteligente, etc.)
+  if (low.includes('recomendador') || low.includes('wizard')) {
+    return 'Recomendador Interactivo';
+  }
+
+  // 3. Chat Online (agrupa todas las variantes de Chat Online)
+  if (low.includes('chat online')) {
+    return 'Chat Online';
+  }
+
+  // 4. Botón WhatsApp Flotante
+  if (low.includes('whatsapp')) {
+    return 'Botón WhatsApp Flotante';
+  }
+
+  // 5. Calculadora Financiera (agrupa Calculadora en Ficha, Calculadora Rápida Home, etc.)
+  if (low.includes('calculadora')) {
+    return 'Calculadora Financiera';
+  }
+
+  // 6. Ficha de Vehículo / Catálogo (agrupa Ficha Modelo y Versiones, Ficha Versión Exacta, Catálogo General)
+  if (
+    low.includes('ficha') ||
+    low.includes('catálogo') ||
+    low.includes('catalogo')
+  ) {
+    return 'Ficha Modelo y Versiones';
+  }
+
+  // 7. Entrega de Usado
+  if (low.includes('usado') || low.includes('parte de pago')) {
+    return 'Entrega de Usado';
+  }
+
+  // 8. Negociamos por Vos
+  if (low.includes('negociamos')) {
+    return 'Negociamos por Vos';
+  }
+
+  // 9. Promociones
+  if (low.includes('promocion') || low.includes('promoción')) {
+    return 'Promociones 0km';
+  }
+
+  return s.toUpperCase();
+}
+
+// Normalizador de Concesionaria de Destino (evita duplicar Central DATACAR vs A designar (Central DATACAR))
+function normalizeLeadConcesionaria(raw: string | undefined | null): string {
+  const s = (raw || '').trim();
+  if (!s) return 'CENTRAL DATACAR';
+  const up = s.toUpperCase();
+  if (
+    up.includes('CENTRAL DATACAR') ||
+    up.includes('A DESIGNAR') ||
+    up.includes('SOLO ADMIN DATACAR') ||
+    up === 'DATACAR'
+  ) {
+    return 'CENTRAL DATACAR';
+  }
+  return up;
 }
 
 // ==========================================
@@ -192,7 +275,7 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<User | null>(null);
 
   // Pestañas del Sistema
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'exportar_csv' | 'ads' | 'slider_home' | 'financiero' | 'accesos' | 'analitica' | 'blog' | 'newsletter'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chats_online' | 'marcas' | 'modelos' | 'versiones' | 'concesionarias' | 'inyector' | 'exportar_csv' | 'ads' | 'slider_home' | 'financiero' | 'accesos' | 'analitica' | 'blog' | 'newsletter'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -208,6 +291,7 @@ export default function AdminDashboardPage() {
   const [blogPostsList, setBlogPostsList] = useState<any[]>([]);
   const [videoReviewsList, setVideoReviewsList] = useState<any[]>([]);
   const [blogSubTab, setBlogSubTab] = useState<'posts' | 'videos'>('posts');
+  const [globalChatOnlineEnabled, setGlobalChatOnlineEnabled] = useState(true);
 
   // Estados Newsletter & Telemetría Recomendador
   const [newsletterSubTab, setNewsletterSubTab] = useState<'b2c_newsletter' | 'b2b_concesionarias'>('b2c_newsletter');
@@ -266,7 +350,12 @@ export default function AdminDashboardPage() {
   const [filterPrefOrigen, setFilterPrefOrigen] = useState('Todos');
 
   // Sub-pestañas de Analítica & Demanda
-  const [analiticaSubTab, setAnaliticaSubTab] = useState<'general' | 'modelo_rango' | 'duelos' | 'recomendador' | 'todos'>('general');
+  const [analiticaSubTab, setAnaliticaSubTab] = useState<'general' | 'comparador_marcas' | 'modelo_rango' | 'duelos' | 'recomendador' | 'todos'>('general');
+
+  // Estados para Comparador de Marcas (Top Marcas Competidoras)
+  const [compBrandSelectedId, setCompBrandSelectedId] = useState<string>('');
+  const [compBrandDateFrom, setCompBrandDateFrom] = useState<string>('');
+  const [compBrandDateTo, setCompBrandDateTo] = useState<string>('');
 
   // Estados para Auditoría de Modelo en Rango de Fechas
   const [auditBrandId, setAuditBrandId] = useState<string>('');
@@ -324,7 +413,7 @@ export default function AdminDashboardPage() {
   const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
 
   // Formularios ABM
-  const [marcaForm, setMarcaForm] = useState({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '' });
+  const [marcaForm, setMarcaForm] = useState({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '', chatOnlineEnabled: false });
   const [modeloForm, setModeloForm] = useState({ id: '', brandId: '', name: '', tipo_carroceria: 'SUV', subsegmento: '', origen: '', startingPrice: '', imgUrl: '', isPopular: false });
   const [versionForm, setVersionForm] = useState({ 
     id: '', modelId: '', name: '', price: '', concesionaria: '', promocion: '', url_auto: '', activo: true,
@@ -475,7 +564,7 @@ export default function AdminDashboardPage() {
         }
       };
 
-      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap, newsSnap, newsSubSnap, wizSnap, sliderSnap] = await Promise.all([
+      const [bSnap, mSnap, vSnap, adSnap, leadsSnap, cSnap, usersSnap, reqsSnap, compSnap, blogSnap, videosSnap, newsSnap, newsSubSnap, wizSnap, chatSessionsSnap, chatPrivSnap, sliderSnap, globalChatSnap] = await Promise.all([
         safeFetch(collection(db, 'brands'), 'brands'),
         safeFetch(collection(db, 'models'), 'models'),
         safeFetch(collection(db, 'versions'), 'versions'),
@@ -490,10 +579,32 @@ export default function AdminDashboardPage() {
         safeFetch(collection(db, 'newsletter'), 'newsletter'),
         safeFetch(collection(db, 'newsletter_subscribers'), 'newsletter_subscribers'),
         safeFetch(collection(db, 'wizard_stats'), 'wizard_stats'),
+        safeFetch(collection(db, 'chat_sessions'), 'chat_sessions'),
+        safeFetch(collection(db, 'chat_private_contacts'), 'chat_private_contacts'),
         getDoc(doc(db, 'config', 'home_slider')).catch(() => null),
+        getDoc(doc(db, 'config', 'chat_online')).catch(() => null),
       ]);
+
+      if (globalChatSnap && globalChatSnap.exists()) {
+        setGlobalChatOnlineEnabled(globalChatSnap.data()?.enabled !== false);
+      } else {
+        setGlobalChatOnlineEnabled(true);
+      }
       
-      setMarcasList(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const localSandbox = isLocalhostRuntime() ? await fetchLocalSandboxState() : null;
+      const localOverrides = localSandbox?.brandChatOverrides || {};
+
+      setMarcasList(
+        bSnap.docs.map(d => {
+          const data = d.data();
+          const hasLocalOverride = d.id in localOverrides;
+          return {
+            id: d.id,
+            ...data,
+            ...(hasLocalOverride ? { chatOnlineEnabled: localOverrides[d.id] } : {}),
+          };
+        })
+      );
       setModelosList(mSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setVersionesList(vSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCampaignsList(adSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -585,11 +696,121 @@ export default function AdminDashboardPage() {
         }
       });
 
-      const loadedLeads = leadsSnap.docs.map(doc => {
-        const data = doc.data();
-        const vehiculoRaw = data.vehiculo || data.vehiculo_interes || 'No especificado';
-        const marcaRaw = data.marca || '';
-        let modeloRaw = data.modelo || '';
+      // AUTO-SINCRONIZACIÓN DE CHATS A LEADS (Backfill automático + enriquecimiento de marca/modelo capturados en chat)
+      const privMap = new Map<string, any>();
+      chatPrivSnap.docs.forEach(d => privMap.set(d.id, d.data()));
+
+      const existingLeadChatIds = new Set<string>();
+      const existingLeadById = new Map<string, any>();
+      leadsSnap.docs.forEach(d => {
+        const lData = d.data();
+        if (lData.chatId) existingLeadChatIds.add(lData.chatId);
+        existingLeadById.set(d.id, { id: d.id, ...lData });
+      });
+
+      const autoCreatedChatLeads: LeadData[] = [];
+      for (const chatDoc of chatSessionsSnap.docs) {
+        const sData = chatDoc.data();
+        const priv = privMap.get(chatDoc.id);
+        const phoneVal = priv?.userPhone || '';
+        const nameVal = sData.userName || priv?.userName || 'Interesado Chat Online';
+        const brandVal = sData.brandName || priv?.brandName || 'CENTRAL DATACAR';
+        const modelVal = sData.modelName || priv?.modelName || '';
+        const vehTitle = `${brandVal}${modelVal ? ` ${modelVal}` : ''}`.trim();
+
+        const hasLinkedLead =
+          existingLeadChatIds.has(chatDoc.id) ||
+          (sData.leadDocId && existingLeadById.has(sData.leadDocId));
+
+        if (!hasLinkedLead && phoneVal) {
+          try {
+            const isAuthorized = !!sData.convertedToLead;
+            const newLeadRef = await addDoc(collection(db, 'leads'), {
+              nombre: nameVal,
+              telefono: phoneVal,
+              email: 'No proporcionado',
+              vehiculo: vehTitle,
+              marca: brandVal,
+              modelo: modelVal,
+              origen: isAuthorized
+                ? 'Chat Online (Autorizado para Concesionaria)'
+                : `Chat Online (${sData.initialTopic || 'Consulta'}) - Solo Admin`,
+              concesionaria_destino: isAuthorized
+                ? `Marca: ${brandVal}`
+                : 'Solo Admin DATACAR (Sin autorizar concesionaria)',
+              concesionaria_destino_norm: isAuthorized
+                ? 'CHAT_AUTORIZADO_MARCA'
+                : 'SOLO_ADMIN_DATACAR',
+              chatId: chatDoc.id,
+              estado: 'Nuevo',
+              createdAt: sData.createdAt || serverTimestamp(),
+            });
+            await updateDoc(doc(db, 'chat_sessions', chatDoc.id), {
+              leadDocId: newLeadRef.id,
+            }).catch(() => {});
+
+            const rawAutoOrigen = isAuthorized
+              ? 'Chat Online (Autorizado para Concesionaria)'
+              : `Chat Online (${sData.initialTopic || 'Consulta'}) - Solo Admin`;
+            const rawAutoConc = isAuthorized
+              ? `Marca: ${brandVal}`
+              : 'Solo Admin DATACAR (Sin autorizar concesionaria)';
+
+            autoCreatedChatLeads.push({
+              id: newLeadRef.id,
+              nombre: nameVal,
+              telefono: phoneVal,
+              email: 'No proporcionado',
+              vehiculo: vehTitle,
+              marca: brandVal,
+              modelo: modelVal,
+              origen: normalizeLeadOrigen(rawAutoOrigen),
+              origenRaw: rawAutoOrigen,
+              concesionaria_destino: normalizeLeadConcesionaria(rawAutoConc),
+              concesionariaRaw: rawAutoConc,
+              estado: 'Nuevo',
+              createdAt: sData.createdAt?.toDate ? sData.createdAt.toDate() : new Date(),
+            });
+          } catch (e) {
+            console.warn('No se pudo auto-sincronizar chat a lead:', e);
+          }
+        } else if (sData.leadDocId && existingLeadById.has(sData.leadDocId)) {
+          // Si el lead ya existía pero en el chat se capturó una marca/modelo nuevo y el lead seguía como CENTRAL DATACAR, lo sincronizamos
+          const currentLead = existingLeadById.get(sData.leadDocId);
+          if (
+            brandVal &&
+            brandVal !== 'CENTRAL DATACAR' &&
+            (currentLead.marca === 'CENTRAL DATACAR' || !currentLead.marca || (!currentLead.modelo && modelVal))
+          ) {
+            updateDoc(doc(db, 'leads', sData.leadDocId), {
+              vehiculo: vehTitle,
+              marca: brandVal,
+              modelo: modelVal,
+            }).catch(() => {});
+          }
+        }
+      }
+
+      const loadedLeads = leadsSnap.docs.map(docSnap => {
+        const data = docSnap.data();
+        // Si está vinculado a un chat_session que ya capturó marca/modelo, priorizamos el dato más fresco
+        const linkedChat = chatSessionsSnap.docs.find(
+          cd => cd.id === data.chatId || cd.data().leadDocId === docSnap.id
+        )?.data();
+        const vehiculoRaw =
+          (linkedChat?.brandName && linkedChat.brandName !== 'CENTRAL DATACAR'
+            ? `${linkedChat.brandName}${linkedChat.modelName ? ` ${linkedChat.modelName}` : ''}`.trim()
+            : '') ||
+          data.vehiculo ||
+          data.vehiculo_interes ||
+          'No especificado';
+        const marcaRaw =
+          (linkedChat?.brandName && linkedChat.brandName !== 'CENTRAL DATACAR'
+            ? linkedChat.brandName
+            : '') ||
+          data.marca ||
+          '';
+        let modeloRaw = linkedChat?.modelName || data.modelo || '';
 
         if (!modeloRaw && vehiculoRaw !== 'No especificado') {
           let vName = vehiculoRaw.trim();
@@ -610,22 +831,44 @@ export default function AdminDashboardPage() {
           ? formatLeadVehicleTitle(marcaRaw, modeloRaw, vehiculoRaw)
           : vehiculoRaw;
         return {
-          id: doc.id,
+          id: docSnap.id,
           nombre: data.nombre || 'Sin Nombre',
           telefono: data.telefono || '-',
           email: data.email || '-',
           vehiculo: finalVehiculo,
           marca: marcaRaw,
           modelo: modeloRaw,
-          origen: data.origen || 'Desconocido',
-          concesionaria_destino: data.concesionaria_destino || 'A designar',
+          origen: normalizeLeadOrigen(data.origen),
+          origenRaw: data.origen || 'Desconocido',
+          concesionaria_destino: normalizeLeadConcesionaria(data.concesionaria_destino),
+          concesionariaRaw: data.concesionaria_destino || 'A designar',
           estado: data.estado || 'Nuevo',
           preferencias_wizard: data.preferencias_wizard || null,
           datos_usado: data.datos_usado || null,
+          topMatches: Array.isArray(data.topMatches) ? data.topMatches : [],
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date())
         };
       });
-      setLeadsList(loadedLeads);
+      const sandboxLeadsMapped = (localSandbox?.sandboxLeads || []).map((sl: any) => ({
+        id: sl.id || `sandbox_${Date.now()}`,
+        nombre: `${sl.nombre || 'Sin Nombre'} [SANDBOX LOCAL]`,
+        telefono: sl.telefono || '-',
+        email: sl.email || '-',
+        vehiculo: sl.vehiculo || 'No especificado',
+        marca: sl.marca || '',
+        modelo: sl.modelo || '',
+        origen: normalizeLeadOrigen(sl.origen || 'Prueba Localhost'),
+        origenRaw: sl.origen || 'Prueba Localhost',
+        concesionaria_destino: normalizeLeadConcesionaria(sl.concesionaria_destino),
+        concesionariaRaw: sl.concesionaria_destino || 'A designar',
+        estado: sl.estado || 'Nuevo',
+        preferencias_wizard: sl.preferencias_wizard || null,
+        datos_usado: sl.datos_usado || null,
+        topMatches: Array.isArray(sl.topMatches) ? sl.topMatches : [],
+        createdAt: sl.createdAt ? new Date(sl.createdAt) : new Date(),
+      }));
+
+      setLeadsList([...autoCreatedChatLeads, ...sandboxLeadsMapped, ...loadedLeads]);
       
     } catch (error: any) {
       setFeedback({ type: 'error', message: `Error de sincronización: ${error.message}` });
@@ -675,6 +918,23 @@ export default function AdminDashboardPage() {
           if (isAuthorized) {
             setAdminUser(currentUser);
             setIsAuthLoading(false);
+            if (typeof window !== 'undefined') {
+              let searchStr = window.location.search;
+              if (!searchStr) {
+                try {
+                  const savedQuery = sessionStorage.getItem('dc_admin_return_query');
+                  if (savedQuery) {
+                    searchStr = savedQuery;
+                    sessionStorage.removeItem('dc_admin_return_query');
+                    window.history.replaceState({}, '', `/admin${savedQuery}`);
+                  }
+                } catch {}
+              }
+              const params = new URLSearchParams(searchStr);
+              if (params.get('tab') === 'chats_online' || params.get('chatId')) {
+                setActiveTab('chats_online');
+              }
+            }
             fetchAllData();
           } else {
             await signOut(auth);
@@ -694,6 +954,47 @@ export default function AdminDashboardPage() {
   }, [router, fetchAllData]);
 
   const handleLogout = async () => { await signOut(auth); router.replace('/admin/login'); };
+
+  // Suscripción en tiempo real a la colección `leads` y `chat_sessions` para que cualquier lead nuevo o actualización de marca/modelo en el chat impacte al instante en el Dashboard de Leads
+  useEffect(() => {
+    if (!adminUser) return;
+    const qLeads = query(collection(db, 'leads'), orderBy('createdAt', 'desc'));
+    const unsubLeads = onSnapshot(
+      qLeads,
+      (snap) => {
+        const realtimeLeads: LeadData[] = snap.docs.map(docSnap => {
+          const data = docSnap.data();
+          const vehiculoRaw = data.vehiculo || data.vehiculo_interes || 'No especificado';
+          const marcaRaw = data.marca || '';
+          const modeloRaw = data.modelo || '';
+          const finalVehiculo = (modeloRaw || marcaRaw)
+            ? formatLeadVehicleTitle(marcaRaw, modeloRaw, vehiculoRaw)
+            : vehiculoRaw;
+          return {
+            id: docSnap.id,
+            nombre: data.nombre || 'Sin Nombre',
+            telefono: data.telefono || '-',
+            email: data.email || '-',
+            vehiculo: finalVehiculo,
+            marca: marcaRaw,
+            modelo: modeloRaw,
+            origen: normalizeLeadOrigen(data.origen),
+            origenRaw: data.origen || 'Desconocido',
+            concesionaria_destino: normalizeLeadConcesionaria(data.concesionaria_destino),
+            concesionariaRaw: data.concesionaria_destino || 'A designar',
+            estado: data.estado || 'Nuevo',
+            preferencias_wizard: data.preferencias_wizard || null,
+            datos_usado: data.datos_usado || null,
+            topMatches: Array.isArray(data.topMatches) ? data.topMatches : [],
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
+          };
+        });
+        setLeadsList(realtimeLeads);
+      },
+      () => {}
+    );
+    return () => unsubLeads();
+  }, [adminUser]);
 
   // ==========================================
   // LÓGICA DEL DASHBOARD ANALÍTICO Y ADS
@@ -983,7 +1284,78 @@ export default function AdminDashboardPage() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit);
   };
 
-  const topVehiculos = useMemo(() => getTopItems(filteredLeads, l => l.vehiculo, 5), [filteredLeads]);
+  const topVehiculos = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const isGenericPlaceholder = (str: string) => {
+      const up = str.toUpperCase().trim();
+      if (!up) return true;
+      return (
+        up === 'NO ESPECIFICADO' ||
+        up === 'SIN ESPECIFICAR' ||
+        up === 'CENTRAL DATACAR' ||
+        up === 'CONSULTA GENERAL' ||
+        up.startsWith('PERFILADO POR') ||
+        up.startsWith('PERFILADO EN') ||
+        up.startsWith('CONSULTA DESDE') ||
+        up.startsWith('ASESORÍA') ||
+        up.startsWith('ASESORIA')
+      );
+    };
+
+    const addVehicleCount = (rawName: string) => {
+      let clean = rawName
+        .replace(/^RECOMENDADOS:\s*/i, '')
+        .replace(/^COMPARATIVA:\s*/i, '')
+        .trim();
+      if (!clean || isGenericPlaceholder(clean)) return;
+      // Quitar sufijo de versión tras guion largo si viene pegado (ej: "KIA SELTOS — EX 1.5" -> "KIA SELTOS")
+      clean = clean.split(/\s+[—–]\s+/)[0].trim().toUpperCase();
+      if (!clean || isGenericPlaceholder(clean)) return;
+      counts[clean] = (counts[clean] || 0) + 1;
+    };
+
+    filteredLeads.forEach(l => {
+      const mBrand = (l.marca || '').trim().toUpperCase();
+      const mModel = (l.modelo || '').trim().toUpperCase();
+
+      // 1. Si el lead tiene marca y modelo explícitos y reales, los agrupamos como "MARCA MODELO"
+      if (mBrand && mBrand !== 'CENTRAL DATACAR' && mModel && !isGenericPlaceholder(mModel)) {
+        const combined = mModel.startsWith(mBrand) ? mModel : `${mBrand} ${mModel}`;
+        addVehicleCount(combined);
+        return;
+      }
+
+      // 2. Si viene del Recomendador con topMatches estructurados, contabilizamos los modelos recomendados
+      if (Array.isArray(l.topMatches) && l.topMatches.length > 0) {
+        l.topMatches.forEach((tm: any) => {
+          const b = (tm.brandName || '').trim().toUpperCase();
+          const m = (tm.modelName || tm.name || '').trim().toUpperCase();
+          const full = m.startsWith(b) ? m : `${b} ${m}`.trim();
+          if (full) addVehicleCount(full);
+        });
+        return;
+      }
+
+      const rawVeh = (l.vehiculo || '').trim();
+      if (!rawVeh || isGenericPlaceholder(rawVeh)) return;
+
+      // 3. Si es una lista "Recomendados: A / B / C" o comparativa "A vs B", desglosamos cada vehículo individualmente
+      if (/^RECOMENDADOS:/i.test(rawVeh) || rawVeh.includes(' / ') || /\s+vs\.?\s+/i.test(rawVeh)) {
+        const stripped = rawVeh.replace(/^RECOMENDADOS:\s*/i, '');
+        const parts = stripped.split(/\s*\/\s*|\s+vs\.?\s+/i);
+        parts.forEach(p => addVehicleCount(p));
+        return;
+      }
+
+      // 4. Caso estándar: vehículo individual
+      addVehicleCount(rawVeh);
+    });
+
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [filteredLeads]);
+
   const leadsPorOrigen = useMemo(() => getTopItems(filteredLeads, l => l.origen, 5), [filteredLeads]);
   const leadsPorConcesionaria = useMemo(() => getTopItems(filteredLeads, l => l.concesionaria_destino, 5), [filteredLeads]);
 
@@ -2265,10 +2637,10 @@ export default function AdminDashboardPage() {
     e.preventDefault(); if (!marcaForm.name) return; setLoading(true);
     try {
       const id = marcaForm.id || generarSlug(marcaForm.name);
-      await setDoc(doc(db, 'brands', id), { name: marcaForm.name.toUpperCase(), origen_marca: marcaForm.origen_marca, logoUrl: marcaForm.logoUrl, prioridad_recomendador: Number(marcaForm.prioridad_recomendador) || 0, email_gerencia: (marcaForm.email_gerencia || '').trim(), email_gerencia_2: (marcaForm.email_gerencia_2 || '').trim(), updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'brands', id), { name: marcaForm.name.toUpperCase(), origen_marca: marcaForm.origen_marca, logoUrl: marcaForm.logoUrl, prioridad_recomendador: Number(marcaForm.prioridad_recomendador) || 0, email_gerencia: (marcaForm.email_gerencia || '').trim(), email_gerencia_2: (marcaForm.email_gerencia_2 || '').trim(), chatOnlineEnabled: !!marcaForm.chatOnlineEnabled, updatedAt: serverTimestamp() }, { merge: true });
       invalidateCatalogCache('brands');
       setFeedback({ type: 'success', message: 'Identidad de Marca guardada correctamente.' });
-      setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '' });
+      setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '', chatOnlineEnabled: false });
       setAbmModalType(null);
       fetchAllData();
     } catch (err: any) { setFeedback({ type: 'error', message: err.message }); } finally { setLoading(false); }
@@ -2357,7 +2729,8 @@ export default function AdminDashboardPage() {
       logoUrl: m.logoUrl || '', 
       prioridad_recomendador: m.prioridad_recomendador ?? 0,
       email_gerencia: m.email_gerencia || '',
-      email_gerencia_2: m.email_gerencia_2 || ''
+      email_gerencia_2: m.email_gerencia_2 || '',
+      chatOnlineEnabled: !!m.chatOnlineEnabled
     }); 
     setAbmModalType('marcas'); 
   };
@@ -2391,7 +2764,7 @@ export default function AdminDashboardPage() {
 
   // Triggers de Alta Nueva (Abren Modal Vacío)
   const openNewMarcaModal = () => {
-    setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '' });
+    setMarcaForm({ id: '', name: '', origen_marca: '', logoUrl: '', prioridad_recomendador: 0, email_gerencia: '', email_gerencia_2: '', chatOnlineEnabled: false });
     setAbmModalType('marcas');
   };
   const openNewModeloModal = () => {
@@ -2442,6 +2815,60 @@ export default function AdminDashboardPage() {
       showToast(newVal ? 'Sello DATACAR CHECK activado' : 'Sello DATACAR CHECK desactivado');
     } catch (error: any) {
       showToast('Error al actualizar: ' + error.message);
+    }
+  };
+
+  // Toggle Directo en Cuadro: Chat Online por Marca
+  const handleToggleBrandChatOnline = async (brandId: string, currentVal: boolean, brandName?: string) => {
+    const newVal = !currentVal;
+    try {
+      if (isLocalhostRuntime()) {
+        await postLocalSandboxAction('toggle_brand_chat', { brandId, enabled: newVal });
+        setMarcasList(prev => prev.map(b => b.id === brandId ? { ...b, chatOnlineEnabled: newVal, updatedAt: new Date() } : b));
+        showToast(
+          newVal
+            ? `🛡️ [SANDBOX LOCAL] 💬 Chat Online ACTIVADO para ${brandName || brandId.toUpperCase()} (No altera Firebase datacar2.0)`
+            : `🛡️ [SANDBOX LOCAL] Chat Online desactivado para ${brandName || brandId.toUpperCase()}`
+        );
+        return;
+      }
+
+      await updateDoc(doc(db, 'brands', brandId), {
+        chatOnlineEnabled: newVal,
+        updatedAt: serverTimestamp()
+      });
+      setMarcasList(prev => prev.map(b => b.id === brandId ? { ...b, chatOnlineEnabled: newVal, updatedAt: new Date() } : b));
+      invalidateCatalogCache('brands');
+      showToast(
+        newVal
+          ? `💬 Chat Online ACTIVADO para ${brandName || brandId.toUpperCase()}`
+          : `Chat Online desactivado para ${brandName || brandId.toUpperCase()}`
+      );
+    } catch (error: any) {
+      showToast('Error al actualizar Chat Online: ' + error.message);
+    }
+  };
+
+  // Interruptor Maestro Global: Activar / Desactivar la totalidad de la función de Chat Online en la web
+  const handleToggleGlobalChatOnline = async () => {
+    const nextVal = !globalChatOnlineEnabled;
+    try {
+      await setDoc(
+        doc(db, 'config', 'chat_online'),
+        {
+          enabled: nextVal,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      setGlobalChatOnlineEnabled(nextVal);
+      showToast(
+        nextVal
+          ? '⚡ Función de Chat Online ACTIVADA en toda la plataforma.'
+          : '⏸ Función de Chat Online DESACTIVADA en toda la plataforma.'
+      );
+    } catch (error: any) {
+      showToast('Error al actualizar estado global de Chat Online: ' + error.message);
     }
   };
 
@@ -3279,6 +3706,246 @@ export default function AdminDashboardPage() {
     return 0;
   }, []);
 
+  // 0. ANALÍTICA DE COMPARADOR DE MARCAS (TOP MARCAS CON LAS QUE COMPITE UNA MARCA)
+  const brandCompetitorAnalytics = useMemo(() => {
+    // 1. Filtrar comparativas por el rango de fechas de este módulo
+    const dateComps = enrichedComparisons.filter(comp => {
+      const t = getCompTimestamp(comp);
+      if (!t) return true;
+      if (compBrandDateFrom) {
+        const fromT = new Date(`${compBrandDateFrom}T00:00:00`).getTime();
+        if (t < fromT) return false;
+      }
+      if (compBrandDateTo) {
+        const toT = new Date(`${compBrandDateTo}T23:59:59.999`).getTime();
+        if (t > toT) return false;
+      }
+      return true;
+    });
+
+    const totalCompsInDateRange = dateComps.length;
+    const activeBrandId = compBrandSelectedId || (filterCompBrand !== 'Todas' ? filterCompBrand : '');
+    const selectedBrand = marcasList.find(b => b.id === activeBrandId) || null;
+
+    if (!selectedBrand) {
+      return {
+        selectedBrand: null,
+        totalCompsInDateRange,
+        brandTotalComps: 0,
+        marketSharePct: '0',
+        slot1Count: 0,
+        slot1Pct: 0,
+        challengerCount: 0,
+        internalCompCount: 0,
+        topCompetingBrands: [] as {
+          brandId: string;
+          brandName: string;
+          origen: string;
+          count: number;
+          shareOfDuelsPct: number;
+          shareOfBrandCompsPct: number;
+          focalSlot1Wins: number;
+          rivalSlot1Wins: number;
+          topModelClash: string;
+        }[],
+        topCompetingModels: [] as {
+          fullName: string;
+          brandName: string;
+          carroceria: string;
+          count: number;
+          pct: number;
+        }[],
+        ownModelsInvolved: [] as {
+          modelId: string;
+          modelName: string;
+          count: number;
+          slot1Count: number;
+          pct: number;
+        }[],
+      };
+    }
+
+    const brandNameUpper = (selectedBrand.name || '').trim().toUpperCase();
+    let brandTotalComps = 0;
+    let slot1Count = 0;
+    let internalCompCount = 0;
+
+    const rivalBrandMap: Record<string, {
+      brandId: string;
+      brandName: string;
+      origen: string;
+      count: number;
+      focalSlot1Wins: number;
+      rivalSlot1Wins: number;
+      modelClashes: Record<string, number>;
+    }> = {};
+
+    const rivalModelMap: Record<string, {
+      fullName: string;
+      brandName: string;
+      carroceria: string;
+      count: number;
+    }> = {};
+
+    const ownModelMap: Record<string, {
+      modelId: string;
+      modelName: string;
+      count: number;
+      slot1Count: number;
+    }> = {};
+
+    dateComps.forEach(comp => {
+      const vehs: any[] = comp.vehicles || [];
+      if (vehs.length === 0) return;
+
+      const isMyBrand = (v: any) =>
+        (v.brandId && v.brandId === selectedBrand.id) ||
+        (v.brandName && v.brandName.trim().toUpperCase() === brandNameUpper);
+
+      const myVehs = vehs.filter(isMyBrand);
+      if (myVehs.length === 0) return;
+
+      brandTotalComps++;
+      const firstVeh = vehs[0];
+      const focalIsSlot1 = firstVeh ? isMyBrand(firstVeh) : false;
+      if (focalIsSlot1) {
+        slot1Count++;
+      }
+
+      // Registrar modelos propios involucrados
+      const seenOwnModels = new Set<string>();
+      myVehs.forEach(mv => {
+        const mKey = mv.modelId || mv.modelName || 'MODELO';
+        if (!seenOwnModels.has(mKey)) {
+          seenOwnModels.add(mKey);
+          if (!ownModelMap[mKey]) {
+            ownModelMap[mKey] = {
+              modelId: mv.modelId || mKey,
+              modelName: mv.modelName || mv.fullName || 'MODELO',
+              count: 0,
+              slot1Count: 0,
+            };
+          }
+          ownModelMap[mKey].count++;
+          if (firstVeh && (firstVeh.modelId === mv.modelId || firstVeh.modelName === mv.modelName)) {
+            ownModelMap[mKey].slot1Count++;
+          }
+        }
+      });
+
+      // Analizar marcas rivales en esta comparativa
+      const rivalVehs = vehs.filter(v => !isMyBrand(v));
+      if (rivalVehs.length === 0 && myVehs.length >= 2) {
+        internalCompCount++;
+      }
+
+      const seenRivalBrandsInComp = new Set<string>();
+      const seenRivalModelsInComp = new Set<string>();
+
+      rivalVehs.forEach(rv => {
+        const rBrandName = (rv.brandName || 'OTRA MARCA').trim().toUpperCase();
+        if (!rBrandName || rBrandName === 'MARCA') return;
+
+        if (!seenRivalBrandsInComp.has(rBrandName)) {
+          seenRivalBrandsInComp.add(rBrandName);
+          if (!rivalBrandMap[rBrandName]) {
+            const catBrand = marcasList.find(b => b.id === rv.brandId || (b.name || '').trim().toUpperCase() === rBrandName);
+            rivalBrandMap[rBrandName] = {
+              brandId: catBrand?.id || rv.brandId || rBrandName,
+              brandName: rBrandName,
+              origen: normalizeOrigen(catBrand?.origen_marca || rv.origen),
+              count: 0,
+              focalSlot1Wins: 0,
+              rivalSlot1Wins: 0,
+              modelClashes: {},
+            };
+          }
+          rivalBrandMap[rBrandName].count++;
+          if (focalIsSlot1) {
+            rivalBrandMap[rBrandName].focalSlot1Wins++;
+          } else if (firstVeh && (firstVeh.brandName || '').trim().toUpperCase() === rBrandName) {
+            rivalBrandMap[rBrandName].rivalSlot1Wins++;
+          }
+        }
+
+        // Cruce específico de modelos (Modelo propio vs Modelo rival)
+        myVehs.forEach(mv => {
+          const clashLabel = `${mv.modelName} vs ${rv.fullName}`;
+          if (rivalBrandMap[rBrandName]) {
+            rivalBrandMap[rBrandName].modelClashes[clashLabel] =
+              (rivalBrandMap[rBrandName].modelClashes[clashLabel] || 0) + 1;
+          }
+        });
+
+        // Modelos rivales directos
+        const rModelFull = rv.fullName || `${rBrandName} ${rv.modelName || ''}`.trim();
+        if (rModelFull && !seenRivalModelsInComp.has(rModelFull)) {
+          seenRivalModelsInComp.add(rModelFull);
+          if (!rivalModelMap[rModelFull]) {
+            rivalModelMap[rModelFull] = {
+              fullName: rModelFull,
+              brandName: rBrandName,
+              carroceria: rv.carroceria || 'SUV',
+              count: 0,
+            };
+          }
+          rivalModelMap[rModelFull].count++;
+        }
+      });
+    });
+
+    const totalRivalBrandInstances = Object.values(rivalBrandMap).reduce((acc, item) => acc + item.count, 0) || 1;
+    const topCompetingBrands = Object.values(rivalBrandMap)
+      .sort((a, b) => b.count - a.count)
+      .map(item => {
+        const topClashEntry = Object.entries(item.modelClashes).sort((a, b) => b[1] - a[1])[0];
+        return {
+          brandId: item.brandId,
+          brandName: item.brandName,
+          origen: item.origen,
+          count: item.count,
+          shareOfDuelsPct: Math.round((item.count / totalRivalBrandInstances) * 100),
+          shareOfBrandCompsPct: brandTotalComps > 0 ? Math.round((item.count / brandTotalComps) * 100) : 0,
+          focalSlot1Wins: item.focalSlot1Wins,
+          rivalSlot1Wins: item.rivalSlot1Wins,
+          topModelClash: topClashEntry ? `${topClashEntry[0]} (${topClashEntry[1]}x)` : '-',
+        };
+      });
+
+    const topCompetingModels = Object.values(rivalModelMap)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map(m => ({
+        ...m,
+        pct: brandTotalComps > 0 ? Math.round((m.count / brandTotalComps) * 100) : 0,
+      }));
+
+    const ownModelsInvolved = Object.values(ownModelMap)
+      .sort((a, b) => b.count - a.count)
+      .map(om => ({
+        ...om,
+        pct: brandTotalComps > 0 ? Math.round((om.count / brandTotalComps) * 100) : 0,
+      }));
+
+    const challengerCount = Math.max(0, brandTotalComps - slot1Count);
+    const slot1Pct = brandTotalComps > 0 ? Math.round((slot1Count / brandTotalComps) * 100) : 0;
+    const marketSharePct = totalCompsInDateRange > 0 ? ((brandTotalComps / totalCompsInDateRange) * 100).toFixed(1) : '0';
+
+    return {
+      selectedBrand,
+      totalCompsInDateRange,
+      brandTotalComps,
+      marketSharePct,
+      slot1Count,
+      slot1Pct,
+      challengerCount,
+      internalCompCount,
+      topCompetingBrands,
+      topCompetingModels,
+      ownModelsInvolved,
+    };
+  }, [enrichedComparisons, compBrandSelectedId, filterCompBrand, compBrandDateFrom, compBrandDateTo, marcasList, getCompTimestamp, normalizeOrigen]);
+
   // 1. ANALÍTICA DE CONTEO DE MODELO EN RANGO DE TIEMPO
   const auditModelAnalytics = useMemo(() => {
     // Filtrar primero por rango de fechas
@@ -3917,10 +4584,70 @@ export default function AdminDashboardPage() {
   if (isAuthLoading) return <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center font-bold text-[#0A1F33] tracking-widest uppercase text-sm">Validando credenciales ejecutivas...</div>;
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex text-[#3A3A3C] font-sans">
+    <div className="min-h-screen bg-[#F8F9FA] flex flex-col lg:flex-row text-[#3A3A3C] font-sans">
+      {/* BARRA MÓVIL SUPERIOR COMPACTA (< lg) */}
+      <div className="lg:hidden bg-[#0A1F33] text-[#FFFFFF] border-b border-[#00BFFF]/40 sticky top-0 z-40">
+        <div className="px-3 py-2.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className="font-black text-base tracking-widest uppercase"
+              style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}
+            >
+              DATA<span className="font-light">CAR</span>
+            </span>
+            <span className="text-[8px] text-[#00BFFF] border border-[#00BFFF] px-1.5 py-0.5 uppercase tracking-wider font-bold shrink-0">
+              Admin
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={fetchAllData}
+              className="text-[9px] font-bold text-white/90 border border-white/25 px-2.5 py-1 uppercase"
+            >
+              {loading ? '...' : '↻ Sync'}
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-[9px] font-bold text-[#00BFFF] border border-[#00BFFF]/40 px-2 py-1 uppercase"
+            >
+              Salir
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 pb-2 overflow-x-auto no-scrollbar">
+          {[
+            { id: 'chats_online', label: `💬 Chats ${globalChatOnlineEnabled ? 'ON' : 'OFF'}` },
+            { id: 'dashboard', label: '📊 Leads' },
+            { id: 'analitica', label: '📈 Analítica' },
+            { id: 'accesos', label: '🔑 Accesos' },
+            { id: 'marcas', label: '🏷️ Marcas' },
+            { id: 'modelos', label: '🚘 Modelos' },
+            { id: 'versiones', label: '⚙️ Versiones' },
+            { id: 'newsletter', label: '✉️ Newsletter' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(t.id as any);
+                setSearchTerm('');
+              }}
+              className={`shrink-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                activeTab === t.id
+                  ? 'bg-[#00BFFF] text-[#0A1F33]'
+                  : 'bg-white/10 text-white/85'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
       
-      {/* SIDEBAR CORPORATIVO */}
-      <aside className="w-64 bg-[#0A1F33] text-[#FFFFFF] min-h-screen flex flex-col border-r border-[#0A1F33] shrink-0 sticky top-0">
+      {/* SIDEBAR CORPORATIVO (Desktop lg+) */}
+      <aside className="hidden lg:flex w-64 bg-[#0A1F33] text-[#FFFFFF] min-h-screen flex-col border-r border-[#0A1F33] shrink-0 sticky top-0">
         <div className="p-6 border-b border-[#FFFFFF]/10">
           <div className="font-black text-2xl tracking-widest uppercase mb-1" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>DATA<span className="font-light">CAR</span></div>
           <span className="text-[8px] text-[#00BFFF] border border-[#00BFFF] px-2 py-0.5 uppercase tracking-widest font-bold">Terminal Admin</span>
@@ -3929,6 +4656,12 @@ export default function AdminDashboardPage() {
         <nav className="flex flex-col flex-grow py-6 text-[10px] font-bold uppercase tracking-widest overflow-y-auto custom-scrollbar" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           <span className="text-[#C0C0C0] px-6 mb-3">CRM & Operaciones</span>
           <button onClick={() => { setActiveTab('dashboard'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 ${activeTab === 'dashboard' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>Dashboard Leads</button>
+          <button onClick={() => { setActiveTab('chats_online'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 flex items-center justify-between ${activeTab === 'chats_online' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>
+            <span>💬 Chats Online</span>
+            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-none ${!globalChatOnlineEnabled ? 'bg-[#D93025] text-white' : activeTab === 'chats_online' ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#1E8E3E] text-white'}`}>
+              {globalChatOnlineEnabled ? 'ON' : 'OFF'}
+            </span>
+          </button>
           <button onClick={() => { setActiveTab('newsletter'); setSearchTerm(''); }} className={`text-left px-6 py-3 transition-colors border-l-2 flex items-center justify-between ${activeTab === 'newsletter' ? 'border-[#00BFFF] bg-[#FFFFFF]/10 text-[#00BFFF]' : 'border-transparent text-[#FFFFFF] hover:bg-[#FFFFFF]/5'}`}>
             <span>Newsletter & Emailing</span>
             <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-none ${activeTab === 'newsletter' ? 'bg-[#00BFFF] text-[#0A1F33]' : 'bg-[#FFFFFF]/15 text-white'}`}>
@@ -3970,8 +4703,8 @@ export default function AdminDashboardPage() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="bg-[#FFFFFF] border-b border-[#C0C0C0] p-6 flex justify-between items-center shrink-0">
+      <main className="flex-1 flex flex-col lg:h-screen lg:overflow-hidden min-w-0">
+        <header className="hidden lg:flex bg-[#FFFFFF] border-b border-[#C0C0C0] p-6 justify-between items-center shrink-0">
           <h1 className="font-black text-2xl text-[#0A1F33] uppercase" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>Módulo Activo: <span className="text-[#00BFFF]">{activeTab}</span></h1>
           <div className="flex items-center gap-2">
             <button
@@ -3987,10 +4720,22 @@ export default function AdminDashboardPage() {
           </div>
         </header>
 
-        {feedback.message && <div className={`m-6 mb-0 p-4 text-xs font-bold uppercase tracking-widest border shrink-0 ${feedback.type === 'error' ? 'bg-[#FFE6E6] text-[#D93025] border-[#D93025]' : 'bg-[#E6F4EA] text-[#1E8E3E] border-[#1E8E3E]'}`}>{feedback.message}</div>}
+        {feedback.message && <div className={`m-2.5 lg:m-6 mb-0 p-3 lg:p-4 text-xs font-bold uppercase tracking-widest border shrink-0 ${feedback.type === 'error' ? 'bg-[#FFE6E6] text-[#D93025] border-[#D93025]' : 'bg-[#E6F4EA] text-[#1E8E3E] border-[#1E8E3E]'}`}>{feedback.message}</div>}
 
-        <div className="p-6 flex-grow overflow-y-auto custom-scrollbar" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+        <div className="p-2.5 sm:p-4 lg:p-6 flex-grow overflow-y-auto custom-scrollbar" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
           
+          {/* ======================================= */}
+          {/* VISTA: CHATS ONLINE POR MARCA (ACTIVACIÓN Y AUDITORÍA) */}
+          {/* ======================================= */}
+          {activeTab === 'chats_online' && (
+            <AdminChatsModule
+              marcasList={marcasList}
+              onToggleBrandChat={handleToggleBrandChatOnline}
+              globalChatEnabled={globalChatOnlineEnabled}
+              onToggleGlobalChat={handleToggleGlobalChatOnline}
+            />
+          )}
+
           {/* ======================================= */}
           {/* VISTA: GESTIÓN DE ACCESOS Y ROLES */}
           {/* ======================================= */}
@@ -4912,6 +5657,23 @@ export default function AdminDashboardPage() {
 
                 <button
                   type="button"
+                  onClick={() => setAnaliticaSubTab('comparador_marcas')}
+                  className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border flex items-center gap-1.5 ${
+                    analiticaSubTab === 'comparador_marcas'
+                      ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+                      : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+                  }`}
+                >
+                  <span>🏢 Comparador de Marcas (Top Competidores)</span>
+                  {brandCompetitorAnalytics.selectedBrand && (
+                    <span className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black px-1.5 py-0.2">
+                      {brandCompetitorAnalytics.topCompetingBrands.length} rivales
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setAnaliticaSubTab('modelo_rango')}
                   className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border flex items-center gap-1.5 ${
                     analiticaSubTab === 'modelo_rango'
@@ -5012,8 +5774,10 @@ export default function AdminDashboardPage() {
                       className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] rounded-none bg-[#F8F9FA] text-[#0A1F33] font-semibold"
                       value={filterCompBrand}
                       onChange={e => {
-                        setFilterCompBrand(e.target.value);
+                        const val = e.target.value;
+                        setFilterCompBrand(val);
                         setFilterCompModel('Todos');
+                        setCompBrandSelectedId(val === 'Todas' ? '' : val);
                       }}
                     >
                       <option value="Todas">Todas las Marcas</option>
@@ -5288,6 +6052,72 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
               </div>
+
+              {/* 3.5. TOP MARCAS CON LAS QUE COMPITE LA MARCA SELECCIONADA (VISTA DIRECTA EN GENERAL) */}
+              {filterCompBrand !== 'Todas' && brandCompetitorAnalytics.selectedBrand && (
+                <div className="bg-[#FFFFFF] border-2 border-[#0A1F33] p-5 flex flex-col gap-4 shrink-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#C0C0C0]/60 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                          Comparador de Marcas
+                        </span>
+                        <h3 className="text-xs font-black text-[#0A1F33] uppercase tracking-wider">
+                          🏆 Top Marcas con las que Compite {brandCompetitorAnalytics.selectedBrand.name}
+                        </h3>
+                      </div>
+                      <p className="text-[10px] text-[#3A3A3C] mt-0.5">
+                        Ranking directo de marcas contra las que se enfrentó {brandCompetitorAnalytics.selectedBrand.name} en el comparador.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAnaliticaSubTab('comparador_marcas')}
+                      className="bg-[#00BFFF] text-[#0A1F33] hover:bg-[#0A1F33] hover:text-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors"
+                    >
+                      Ver Análisis Completo de Marca →
+                    </button>
+                  </div>
+
+                  {brandCompetitorAnalytics.topCompetingBrands.length === 0 ? (
+                    <p className="text-[10px] text-[#C0C0C0] uppercase font-bold py-4 text-center">
+                      No hay cruces registrados frente a otras marcas para este filtro.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      {brandCompetitorAnalytics.topCompetingBrands.slice(0, 10).map((rb, idx) => (
+                        <div
+                          key={rb.brandName}
+                          className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-3 flex flex-col justify-between hover:border-[#0A1F33] transition-colors"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="bg-[#0A1F33] text-[#00BFFF] font-mono font-black text-[9px] px-1.5 py-0.5">
+                                #{idx + 1}
+                              </span>
+                              <span className="text-[8px] font-bold uppercase text-[#3A3A3C] bg-white border border-[#C0C0C0]/60 px-1.5 py-0.5">
+                                {rb.origen}
+                              </span>
+                            </div>
+                            <span className="font-black text-sm text-[#0A1F33] uppercase block truncate mt-1">
+                              {rb.brandName}
+                            </span>
+                          </div>
+                          <div className="mt-2 pt-2 border-t border-[#C0C0C0]/40">
+                            <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                              <span>{rb.count} duelos</span>
+                              <span className="text-[#00BFFF] font-mono">{rb.shareOfDuelsPct}%</span>
+                            </div>
+                            <div className="w-full bg-[#E0E0E0] h-1.5 overflow-hidden">
+                              <div className="h-full bg-[#00BFFF]" style={{ width: `${rb.shareOfDuelsPct}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 4. ANALÍTICA GLOBAL Y COMPETITIVA: 4 GRÁFICOS CIRCULARES */}
               <div className="flex flex-col gap-3 shrink-0">
@@ -5761,6 +6591,411 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
                 </>
+              )}
+
+              {/* ================================================================ */}
+              {/* SECCIÓN NUEVA: COMPARADOR DE MARCAS (TOP MARCAS COMPETIDORAS)    */}
+              {/* ================================================================ */}
+              {(analiticaSubTab === 'comparador_marcas' || analiticaSubTab === 'todos') && (
+                <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-6 shadow-none">
+                  {/* Encabezado */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#C0C0C0]/50 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-2.5 h-2.5 bg-[#00BFFF] inline-block" />
+                        <h3 className="text-xs font-black uppercase tracking-widest text-[#0A1F33]">
+                          Comparador de Marcas: Top Marcas con las que Compite una Marca
+                        </h3>
+                        <span className="bg-[#0A1F33] text-[#00BFFF] px-2 py-0.5 text-[8px] font-black uppercase">
+                          Radar Competitivo de Marca
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[#3A3A3C]">
+                        Seleccioná una marca del catálogo para ver al instante el ranking de marcas contra las que más la comparan los compradores, su cuota de pantalla y qué modelos protagonizan los enfrentamientos.
+                      </p>
+                    </div>
+
+                    {/* Botones de rango rápido */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider mr-1">Rango rápido:</span>
+                      <button
+                        type="button"
+                        onClick={() => { setCompBrandDateFrom(''); setCompBrandDateTo(''); }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Histórico Total
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = new Date().toISOString().split('T')[0];
+                          setCompBrandDateFrom(today);
+                          setCompBrandDateTo(today);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Hoy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() - 7);
+                          setCompBrandDateFrom(d.toISOString().split('T')[0]);
+                          setCompBrandDateTo(new Date().toISOString().split('T')[0]);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Últimos 7 días
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() - 30);
+                          setCompBrandDateFrom(d.toISOString().split('T')[0]);
+                          setCompBrandDateTo(new Date().toISOString().split('T')[0]);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Últimos 30 días
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const now = new Date();
+                          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                          setCompBrandDateFrom(firstDay);
+                          setCompBrandDateTo(now.toISOString().split('T')[0]);
+                        }}
+                        className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+                      >
+                        Este Mes
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Barra de Selección de Marca y Fechas */}
+                  <div className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    <div className="md:col-span-6">
+                      <label htmlFor="compBrandSelect" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Seleccionar Marca a Analizar <span className="text-[#00BFFF]">*</span>
+                      </label>
+                      <select
+                        id="compBrandSelect"
+                        className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                        value={compBrandSelectedId || (filterCompBrand !== 'Todas' ? filterCompBrand : '')}
+                        onChange={e => setCompBrandSelectedId(e.target.value)}
+                      >
+                        <option value="">-- Elegir una marca del catálogo ({marcasList.length} disponibles) --</option>
+                        {[...marcasList]
+                          .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                          .map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.name} {b.origen_marca ? `(${b.origen_marca})` : ''}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label htmlFor="compBrandDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Fecha Desde
+                      </label>
+                      <input
+                        id="compBrandDateFrom"
+                        type="date"
+                        className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                        value={compBrandDateFrom}
+                        onChange={e => setCompBrandDateFrom(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label htmlFor="compBrandDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                        Fecha Hasta
+                      </label>
+                      <input
+                        id="compBrandDateTo"
+                        type="date"
+                        className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                        value={compBrandDateTo}
+                        onChange={e => setCompBrandDateTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Resultados del Comparador de Marcas */}
+                  {brandCompetitorAnalytics.selectedBrand ? (
+                    <div className="flex flex-col gap-6">
+                      {/* 4 KPIs Principales de la Marca */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-[#F8F9FA] border-2 border-[#00BFFF] p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1">
+                              Comparativas de {brandCompetitorAnalytics.selectedBrand.name}
+                            </span>
+                            <span className="font-black text-4xl text-[#0A1F33] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {brandCompetitorAnalytics.brandTotalComps}
+                            </span>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 flex justify-between items-center text-[9px]">
+                            <span className="text-[#3A3A3C] uppercase font-bold">Muestra total del período:</span>
+                            <span className="font-mono font-bold text-[#0A1F33]">{brandCompetitorAnalytics.totalCompsInDateRange} comp.</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">
+                              Cuota de Presencia de Marca
+                            </span>
+                            <span className="font-black text-4xl text-[#00BFFF] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {brandCompetitorAnalytics.marketSharePct}%
+                            </span>
+                          </div>
+                          <span className="text-[8px] text-[#3A3A3C] uppercase font-semibold mt-3 pt-2 border-t border-[#C0C0C0]/50 block">
+                            Presente en {brandCompetitorAnalytics.brandTotalComps} de {brandCompetitorAnalytics.totalCompsInDateRange} comparativas
+                          </span>
+                        </div>
+
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#1E8E3E] uppercase tracking-wider block mb-1">
+                              Elegida como 1ra Opción (Slot #1)
+                            </span>
+                            <span className="font-black text-4xl text-[#1E8E3E] block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {brandCompetitorAnalytics.slot1Count}
+                            </span>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 text-[9px] text-[#3A3A3C] font-semibold">
+                            Tasa de 1ra elección: <strong className="text-[#1E8E3E]">{brandCompetitorAnalytics.slot1Pct}%</strong> (Retadora: {brandCompetitorAnalytics.challengerCount}x)
+                          </div>
+                        </div>
+
+                        <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1">
+                              Marca Rival #1 Principal
+                            </span>
+                            <span className="font-black text-2xl text-[#0A1F33] truncate block" style={{ fontFamily: 'var(--font-montserrat)' }}>
+                              {brandCompetitorAnalytics.topCompetingBrands[0]?.brandName || 'Sin rivales'}
+                            </span>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 text-[9px] text-[#3A3A3C] font-semibold">
+                            {brandCompetitorAnalytics.topCompetingBrands[0]
+                              ? `${brandCompetitorAnalytics.topCompetingBrands[0].count} cruces directos (${brandCompetitorAnalytics.topCompetingBrands[0].shareOfDuelsPct}% del total de rivales)`
+                              : 'Aún sin cruces registrados'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bloque Principal: Ranking Top Marcas Competidoras + Desglose de Modelos */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Columna Izquierda (7 cols): Top Marcas con las que compite */}
+                        <div className="lg:col-span-7 bg-[#FFFFFF] border border-[#C0C0C0] p-5 flex flex-col justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#C0C0C0]/60 pb-3 mb-4">
+                              <div>
+                                <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                                  Ranking de Competencia Directa
+                                </span>
+                                <h4 className="text-xs font-black uppercase tracking-wider text-[#0A1F33] mt-1">
+                                  🏆 Top Marcas con las que Compite {brandCompetitorAnalytics.selectedBrand.name}
+                                </h4>
+                              </div>
+                              <span className="text-[9px] font-bold text-[#3A3A3C] uppercase">
+                                {brandCompetitorAnalytics.topCompetingBrands.length} marcas rivales detectadas
+                              </span>
+                            </div>
+
+                            {brandCompetitorAnalytics.topCompetingBrands.length === 0 ? (
+                              <div className="p-8 text-center text-[10px] text-[#C0C0C0] uppercase font-bold">
+                                No se registraron enfrentamientos contra otras marcas para {brandCompetitorAnalytics.selectedBrand.name} en este período.
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto custom-scrollbar max-h-[460px]">
+                                <table className="w-full text-left border-collapse text-[10px]">
+                                  <thead className="bg-[#F8F9FA] sticky top-0 z-10 border-b border-[#C0C0C0]/60 text-[8px] font-bold uppercase text-[#3A3A3C]">
+                                    <tr>
+                                      <th className="p-2.5 w-10 text-center">Rank</th>
+                                      <th className="p-2.5">Marca Competidora</th>
+                                      <th className="p-2.5 text-center">Cruces</th>
+                                      <th className="p-2.5 w-36">% Competencia</th>
+                                      <th className="p-2.5 text-center" title="Veces que tu marca fue elegida en Slot #1 vs la marca rival">1ra Opción (Slot 1)</th>
+                                      <th className="p-2.5">Duelo Principal de Modelos</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {brandCompetitorAnalytics.topCompetingBrands.slice(0, 15).map((rb, idx) => (
+                                      <tr
+                                        key={rb.brandName}
+                                        className="border-b border-[#F1F5F9] hover:bg-[#F5FBFF] transition-colors"
+                                      >
+                                        <td className="p-2.5 text-center font-mono font-black">
+                                          <span className={`inline-block w-6 text-center py-0.5 text-[9px] font-bold ${
+                                            idx === 0
+                                              ? 'bg-[#0A1F33] text-[#00BFFF]'
+                                              : idx === 1
+                                                ? 'bg-[#3A3A3C] text-white'
+                                                : idx === 2
+                                                  ? 'bg-[#C0C0C0] text-[#0A1F33]'
+                                                  : 'bg-[#F0F0F0] text-[#3A3A3C]'
+                                          }`}>
+                                            #{idx + 1}
+                                          </span>
+                                        </td>
+                                        <td className="p-2.5">
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const matchB = marcasList.find(b => b.id === rb.brandId || (b.name || '').trim().toUpperCase() === rb.brandName);
+                                                if (matchB) setCompBrandSelectedId(matchB.id);
+                                              }}
+                                              className="font-black text-[#0A1F33] hover:text-[#00BFFF] uppercase text-left transition-colors"
+                                              title="Click para auditar esta marca"
+                                            >
+                                              {rb.brandName}
+                                            </button>
+                                            <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 bg-[#F8F9FA] border border-[#C0C0C0]/60 text-[#3A3A3C]">
+                                              {rb.origen}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="p-2.5 text-center font-mono font-black text-xs text-[#0A1F33]">
+                                          {rb.count}x
+                                        </td>
+                                        <td className="p-2.5">
+                                          <div className="flex items-center justify-between text-[9px] font-bold text-[#0A1F33] mb-1">
+                                            <span>{rb.shareOfDuelsPct}% del total rival</span>
+                                            <span className="text-[#C0C0C0]">({rb.shareOfBrandCompsPct}% comp.)</span>
+                                          </div>
+                                          <div className="w-full bg-[#E0E0E0] h-1.5 overflow-hidden">
+                                            <div
+                                              className="h-full bg-[#00BFFF] transition-all duration-500"
+                                              style={{ width: `${rb.shareOfDuelsPct}%` }}
+                                            />
+                                          </div>
+                                        </td>
+                                        <td className="p-2.5 text-center whitespace-nowrap">
+                                          <span className="text-[9px] font-bold text-[#1E8E3E]" title={`${brandCompetitorAnalytics.selectedBrand?.name} elegido 1º`}>
+                                            {rb.focalSlot1Wins}
+                                          </span>
+                                          <span className="text-[#C0C0C0] mx-1">vs</span>
+                                          <span className="text-[9px] font-bold text-[#3A3A3C]" title={`${rb.brandName} elegido 1º`}>
+                                            {rb.rivalSlot1Wins}
+                                          </span>
+                                        </td>
+                                        <td className="p-2.5 text-[9px] font-semibold text-[#3A3A3C] truncate max-w-[200px]" title={rb.topModelClash}>
+                                          {rb.topModelClash}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-4 pt-3 border-t border-[#C0C0C0]/40 flex flex-wrap justify-between items-center gap-2 text-[9px] text-[#3A3A3C]">
+                            <span>
+                              💡 <strong>Tip:</strong> Hacé clic en el nombre de cualquier marca competidora de la tabla para saltar a su propio perfil competitivo.
+                            </span>
+                            {brandCompetitorAnalytics.internalCompCount > 0 && (
+                              <span className="bg-[#F8F9FA] border border-[#C0C0C0] px-2 py-0.5 font-bold text-[#0A1F33]">
+                                Comparativas internas ({brandCompetitorAnalytics.selectedBrand.name} vs {brandCompetitorAnalytics.selectedBrand.name}): {brandCompetitorAnalytics.internalCompCount}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Columna Derecha (5 cols): Top Modelos Rivales Directos + Modelos Propios más comparados */}
+                        <div className="lg:col-span-5 flex flex-col gap-6">
+                          {/* Subtarjeta 1: Top Modelos de Otras Marcas que compiten contra la Marca */}
+                          <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2 mb-3">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                                  🚗 Top 10 Modelos Rivales Contra {brandCompetitorAnalytics.selectedBrand.name}
+                                </span>
+                                <span className="text-[8px] font-bold text-[#00BFFF] uppercase">Cruces</span>
+                              </div>
+                              <div className="flex flex-col gap-2.5 max-h-[210px] overflow-y-auto custom-scrollbar pr-1">
+                                {brandCompetitorAnalytics.topCompetingModels.length === 0 ? (
+                                  <p className="text-[10px] text-[#C0C0C0] p-4 text-center uppercase">Sin modelos rivales en este rango.</p>
+                                ) : (
+                                  brandCompetitorAnalytics.topCompetingModels.map((rm, idx) => (
+                                    <div key={rm.fullName}>
+                                      <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                        <span className="flex items-center gap-1.5 truncate">
+                                          <span className="text-[8px] bg-[#0A1F33] text-white px-1 font-mono">#{idx + 1}</span>
+                                          <span className="truncate">{rm.fullName}</span>
+                                          <span className="text-[8px] text-[#3A3A3C] font-normal">({rm.carroceria})</span>
+                                        </span>
+                                        <span className="font-mono text-[10px] text-[#00BFFF] shrink-0 font-bold ml-2">
+                                          {rm.count}x ({rm.pct}%)
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-[#E0E0E0] h-1.5 overflow-hidden">
+                                        <div
+                                          className="h-full bg-[#0A1F33] transition-all duration-500"
+                                          style={{ width: `${rm.pct}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Subtarjeta 2: Modelos propios de la marca más comparados */}
+                          <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2 mb-3">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                                  📌 Modelos de {brandCompetitorAnalytics.selectedBrand.name} Más Comparados
+                                </span>
+                                <span className="text-[8px] font-bold text-[#1E8E3E] uppercase">Tracción Propia</span>
+                              </div>
+                              <div className="flex flex-col gap-2.5 max-h-[190px] overflow-y-auto custom-scrollbar pr-1">
+                                {brandCompetitorAnalytics.ownModelsInvolved.length === 0 ? (
+                                  <p className="text-[10px] text-[#C0C0C0] p-4 text-center uppercase">Sin modelos propios registrados.</p>
+                                ) : (
+                                  brandCompetitorAnalytics.ownModelsInvolved.map((om, idx) => (
+                                    <div key={om.modelId} className="flex items-center justify-between border-b border-[#F1F5F9] pb-1.5 last:border-none text-[10px]">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-[8px] bg-[#00BFFF] text-[#0A1F33] font-black px-1 font-mono">#{idx + 1}</span>
+                                        <span className="font-bold text-[#0A1F33] uppercase truncate">{om.modelName}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <span className="text-[9px] text-[#1E8E3E] font-bold" title="Veces elegido como 1ra opción (Slot #1)">
+                                          1º: {om.slot1Count}x
+                                        </span>
+                                        <span className="font-mono font-black text-[#0A1F33] bg-[#F8F9FA] border border-[#C0C0C0]/60 px-1.5 py-0.5">
+                                          {om.count} comp. ({om.pct}%)
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#F8F9FA] border border-dashed border-[#C0C0C0] p-10 text-center">
+                      <p className="text-sm font-bold text-[#0A1F33] uppercase tracking-wider mb-2">
+                        Seleccioná una marca en el desplegable superior para ver contra qué marcas compite
+                      </p>
+                      <p className="text-[11px] text-[#3A3A3C] max-w-lg mx-auto">
+                        Descubrí el ranking exacto de marcas competidoras, el porcentaje de cruces frente a cada rival, cuántas veces tu marca fue elegida como primera opción (Slot #1) y cuáles son los modelos que protagonizan los duelos.
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* ================================================================ */}
@@ -7390,6 +8625,7 @@ export default function AdminDashboardPage() {
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Origen de la Marca ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Emails Gerencia (Leads) ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center">Modelos en Catálogo</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center" title="Activar o desactivar el Chat Online en vivo para esta marca">💬 Chat Online</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 text-center" title="Prioridad para desempates en el recomendador (mayor valor gana en empate)">Prioridad Rec. ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación (J)</th>
                           <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
@@ -7481,6 +8717,22 @@ export default function AdminDashboardPage() {
                               {/* Q Modelos */}
                               <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
                                 <span className="bg-[#F8F9FA] border border-[#C0C0C0] text-[#0A1F33] text-[10px] font-black px-2.5 py-0.5">{modelsCount} modelos</span>
+                              </td>
+
+                              {/* Toggle Directo Chat Online por Marca */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBrandChatOnline(m.id, !!m.chatOnlineEnabled, m.name)}
+                                  className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                                    m.chatOnlineEnabled
+                                      ? 'bg-[#E6F4EA] text-[#1E8E3E] border-[#1E8E3E] shadow-sm'
+                                      : 'bg-[#F8F9FA] text-[#A0A0A0] border-[#C0C0C0] hover:border-[#1E8E3E] hover:text-[#1E8E3E]'
+                                  }`}
+                                  title={m.chatOnlineEnabled ? 'Desactivar Chat Online para esta marca' : 'Activar Chat Online para esta marca'}
+                                >
+                                  {m.chatOnlineEnabled ? '💬 CHAT ACTIVO' : '○ Chat Inactivo'}
+                                </button>
                               </td>
 
                               {/* Prioridad Recomendador inline */}
@@ -7742,6 +8994,23 @@ export default function AdminDashboardPage() {
                     <label htmlFor="marcaForm-prioridad" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Prioridad Recomendador (Desempate)</label>
                     <input id="marcaForm-prioridad" type="number" min="0" max="999" className="w-full border p-3 text-xs focus:outline-none focus:border-[#0A1F33] font-bold" value={marcaForm.prioridad_recomendador} onChange={e => setMarcaForm({...marcaForm, prioridad_recomendador: Number(e.target.value) || 0})} placeholder="0 (Normal), 10 (Alta prioridad en empates)..." />
                     <p className="text-[9px] text-[#C0C0C0] mt-1">Ante igualdad de afinidad en el recomendador, las marcas con mayor prioridad ganan el desempate.</p>
+                  </div>
+                  <div className="p-3 bg-[#F8F9FA] border border-[#C0C0C0] flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-black text-[#0A1F33] uppercase block">💬 Chat Online en la Plataforma</span>
+                      <span className="text-[9px] text-[#707070] block">Permite que los usuarios inicien un chat en vivo con esta marca (protegiendo su número de spam).</span>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-[#1E8E3E] cursor-pointer"
+                        checked={!!marcaForm.chatOnlineEnabled}
+                        onChange={e => setMarcaForm({ ...marcaForm, chatOnlineEnabled: e.target.checked })}
+                      />
+                      <span className={`text-[10px] font-black uppercase ${marcaForm.chatOnlineEnabled ? 'text-[#1E8E3E]' : 'text-[#707070]'}`}>
+                        {marcaForm.chatOnlineEnabled ? '✓ Activo' : 'Inactivo'}
+                      </span>
+                    </label>
                   </div>
                   <ImageUploadField label="Logotipo" folder="brands" value={marcaForm.logoUrl} onChange={url => setMarcaForm({...marcaForm, logoUrl: url})} accentClass="text-[#00BFFF]" />
                   <div className="flex gap-3 mt-4">

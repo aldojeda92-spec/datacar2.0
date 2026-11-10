@@ -11,6 +11,7 @@ export interface LeadNotificationParams {
   vehicleOfInterest: string;
   origen: string;
   concesionariaDestino: string;
+  onlyAdmin?: boolean;
   brandOfInterest?: string;
   marca?: string;
   brandId?: string;
@@ -46,9 +47,12 @@ export const sendLeadNotificationEmail = async (params: LeadNotificationParams) 
 
     let nombreConcesionariaOficial = 'Central DATACAR';
 
-    // Si es un lead de perfilado inicial, NO se asigna marca ni concesionaria (va únicamente a auditoría DATACAR)
-    const isProfilingLead = (params.vehicleOfInterest || '').toLowerCase().includes('perfilado') ||
-                            (params.origen || '').toLowerCase().includes('perfilado');
+    // Si es un lead de perfilado inicial o exclusivo para Admin (ej: Chat Online antes de autorizar concesionaria),
+    // NO se asigna correo de marca ni concesionaria (va únicamente a auditoría DATACAR)
+    const isProfilingLead =
+      params.onlyAdmin === true ||
+      (params.vehicleOfInterest || '').toLowerCase().includes('perfilado') ||
+      (params.origen || '').toLowerCase().includes('perfilado');
 
     // 1. Determinar la marca objetivo del lead (solo si no es perfilado inicial)
     let targetBrandName = '';
@@ -472,3 +476,111 @@ export const sendDealershipReportEmail = async (params: DealershipReportEmailPar
     };
   }
 };
+
+// ==========================================
+// 8. MAILING PARA NUEVO CHAT ONLINE POR MARCA (B2C -> B2B & ADMIN)
+// ==========================================
+export interface ChatInitiatedNotificationParams {
+  chatId: string;
+  userName: string;
+  userPhone: string; // SOLO se envía a Auditoría Admin (Aldo). NUNCA a la concesionaria.
+  brandId: string;
+  brandName: string;
+  modelName?: string;
+  firstMessage: string;
+}
+
+export const sendChatInitiatedEmail = async (params: ChatInitiatedNotificationParams): Promise<void> => {
+  try {
+    const brandEmails: string[] = [];
+    const targetBrandId = (params.brandId || '').trim();
+    const targetBrandName = (params.brandName || '').trim();
+
+    let brandDocData: any = null;
+    if (targetBrandId) {
+      try {
+        const bSnap = await getDoc(doc(db, 'brands', targetBrandId));
+        if (bSnap.exists()) brandDocData = bSnap.data();
+      } catch {}
+    }
+
+    if (!brandDocData && targetBrandName) {
+      try {
+        const slugId = targetBrandName.toLowerCase().replace(/\s+/g, '-');
+        const bSnapSlug = await getDoc(doc(db, 'brands', slugId));
+        if (bSnapSlug.exists()) {
+          brandDocData = bSnapSlug.data();
+        } else {
+          const qBrand = query(collection(db, 'brands'), where('name', '==', targetBrandName.toUpperCase()));
+          const qSnap = await getDocs(qBrand);
+          if (!qSnap.empty) brandDocData = qSnap.docs[0].data();
+        }
+      } catch {}
+    }
+
+    if (brandDocData) {
+      if (brandDocData.email_gerencia && typeof brandDocData.email_gerencia === 'string') {
+        const e1 = brandDocData.email_gerencia.trim();
+        if (e1 && !brandEmails.map((d) => d.toLowerCase()).includes(e1.toLowerCase())) {
+          brandEmails.push(e1);
+        }
+      }
+      if (brandDocData.email_gerencia_2 && typeof brandDocData.email_gerencia_2 === 'string') {
+        const e2 = brandDocData.email_gerencia_2.trim();
+        if (e2 && !brandEmails.map((d) => d.toLowerCase()).includes(e2.toLowerCase())) {
+          brandEmails.push(e2);
+        }
+      }
+    }
+
+    const baseUrl =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'https://datacarpy.com';
+    const adminChatUrl = `${baseUrl}/admin?tab=chats_online&chatId=${encodeURIComponent(params.chatId)}`;
+    const dealerChatUrl = `${baseUrl}/concesionarias?tab=chats&chatId=${encodeURIComponent(params.chatId)}`;
+
+    // 1. Enviar aviso al Admin (Aldo) con la ficha completa + enlace directo para abrir y seguir el chat desde el celular
+    await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'chat_initiated_admin',
+        destinatarios: ['aldo.ojeda@datacarpy.com'],
+        data: {
+          chatId: params.chatId,
+          userName: params.userName,
+          userPhone: params.userPhone,
+          brandName: params.brandName,
+          modelName: params.modelName || 'Consulta general de la marca',
+          firstMessage: params.firstMessage,
+          brandEmailsNotified: brandEmails,
+          adminChatUrl,
+        },
+      }),
+    });
+
+    // 2. Enviar aviso a la Concesionaria / Marca (SIN el número de celular por privacidad anti-spam)
+    if (brandEmails.length > 0) {
+      await fetch('/api/mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'chat_initiated_dealer',
+          destinatarios: brandEmails,
+          data: {
+            chatId: params.chatId,
+            userName: params.userName,
+            brandName: params.brandName,
+            modelName: params.modelName || 'Consulta general de la marca',
+            firstMessage: params.firstMessage,
+            dealerChatUrl,
+          },
+        }),
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error enviando notificación de nuevo Chat Online:', error);
+  }
+};
+

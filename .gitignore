@@ -57,3 +57,4 @@ serviceAccount*.json*
 # Previsualizaciones locales y uploads temporales
 /public/emails-preview/
 /public/uploads/
+.local-sandbox-db.json

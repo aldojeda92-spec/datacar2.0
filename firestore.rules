@@ -145,15 +145,13 @@ service cloud.firestore {
       allow create: if true;
 
       allow get, list: if isAdmin() || (
-        isConcesionaria() &&
-        resource.data.concesionaria_destino_norm == myDealershipNorm()
+        isConcesionaria() && (
+          resource.data.concesionaria_destino_norm == myDealershipNorm() ||
+          resource.data.concesionaria_destino_norm == 'CHAT_AUTORIZADO_MARCA'
+        )
       );
 
-      allow update: if isAdmin() || (
-        isConcesionaria() &&
-        resource.data.concesionaria_destino_norm == myDealershipNorm() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado'])
-      );
+      allow update: if true;
 
       allow delete: if isAdmin();
     }
@@ -201,6 +199,34 @@ service cloud.firestore {
     match /audit_logs/{logId} {
       allow create: if isSignedIn();
       allow read, write: if isAdmin();
+    }
+
+    // ---------------- chat_sessions & messages (Chat Online por Marca) ----------------
+    // El documento de sesión NUNCA guarda el teléfono del usuario para protegerlo de spam.
+    match /chat_sessions/{chatId} {
+      allow create: if true;
+      allow get, list: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+
+      match /messages/{msgId} {
+        allow create: if true;
+        allow get, list: if true;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // ---------------- chat_private_contacts (Celulares protegidos: SOLO ADMIN) ----------------
+    // Guarda el celular ingresado por el usuario al iniciar un chat. La concesionaria NO tiene permiso de lectura.
+    match /chat_private_contacts/{chatId} {
+      allow create, update: if true;
+      allow get, list, delete: if isAdmin();
+    }
+
+    // ---------------- chat_telemetry (Eventos de apertura/interacción del funnel de Chat Online) ----------------
+    match /chat_telemetry/{eventId} {
+      allow create, update: if true;
+      allow get, list, delete: if isAdmin();
     }
 
     // Todo lo no listado explícitamente: denegado por defecto.
