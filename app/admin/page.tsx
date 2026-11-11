@@ -2886,8 +2886,12 @@ export default function AdminDashboardPage() {
         else if (field === 'name') updatePayload.name = value;
         else if (field === 'concesionaria') updatePayload.concesionaria = value.toUpperCase();
         else if (field === 'url_auto') updatePayload.url_auto = value;
-        else if (['motor', 'transmision', 'combustible'].includes(field)) {
+        else if (['motor', 'transmision', 'combustible', 'autonomi_electrica'].includes(field)) {
           updatePayload[`specs.${field}`] = value;
+        } else if (field === 'tamanho_pantalla') {
+          updatePayload['specs.tamanho_pantalla'] = Number(value) || 0;
+        } else if (['techo_panoramico', 'asiento_cuero'].includes(field)) {
+          updatePayload[`features.${field}`] = value;
         }
         await updateDoc(doc(db, 'versions', id), updatePayload);
         setVersionesList(prev => prev.map(v => {
@@ -2897,8 +2901,14 @@ export default function AdminDashboardPage() {
           if (field === 'name') return { ...v, name: value, updatedAt: now };
           if (field === 'concesionaria') return { ...v, concesionaria: value.toUpperCase(), updatedAt: now };
           if (field === 'url_auto') return { ...v, url_auto: value, updatedAt: now };
-          if (['motor', 'transmision', 'combustible'].includes(field)) {
+          if (['motor', 'transmision', 'combustible', 'autonomi_electrica'].includes(field)) {
             return { ...v, specs: { ...(v.specs || {}), [field]: value }, updatedAt: now };
+          }
+          if (field === 'tamanho_pantalla') {
+            return { ...v, specs: { ...(v.specs || {}), tamanho_pantalla: Number(value) || 0 }, updatedAt: now };
+          }
+          if (['techo_panoramico', 'asiento_cuero'].includes(field)) {
+            return { ...v, features: { ...(v.features || {}), [field]: value }, updatedAt: now };
           }
           return v;
         }));
@@ -8196,6 +8206,7 @@ export default function AdminDashboardPage() {
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Promoción ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Concesionaria ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Motor / Combustible ✏️</th>
+                          <th className="p-3.5 border-r border-[#C0C0C0]/50">Equipamiento Clave (Pantalla / Techo / Cuero / Rango)</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50">Ficha URL ✏️</th>
                           <th className="p-3.5 border-r border-[#C0C0C0]/50 bg-[#F8F9FA]">Última Modificación (J)</th>
                           <th className="p-3.5 text-right bg-[#F8F9FA] sticky right-0">Acciones</th>
@@ -8203,7 +8214,7 @@ export default function AdminDashboardPage() {
                       </thead>
                       <tbody className="text-[11px] text-[#3A3A3C]">
                         {filteredVersiones.length === 0 ? (
-                          <tr><td colSpan={9} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron versiones con los filtros aplicados.</td></tr>
+                          <tr><td colSpan={11} className="p-12 text-center text-[#C0C0C0] font-bold uppercase tracking-widest">No se encontraron versiones con los filtros aplicados.</td></tr>
                         ) : filteredVersiones.map(v => {
                           const modObj = modelosList.find(m => m.id === v.modelId);
                           const brandObj = modObj ? marcasList.find(b => b.id === modObj.brandId) : null;
@@ -8315,6 +8326,30 @@ export default function AdminDashboardPage() {
                                     <button onClick={() => setAdminInlineEdit({ type: 'version', id: v.id, field: 'motor', value: v.specs?.motor || '' })} className="text-[#00BFFF] opacity-50 group-hover:opacity-100 text-[11px]" title="Editar motor">✏️</button>
                                   </div>
                                 )}
+                              </td>
+
+                              {/* Equipamiento Clave: Pantalla, Techo, Cuero, Autonomía */}
+                              <td className="p-3.5 border-r border-[#C0C0C0]/50 max-w-[220px]">
+                                <div className="flex flex-col gap-1 text-[9.5px]">
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className="text-[#71717A] uppercase font-bold text-[8.5px]">📱 Pantalla:</span>
+                                    <span className="font-bold text-[#0A1F33]">{v.specs?.tamanho_pantalla ? `${v.specs.tamanho_pantalla}"` : '-'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className="text-[#71717A] uppercase font-bold text-[8.5px]">☀️ Techo:</span>
+                                    <span className="font-bold text-[#0A1F33] truncate max-w-[120px]" title={v.features?.techo_panoramico || '-'}>{v.features?.techo_panoramico || '-'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className="text-[#71717A] uppercase font-bold text-[8.5px]">💺 Cuero:</span>
+                                    <span className="font-bold text-[#0A1F33] truncate max-w-[120px]" title={v.features?.asiento_cuero || '-'}>{v.features?.asiento_cuero || '-'}</span>
+                                  </div>
+                                  {v.specs?.autonomi_electrica && (
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <span className="text-[#00BFFF] uppercase font-bold text-[8.5px]">⚡ Rango:</span>
+                                      <span className="font-bold text-[#00BFFF] truncate max-w-[120px]" title={v.specs.autonomi_electrica}>{v.specs.autonomi_electrica}</span>
+                                    </div>
+                                  )}
+                                </div>
                               </td>
 
                               {/* URL Ficha Técnica inline */}
@@ -9118,11 +9153,24 @@ export default function AdminDashboardPage() {
                   {/* Bloque 2: Motor y Transmisión */}
                   <fieldset className="border border-[#C0C0C0] p-4 bg-[#F8F9FA]">
                     <legend className="text-[10px] font-black text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">2. Motor y Transmisión</legend>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
                       <div><label htmlFor="versionForm-combustible" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Combustible Base</label><input id="versionForm-combustible" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.combustible} onChange={e => setVersionForm({...versionForm, combustible: e.target.value})} placeholder="Nafta / HEV / EV" /></div>
                       <div><label htmlFor="versionForm-motor" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Motor</label><input id="versionForm-motor" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.motor} onChange={e => setVersionForm({...versionForm, motor: e.target.value})} placeholder="Ej: 2.0L Turbo 240 CV" /></div>
                       <div><label htmlFor="versionForm-transmision" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Caja / Transmisión</label><input id="versionForm-transmision" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.transmision} onChange={e => setVersionForm({...versionForm, transmision: e.target.value})} placeholder="Ej: AT 8 Vel" /></div>
                       <div><label htmlFor="versionForm-traccion" className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Tracción</label><input id="versionForm-traccion" type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.traccion} onChange={e => setVersionForm({...versionForm, traccion: e.target.value})} placeholder="Ej: FWD / 4WD" /></div>
+                      <div>
+                        <label htmlFor="versionForm-autonomi_electrica" className="text-[10px] font-black text-[#00BFFF] uppercase block mb-1">
+                          ⚡ Autonomía (km)
+                        </label>
+                        <input
+                          id="versionForm-autonomi_electrica"
+                          type="text"
+                          className="w-full border border-[#00BFFF]/60 p-2 text-xs bg-white font-bold"
+                          value={versionForm.autonomi_electrica}
+                          onChange={e => setVersionForm({...versionForm, autonomi_electrica: e.target.value})}
+                          placeholder="Ej: 450 km / 120 km EV"
+                        />
+                      </div>
                     </div>
                   </fieldset>
 
@@ -9144,10 +9192,57 @@ export default function AdminDashboardPage() {
                     <legend className="text-[10px] font-black text-[#0A1F33] bg-[#E6E6E6] border border-[#C0C0C0] uppercase tracking-widest px-3 py-1">4. Seguridad, Confort y ADAS</legend>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                       <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Airbags</label><input type="number" className="w-full border p-2 text-xs bg-white" value={versionForm.airbags} onChange={e => setVersionForm({...versionForm, airbags: e.target.value})} /></div>
-                      <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Pantalla (")</label><input type="number" step="0.1" className="w-full border p-2 text-xs bg-white" value={versionForm.tamanho_pantalla} onChange={e => setVersionForm({...versionForm, tamanho_pantalla: e.target.value})} /></div>
+                      <div>
+                        <label htmlFor="versionForm-tamanho_pantalla" className="text-[10px] font-black text-[#00BFFF] uppercase block mb-1">
+                          📱 Pantalla (Pulgadas ")
+                        </label>
+                        <input
+                          id="versionForm-tamanho_pantalla"
+                          type="number"
+                          step="0.1"
+                          className="w-full border border-[#00BFFF]/60 p-2 text-xs bg-white font-bold"
+                          value={versionForm.tamanho_pantalla}
+                          onChange={e => setVersionForm({...versionForm, tamanho_pantalla: e.target.value})}
+                          placeholder="Ej: 10.25"
+                        />
+                      </div>
                       <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Cámaras</label><input type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.camaras} onChange={e => setVersionForm({...versionForm, camaras: e.target.value})} placeholder="360 / Reversa" /></div>
                       <div><label className="text-[10px] font-bold text-[#3A3A3C] uppercase block mb-1">Garantía</label><input type="text" className="w-full border p-2 text-xs bg-white" value={versionForm.garantia} onChange={e => setVersionForm({...versionForm, garantia: e.target.value})} placeholder="5 años" /></div>
                     </div>
+
+                    {/* Fila Especial: Techo Panorámico y Asientos de Cuero */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 p-3 bg-white border border-[#C0C0C0]">
+                      <div>
+                        <label htmlFor="versionForm-techo_panoramico" className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                          ☀️ Techo Panorámico / Solar
+                        </label>
+                        <input
+                          id="versionForm-techo_panoramico"
+                          type="text"
+                          className="w-full border border-[#C0C0C0] p-2 text-xs bg-[#F8F9FA] focus:bg-white focus:border-[#00BFFF] font-bold text-[#0A1F33]"
+                          value={versionForm.techo_panoramico}
+                          onChange={e => setVersionForm({...versionForm, techo_panoramico: e.target.value})}
+                          placeholder="Ej: Panorámico eléctrico / Solar corredizo / No"
+                        />
+                        <span className="text-[8px] text-[#71717A] mt-0.5 block">Valor evaluado directamente en la ficha técnica del comparador.</span>
+                      </div>
+
+                      <div>
+                        <label htmlFor="versionForm-asiento_cuero" className="text-[10px] font-black text-[#0A1F33] uppercase block mb-1">
+                          💺 Tapizado de Asientos / Cuero
+                        </label>
+                        <input
+                          id="versionForm-asiento_cuero"
+                          type="text"
+                          className="w-full border border-[#C0C0C0] p-2 text-xs bg-[#F8F9FA] focus:bg-white focus:border-[#00BFFF] font-bold text-[#0A1F33]"
+                          value={versionForm.asiento_cuero}
+                          onChange={e => setVersionForm({...versionForm, asiento_cuero: e.target.value})}
+                          placeholder="Ej: Cuero genuino / Eco-cuero / Tela / Mixto"
+                        />
+                        <span className="text-[8px] text-[#71717A] mt-0.5 block">Material de tapizado (utilizado en el radar de confort).</span>
+                      </div>
+                    </div>
+
                     <div className="flex flex-col gap-3">
                       <div><label className="text-[10px] font-bold text-[#00BFFF] uppercase block mb-1">Sistemas ADAS (Separar con | )</label><input type="text" className="w-full border border-[#00BFFF]/40 p-2 text-xs bg-white" value={versionForm.adas} onChange={e => setVersionForm({...versionForm, adas: e.target.value})} placeholder="Frenado autónomo | Alerta punto ciego | Mantenimiento carril" /></div>
                       <div><label className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">Seguridad Standard (Separar con ; )</label><textarea rows={2} className="w-full border p-2 text-xs bg-white resize-none" value={versionForm.seguridad_standard} onChange={e => setVersionForm({...versionForm, seguridad_standard: e.target.value})} placeholder="6 Airbags; Frenos ABS + EBD; Control de estabilidad"></textarea></div>
