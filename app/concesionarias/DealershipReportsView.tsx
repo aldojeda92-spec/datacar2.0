@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { normalizeCarroceria } from '../../lib/carroceria';
 import { normalizeCombustible } from '../../lib/combustible';
 
@@ -34,11 +34,19 @@ export default function DealershipReportsView({
   onRequestAccess,
   isRequestingAccess,
 }: DealershipReportsViewProps) {
-  // Filtros reactivos
+  // Sub-pestañas de Reportes para Concesionaria
+  const [reportSubTab, setReportSubTab] = useState<'general' | 'radar_competitivo'>('general');
+
+  // Filtros reactivos para la vista general
   const [filterBrand, setFilterBrand] = useState('Todas');
   const [filterModel, setFilterModel] = useState('Todos');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+
+  // Estados específicos para el Comparador de Marcas (Radar Competitivo de Concesionaria)
+  const [compBrandSelectedId, setCompBrandSelectedId] = useState<string>('');
+  const [compBrandDateFrom, setCompBrandDateFrom] = useState<string>('');
+  const [compBrandDateTo, setCompBrandDateTo] = useState<string>('');
 
   // Normalizador de origen de manufactura
   const normalizeOrigen = useCallback((raw: string | undefined | null): string => {
@@ -66,6 +74,28 @@ export default function DealershipReportsView({
   const permittedBrandsUpper = useMemo(() => {
     return (userData.marcasPermitidas || []).map(m => m.toUpperCase().trim()).filter(Boolean);
   }, [userData.marcasPermitidas]);
+
+  // Marcas autorizadas del catálogo para esta concesionaria
+  const authorizedBrands = useMemo(() => {
+    return marcasList.filter(b => permittedBrandsUpper.includes((b.name || '').toUpperCase().trim()));
+  }, [marcasList, permittedBrandsUpper]);
+
+  useEffect(() => {
+    if (!compBrandSelectedId && authorizedBrands.length > 0) {
+      setCompBrandSelectedId(authorizedBrands[0].id);
+    }
+  }, [authorizedBrands, compBrandSelectedId]);
+
+  // Helper de timestamp de comparativa
+  const getCompTimestamp = useCallback((comp: any) => {
+    if (comp.createdAt?.toDate) return comp.createdAt.toDate().getTime();
+    if (comp.createdAt?.seconds) return comp.createdAt.seconds * 1000;
+    if (comp.createdAt) {
+      const t = new Date(comp.createdAt).getTime();
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  }, []);
 
   // Modelos que pertenecen a las marcas autorizadas de esta concesionaria
   const myModels = useMemo(() => {
@@ -501,6 +531,249 @@ export default function DealershipReportsView({
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
   }, [scopedComparisons]);
 
+  // ==========================================
+  // COMPARADOR DE MARCAS (RADAR COMPETITIVO PARA CONCESIONARIA)
+  // Restringido estrictamente a las marcas permitidas de la concesionaria
+  // ==========================================
+  const brandCompetitorAnalytics = useMemo(() => {
+    const dateComps = enrichedComparisons.filter(comp => {
+      const t = getCompTimestamp(comp);
+      if (!t) return true;
+      if (compBrandDateFrom) {
+        const fromT = new Date(`${compBrandDateFrom}T00:00:00`).getTime();
+        if (t < fromT) return false;
+      }
+      if (compBrandDateTo) {
+        const toT = new Date(`${compBrandDateTo}T23:59:59.999`).getTime();
+        if (t > toT) return false;
+      }
+      return true;
+    });
+
+    const totalCompsInDateRange = dateComps.length;
+    // Solo permitir seleccionar marcas que pertenezcan a las marcas autorizadas de la concesionaria
+    const activeBrandId = compBrandSelectedId || (authorizedBrands[0]?.id || '');
+    const selectedBrand = authorizedBrands.find(b => b.id === activeBrandId) || null;
+
+    if (!selectedBrand) {
+      return {
+        selectedBrand: null,
+        totalCompsInDateRange,
+        brandTotalComps: 0,
+        marketSharePct: '0',
+        slot1Count: 0,
+        slot1Pct: 0,
+        challengerCount: 0,
+        internalCompCount: 0,
+        topCompetingBrands: [] as {
+          brandId: string;
+          brandName: string;
+          origen: string;
+          count: number;
+          shareOfDuelsPct: number;
+          shareOfBrandCompsPct: number;
+          focalSlot1Wins: number;
+          rivalSlot1Wins: number;
+          topModelClash: string;
+        }[],
+        topCompetingModels: [] as {
+          fullName: string;
+          brandName: string;
+          carroceria: string;
+          count: number;
+          pct: number;
+        }[],
+        ownModelsInvolved: [] as {
+          modelId: string;
+          modelName: string;
+          count: number;
+          slot1Count: number;
+          pct: number;
+        }[],
+      };
+    }
+
+    const brandNameUpper = (selectedBrand.name || '').trim().toUpperCase();
+    let brandTotalComps = 0;
+    let slot1Count = 0;
+    let internalCompCount = 0;
+
+    const rivalBrandMap: Record<string, {
+      brandId: string;
+      brandName: string;
+      origen: string;
+      count: number;
+      focalSlot1Wins: number;
+      rivalSlot1Wins: number;
+      modelClashes: Record<string, number>;
+    }> = {};
+
+    const rivalModelMap: Record<string, {
+      fullName: string;
+      brandName: string;
+      carroceria: string;
+      count: number;
+    }> = {};
+
+    const ownModelMap: Record<string, {
+      modelId: string;
+      modelName: string;
+      count: number;
+      slot1Count: number;
+    }> = {};
+
+    dateComps.forEach(comp => {
+      const vehs: any[] = comp.vehicles || [];
+      if (vehs.length === 0) return;
+
+      const isMyBrand = (v: any) =>
+        (v.brandId && v.brandId === selectedBrand.id) ||
+        (v.brandName && v.brandName.trim().toUpperCase() === brandNameUpper);
+
+      const myVehs = vehs.filter(isMyBrand);
+      if (myVehs.length === 0) return;
+
+      brandTotalComps++;
+      const firstVeh = vehs[0];
+      const focalIsSlot1 = firstVeh ? isMyBrand(firstVeh) : false;
+      if (focalIsSlot1) {
+        slot1Count++;
+      }
+
+      // Registrar modelos propios involucrados
+      const seenOwnModels = new Set<string>();
+      myVehs.forEach(mv => {
+        const mKey = mv.modelId || mv.modelName || 'MODELO';
+        if (!seenOwnModels.has(mKey)) {
+          seenOwnModels.add(mKey);
+          if (!ownModelMap[mKey]) {
+            ownModelMap[mKey] = {
+              modelId: mv.modelId || mKey,
+              modelName: mv.modelName || mv.fullName || 'MODELO',
+              count: 0,
+              slot1Count: 0,
+            };
+          }
+          ownModelMap[mKey].count++;
+          if (firstVeh && (firstVeh.modelId === mv.modelId || firstVeh.modelName === mv.modelName)) {
+            ownModelMap[mKey].slot1Count++;
+          }
+        }
+      });
+
+      // Analizar marcas rivales en esta comparativa
+      const rivalVehs = vehs.filter(v => !isMyBrand(v));
+      if (rivalVehs.length === 0 && myVehs.length >= 2) {
+        internalCompCount++;
+      }
+
+      const seenRivalBrandsInComp = new Set<string>();
+      const seenRivalModelsInComp = new Set<string>();
+
+      rivalVehs.forEach(rv => {
+        const rBrandName = (rv.brandName || 'OTRA MARCA').trim().toUpperCase();
+        if (!rBrandName || rBrandName === 'MARCA') return;
+
+        if (!seenRivalBrandsInComp.has(rBrandName)) {
+          seenRivalBrandsInComp.add(rBrandName);
+          if (!rivalBrandMap[rBrandName]) {
+            const catBrand = marcasList.find(b => b.id === rv.brandId || (b.name || '').trim().toUpperCase() === rBrandName);
+            rivalBrandMap[rBrandName] = {
+              brandId: catBrand?.id || rv.brandId || rBrandName,
+              brandName: rBrandName,
+              origen: normalizeOrigen(catBrand?.origen_marca || rv.origen),
+              count: 0,
+              focalSlot1Wins: 0,
+              rivalSlot1Wins: 0,
+              modelClashes: {},
+            };
+          }
+          rivalBrandMap[rBrandName].count++;
+          if (focalIsSlot1) {
+            rivalBrandMap[rBrandName].focalSlot1Wins++;
+          } else if (firstVeh && (firstVeh.brandName || '').trim().toUpperCase() === rBrandName) {
+            rivalBrandMap[rBrandName].rivalSlot1Wins++;
+          }
+        }
+
+        // Cruce específico de modelos (Modelo propio vs Modelo rival)
+        myVehs.forEach(mv => {
+          const clashLabel = `${mv.modelName} vs ${rv.fullName}`;
+          if (rivalBrandMap[rBrandName]) {
+            rivalBrandMap[rBrandName].modelClashes[clashLabel] =
+              (rivalBrandMap[rBrandName].modelClashes[clashLabel] || 0) + 1;
+          }
+        });
+
+        // Modelos rivales directos
+        const rModelFull = rv.fullName || `${rBrandName} ${rv.modelName || ''}`.trim();
+        if (rModelFull && !seenRivalModelsInComp.has(rModelFull)) {
+          seenRivalModelsInComp.add(rModelFull);
+          if (!rivalModelMap[rModelFull]) {
+            rivalModelMap[rModelFull] = {
+              fullName: rModelFull,
+              brandName: rBrandName,
+              carroceria: rv.carroceria || 'SUV',
+              count: 0,
+            };
+          }
+          rivalModelMap[rModelFull].count++;
+        }
+      });
+    });
+
+    const totalRivalBrandInstances = Object.values(rivalBrandMap).reduce((acc, item) => acc + item.count, 0) || 1;
+    const topCompetingBrands = Object.values(rivalBrandMap)
+      .sort((a, b) => b.count - a.count)
+      .map(item => {
+        const topClashEntry = Object.entries(item.modelClashes).sort((a, b) => b[1] - a[1])[0];
+        return {
+          brandId: item.brandId,
+          brandName: item.brandName,
+          origen: item.origen,
+          count: item.count,
+          shareOfDuelsPct: Math.round((item.count / totalRivalBrandInstances) * 100),
+          shareOfBrandCompsPct: brandTotalComps > 0 ? Math.round((item.count / brandTotalComps) * 100) : 0,
+          focalSlot1Wins: item.focalSlot1Wins,
+          rivalSlot1Wins: item.rivalSlot1Wins,
+          topModelClash: topClashEntry ? `${topClashEntry[0]} (${topClashEntry[1]}x)` : '-',
+        };
+      });
+
+    const topCompetingModels = Object.values(rivalModelMap)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map(m => ({
+        ...m,
+        pct: brandTotalComps > 0 ? Math.round((m.count / brandTotalComps) * 100) : 0,
+      }));
+
+    const ownModelsInvolved = Object.values(ownModelMap)
+      .sort((a, b) => b.count - a.count)
+      .map(om => ({
+        ...om,
+        pct: brandTotalComps > 0 ? Math.round((om.count / brandTotalComps) * 100) : 0,
+      }));
+
+    const challengerCount = Math.max(0, brandTotalComps - slot1Count);
+    const slot1Pct = brandTotalComps > 0 ? Math.round((slot1Count / brandTotalComps) * 100) : 0;
+    const marketSharePct = totalCompsInDateRange > 0 ? ((brandTotalComps / totalCompsInDateRange) * 100).toFixed(1) : '0';
+
+    return {
+      selectedBrand,
+      totalCompsInDateRange,
+      brandTotalComps,
+      marketSharePct,
+      slot1Count,
+      slot1Pct,
+      challengerCount,
+      internalCompCount,
+      topCompetingBrands,
+      topCompetingModels,
+      ownModelsInvolved,
+    };
+  }, [enrichedComparisons, compBrandSelectedId, compBrandDateFrom, compBrandDateTo, authorizedBrands, marcasList, getCompTimestamp, normalizeOrigen]);
+
   // Componente Gráfico Circular (Donut SVG)
   const DonutCard = ({
     title,
@@ -680,10 +953,43 @@ export default function DealershipReportsView({
   // PANTALLA HABILITADA: DASHBOARD COMPLETO DE REPORTES BI
   // ==========================================
   return (
-    <div className="flex flex-col gap-8 pb-10">
+    <div className="flex flex-col gap-6 pb-10">
       
-      {/* 1. BARRA PRINCIPAL DE FILTROS */}
-      <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-5 shadow-none">
+      {/* 0. NAVEGACIÓN ENTRE SUB-PESTAÑAS DE REPORTES BI */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#C0C0C0] pb-3">
+        <button
+          type="button"
+          onClick={() => setReportSubTab('general')}
+          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border flex items-center gap-1.5 ${
+            reportSubTab === 'general'
+              ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+              : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+          }`}
+        >
+          <span>📊</span>
+          <span>Rendimiento General & Demanda</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setReportSubTab('radar_competitivo')}
+          className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors border flex items-center gap-1.5 ${
+            reportSubTab === 'radar_competitivo'
+              ? 'bg-[#0A1F33] text-white border-[#0A1F33]'
+              : 'bg-[#F8F9FA] text-[#3A3A3C] border-[#C0C0C0] hover:border-[#0A1F33]'
+          }`}
+        >
+          <span>🏢</span>
+          <span>Comparador de Marcas (Top Competidores)</span>
+        </button>
+      </div>
+
+      {/* ==================================================================== */}
+      {/* VISTA 1: RENDIMIENTO GENERAL & DEMANDA (AUDITORÍA TRADICIONAL)       */}
+      {/* ==================================================================== */}
+      {reportSubTab === 'general' && (
+        <div className="flex flex-col gap-8">
+          {/* 1. BARRA PRINCIPAL DE FILTROS */}
+          <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-5 shadow-none">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#C0C0C0]/50 pb-3 mb-4">
           <div>
             <h3 className="font-black text-sm uppercase text-[#0A1F33] tracking-wide" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
@@ -1035,6 +1341,423 @@ export default function DealershipReportsView({
           </div>
         )}
       </div>
+      </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* VISTA 2: COMPARADOR DE MARCAS (TOP COMPETIDORES) - RADAR COMPETITIVO */}
+      {/* ==================================================================== */}
+      {reportSubTab === 'radar_competitivo' && (
+        <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-6 flex flex-col gap-6 shadow-none">
+          {/* Encabezado */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#C0C0C0]/50 pb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-2.5 h-2.5 bg-[#00BFFF] inline-block" />
+                <h3 className="text-xs font-black uppercase tracking-widest text-[#0A1F33]">
+                  Comparador de Marcas: Top Marcas con las que Compite tu Marca
+                </h3>
+                <span className="bg-[#0A1F33] text-[#00BFFF] px-2 py-0.5 text-[8px] font-black uppercase">
+                  Radar Competitivo de Marca
+                </span>
+              </div>
+              <p className="text-[10px] text-[#3A3A3C]">
+                Seleccioná una de tus marcas autorizadas para ver al instante el ranking de marcas contra las que más la comparan los compradores, su cuota de pantalla y qué modelos protagonizan los enfrentamientos.
+              </p>
+            </div>
+
+            {/* Botones de rango rápido */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider mr-1">Rango rápido:</span>
+              <button
+                type="button"
+                onClick={() => { setCompBrandDateFrom(''); setCompBrandDateTo(''); }}
+                className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+              >
+                Histórico Total
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0];
+                  setCompBrandDateFrom(today);
+                  setCompBrandDateTo(today);
+                }}
+                className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+              >
+                Hoy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - 7);
+                  setCompBrandDateFrom(d.toISOString().split('T')[0]);
+                  setCompBrandDateTo(new Date().toISOString().split('T')[0]);
+                }}
+                className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+              >
+                Últimos 7 días
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - 30);
+                  setCompBrandDateFrom(d.toISOString().split('T')[0]);
+                  setCompBrandDateTo(new Date().toISOString().split('T')[0]);
+                }}
+                className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+              >
+                Últimos 30 días
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date();
+                  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                  setCompBrandDateFrom(firstDay);
+                  setCompBrandDateTo(now.toISOString().split('T')[0]);
+                }}
+                className="px-2.5 py-1 text-[9px] font-bold uppercase border border-[#C0C0C0] hover:border-[#0A1F33] bg-[#F8F9FA] text-[#0A1F33]"
+              >
+                Este Mes
+              </button>
+            </div>
+          </div>
+
+          {/* Barra de Selección de Marca Autorizada y Fechas */}
+          <div className="bg-[#F8F9FA] border border-[#C0C0C0]/70 p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div className="md:col-span-6">
+              <label htmlFor="compBrandSelectDealer" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                Seleccionar Marca a Analizar <span className="text-[#00BFFF]">*</span>
+              </label>
+              <select
+                id="compBrandSelectDealer"
+                className="w-full border border-[#C0C0C0] p-2.5 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] font-bold rounded-none"
+                value={compBrandSelectedId}
+                onChange={e => setCompBrandSelectedId(e.target.value)}
+              >
+                {authorizedBrands.length === 0 ? (
+                  <option value="">No hay marcas autorizadas asociadas</option>
+                ) : (
+                  authorizedBrands.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} {b.origen_marca ? `(${b.origen_marca})` : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="md:col-span-3">
+              <label htmlFor="compBrandDealerDateFrom" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                Fecha Desde
+              </label>
+              <input
+                id="compBrandDealerDateFrom"
+                type="date"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                value={compBrandDateFrom}
+                onChange={e => setCompBrandDateFrom(e.target.value)}
+              />
+            </div>
+
+            <div className="md:col-span-3">
+              <label htmlFor="compBrandDealerDateTo" className="text-[10px] font-bold text-[#0A1F33] uppercase block mb-1">
+                Fecha Hasta
+              </label>
+              <input
+                id="compBrandDealerDateTo"
+                type="date"
+                className="w-full border border-[#C0C0C0] p-2 text-xs focus:outline-none focus:border-[#00BFFF] bg-white text-[#0A1F33] rounded-none"
+                value={compBrandDateTo}
+                onChange={e => setCompBrandDateTo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Resultados del Comparador de Marcas */}
+          {brandCompetitorAnalytics.selectedBrand ? (
+            <div className="flex flex-col gap-6">
+              {/* 4 KPIs Principales de la Marca */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-[#F8F9FA] border-2 border-[#00BFFF] p-5 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1">
+                      Comparativas de {brandCompetitorAnalytics.selectedBrand.name}
+                    </span>
+                    <span className="font-black text-4xl text-[#0A1F33] block" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      {brandCompetitorAnalytics.brandTotalComps}
+                    </span>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 flex justify-between items-center text-[9px]">
+                    <span className="text-[#3A3A3C] uppercase font-bold">Muestra total del período:</span>
+                    <span className="font-mono font-bold text-[#0A1F33]">{brandCompetitorAnalytics.totalCompsInDateRange} comp.</span>
+                  </div>
+                </div>
+
+                <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-bold text-[#C0C0C0] uppercase tracking-wider block mb-1">
+                      Cuota de Presencia de Marca
+                    </span>
+                    <span className="font-black text-4xl text-[#00BFFF] block" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      {brandCompetitorAnalytics.marketSharePct}%
+                    </span>
+                  </div>
+                  <span className="text-[8px] text-[#3A3A3C] uppercase font-semibold mt-3 pt-2 border-t border-[#C0C0C0]/50 block">
+                    Presente en {brandCompetitorAnalytics.brandTotalComps} de {brandCompetitorAnalytics.totalCompsInDateRange} comparativas
+                  </span>
+                </div>
+
+                <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-bold text-[#1E8E3E] uppercase tracking-wider block mb-1">
+                      Elegida como 1ra Opción (Slot #1)
+                    </span>
+                    <span className="font-black text-4xl text-[#1E8E3E] block" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      {brandCompetitorAnalytics.slot1Count}
+                    </span>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 text-[9px] text-[#3A3A3C] font-semibold">
+                    Tasa de 1ra elección: <strong className="text-[#1E8E3E]">{brandCompetitorAnalytics.slot1Pct}%</strong> (Retadora: {brandCompetitorAnalytics.challengerCount}x)
+                  </div>
+                </div>
+
+                <div className="bg-[#F8F9FA] border border-[#C0C0C0]/60 p-5 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[9px] font-bold text-[#0A1F33] uppercase tracking-wider block mb-1">
+                      Marca Rival #1 Principal
+                    </span>
+                    <span className="font-black text-2xl text-[#0A1F33] truncate block" style={{ fontFamily: 'var(--font-montserrat), sans-serif' }}>
+                      {brandCompetitorAnalytics.topCompetingBrands[0]?.brandName || 'Sin rivales'}
+                    </span>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-[#C0C0C0]/50 text-[9px] text-[#3A3A3C] font-semibold">
+                    {brandCompetitorAnalytics.topCompetingBrands[0]
+                      ? `${brandCompetitorAnalytics.topCompetingBrands[0].count} cruces directos (${brandCompetitorAnalytics.topCompetingBrands[0].shareOfDuelsPct}% del total de rivales)`
+                      : 'Aún sin cruces registrados'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloque Principal: Ranking Top Marcas Competidoras + Desglose de Modelos */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Columna Izquierda (7 cols): Top Marcas con las que compite */}
+                <div className="lg:col-span-7 bg-[#FFFFFF] border border-[#C0C0C0] p-5 flex flex-col justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#C0C0C0]/60 pb-3 mb-4">
+                      <div>
+                        <span className="bg-[#0A1F33] text-[#00BFFF] text-[8px] font-black uppercase px-2 py-0.5 tracking-widest">
+                          Ranking de Competencia Directa
+                        </span>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#0A1F33] mt-1">
+                          🏆 Top Marcas con las que Compite {brandCompetitorAnalytics.selectedBrand.name}
+                        </h4>
+                      </div>
+                      <span className="text-[9px] font-bold text-[#3A3A3C] uppercase">
+                        {brandCompetitorAnalytics.topCompetingBrands.length} marcas rivales detectadas
+                      </span>
+                    </div>
+
+                    {brandCompetitorAnalytics.topCompetingBrands.length === 0 ? (
+                      <div className="p-8 text-center text-[10px] text-[#C0C0C0] uppercase font-bold">
+                        No se registraron enfrentamientos contra otras marcas para {brandCompetitorAnalytics.selectedBrand.name} en este período.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto custom-scrollbar max-h-[460px]">
+                        <table className="w-full text-left border-collapse text-[10px]">
+                          <thead className="bg-[#F8F9FA] sticky top-0 z-10 border-b border-[#C0C0C0]/60 text-[8px] font-bold uppercase text-[#3A3A3C]">
+                            <tr>
+                              <th className="p-2.5 w-10 text-center">Rank</th>
+                              <th className="p-2.5">Marca Competidora</th>
+                              <th className="p-2.5 text-center">Cruces</th>
+                              <th className="p-2.5 w-36">% Competencia</th>
+                              <th className="p-2.5 text-center" title="Veces que tu marca fue elegida en Slot #1 vs la marca rival">1ra Opción (Slot 1)</th>
+                              <th className="p-2.5">Duelo Principal de Modelos</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {brandCompetitorAnalytics.topCompetingBrands.slice(0, 15).map((rb, idx) => {
+                              const isAlsoMyBrand = permittedBrandsUpper.includes(rb.brandName);
+                              return (
+                                <tr
+                                  key={rb.brandName}
+                                  className="border-b border-[#F1F5F9] hover:bg-[#F5FBFF] transition-colors"
+                                >
+                                  <td className="p-2.5 text-center font-mono font-black">
+                                    <span className={`inline-block w-6 text-center py-0.5 text-[9px] font-bold ${
+                                      idx === 0
+                                        ? 'bg-[#0A1F33] text-[#00BFFF]'
+                                        : idx === 1
+                                          ? 'bg-[#3A3A3C] text-white'
+                                          : idx === 2
+                                            ? 'bg-[#C0C0C0] text-[#0A1F33]'
+                                            : 'bg-[#F0F0F0] text-[#3A3A3C]'
+                                    }`}>
+                                      #{idx + 1}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <div className="flex items-center gap-2">
+                                      {isAlsoMyBrand ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const matchB = authorizedBrands.find(b => b.id === rb.brandId || (b.name || '').trim().toUpperCase() === rb.brandName);
+                                            if (matchB) setCompBrandSelectedId(matchB.id);
+                                          }}
+                                          className="font-black text-[#0A1F33] hover:text-[#00BFFF] uppercase text-left transition-colors"
+                                          title="Click para ver el radar de esta marca tuya"
+                                        >
+                                          {rb.brandName}
+                                        </button>
+                                      ) : (
+                                        <span className="font-black text-[#0A1F33] uppercase text-left">
+                                          {rb.brandName}
+                                        </span>
+                                      )}
+                                      <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 bg-[#F8F9FA] border border-[#C0C0C0]/60 text-[#3A3A3C]">
+                                        {rb.origen}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5 text-center font-mono font-black text-xs text-[#0A1F33]">
+                                    {rb.count}x
+                                  </td>
+                                  <td className="p-2.5">
+                                    <div className="flex items-center justify-between text-[9px] font-bold text-[#0A1F33] mb-1">
+                                      <span>{rb.shareOfDuelsPct}% del total rival</span>
+                                      <span className="text-[#C0C0C0]">({rb.shareOfBrandCompsPct}% comp.)</span>
+                                    </div>
+                                    <div className="w-full bg-[#E0E0E0] h-1.5 overflow-hidden">
+                                      <div
+                                        className="h-full bg-[#00BFFF] transition-all duration-500"
+                                        style={{ width: `${rb.shareOfDuelsPct}%` }}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5 text-center whitespace-nowrap">
+                                    <span className="text-[9px] font-bold text-[#1E8E3E]" title={`${brandCompetitorAnalytics.selectedBrand?.name} elegido 1º`}>
+                                      {rb.focalSlot1Wins}
+                                    </span>
+                                    <span className="text-[#C0C0C0] mx-1">vs</span>
+                                    <span className="text-[9px] font-bold text-[#3A3A3C]" title={`${rb.brandName} elegido 1º`}>
+                                      {rb.rivalSlot1Wins}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-[9px] font-semibold text-[#3A3A3C] truncate max-w-[200px]" title={rb.topModelClash}>
+                                    {rb.topModelClash}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-[#C0C0C0]/40 flex flex-wrap justify-between items-center gap-2 text-[9px] text-[#3A3A3C]">
+                    <span>
+                      📊 Muestra de competencia calculada a partir de las decisiones reales de los usuarios en el Comparador DATACAR.
+                    </span>
+                    {brandCompetitorAnalytics.internalCompCount > 0 && (
+                      <span className="bg-[#F8F9FA] border border-[#C0C0C0] px-2 py-0.5 font-bold text-[#0A1F33]">
+                        Comparativas internas ({brandCompetitorAnalytics.selectedBrand.name} vs {brandCompetitorAnalytics.selectedBrand.name}): {brandCompetitorAnalytics.internalCompCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Columna Derecha (5 cols): Top Modelos Rivales Directos + Modelos Propios más comparados */}
+                <div className="lg:col-span-5 flex flex-col gap-6">
+                  {/* Subtarjeta 1: Top Modelos de Otras Marcas que compiten contra tu Marca */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2 mb-3">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                          🚗 Top 10 Modelos Rivales Contra {brandCompetitorAnalytics.selectedBrand.name}
+                        </span>
+                        <span className="text-[8px] font-bold text-[#00BFFF] uppercase">Cruces</span>
+                      </div>
+                      <div className="flex flex-col gap-2.5 max-h-[210px] overflow-y-auto custom-scrollbar pr-1">
+                        {brandCompetitorAnalytics.topCompetingModels.length === 0 ? (
+                          <p className="text-[10px] text-[#C0C0C0] p-4 text-center uppercase">Sin modelos rivales en este rango.</p>
+                        ) : (
+                          brandCompetitorAnalytics.topCompetingModels.map((rm, idx) => (
+                            <div key={rm.fullName}>
+                              <div className="flex justify-between items-center text-[10px] font-bold text-[#0A1F33] mb-1">
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <span className="text-[8px] bg-[#0A1F33] text-white px-1 font-mono">#{idx + 1}</span>
+                                  <span className="truncate">{rm.fullName}</span>
+                                  <span className="text-[8px] text-[#3A3A3C] font-normal">({rm.carroceria})</span>
+                                </span>
+                                <span className="font-mono text-[10px] text-[#00BFFF] shrink-0 font-bold ml-2">
+                                  {rm.count}x ({rm.pct}%)
+                                </span>
+                              </div>
+                              <div className="w-full bg-[#E0E0E0] h-1.5 overflow-hidden">
+                                <div
+                                  className="h-full bg-[#0A1F33] transition-all duration-500"
+                                  style={{ width: `${rm.pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subtarjeta 2: Modelos propios de tu marca más comparados */}
+                  <div className="bg-[#FFFFFF] border border-[#C0C0C0] p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between border-b border-[#C0C0C0]/50 pb-2 mb-3">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#0A1F33]">
+                          📌 Modelos de {brandCompetitorAnalytics.selectedBrand.name} Más Comparados
+                        </span>
+                        <span className="text-[8px] font-bold text-[#1E8E3E] uppercase">Tracción Propia</span>
+                      </div>
+                      <div className="flex flex-col gap-2.5 max-h-[190px] overflow-y-auto custom-scrollbar pr-1">
+                        {brandCompetitorAnalytics.ownModelsInvolved.length === 0 ? (
+                          <p className="text-[10px] text-[#C0C0C0] p-4 text-center uppercase">Sin modelos propios registrados.</p>
+                        ) : (
+                          brandCompetitorAnalytics.ownModelsInvolved.map((om, idx) => (
+                            <div key={om.modelId} className="flex items-center justify-between border-b border-[#F1F5F9] pb-1.5 last:border-none text-[10px]">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-[8px] bg-[#00BFFF] text-[#0A1F33] font-black px-1 font-mono">#{idx + 1}</span>
+                                <span className="font-bold text-[#0A1F33] uppercase truncate">{om.modelName}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[9px] text-[#1E8E3E] font-bold" title="Veces elegido como 1ra opción (Slot #1)">
+                                  1º: {om.slot1Count}x
+                                </span>
+                                <span className="font-mono font-black text-[#0A1F33] bg-[#F8F9FA] border border-[#C0C0C0]/60 px-1.5 py-0.5">
+                                  {om.count} comp. ({om.pct}%)
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-[#F8F9FA] border border-dashed border-[#C0C0C0] p-10 text-center">
+              <p className="text-sm font-bold text-[#0A1F33] uppercase tracking-wider mb-2">
+                Seleccioná una marca autorizada en el desplegable superior para ver contra qué marcas compite
+              </p>
+              <p className="text-[11px] text-[#3A3A3C] max-w-lg mx-auto">
+                Descubrí el ranking exacto de marcas competidoras, el porcentaje de cruces frente a cada rival, cuántas veces tu marca fue elegida como primera opción (Slot #1) y cuáles son los modelos que protagonizan los duelos.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );
